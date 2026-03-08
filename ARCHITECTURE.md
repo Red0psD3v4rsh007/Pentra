@@ -2384,3 +2384,9 @@ This ensures consistent schema definitions, authentication logic, database helpe
 
 ## MOD-02 — Monorepo & Base Infrastructure
 MOD-02 Status: Completed
+
+## MOD-03 — API Core
+Phase 1  Completed (pentra-common shared library)
+Phase 2  Completed (SQLAlchemy models + migrations + RLS)
+Phase 3A Completed (FastAPI core skeleton)
+Phase 3B Pending
