@@ -1,0 +1,30 @@
+"""Import all models so Alembic auto-detect can discover them.
+
+This module also serves as a convenience import for the rest of
+the application::
+
+    from app.models import Tenant, User, Scan, Finding  # etc.
+"""
+
+from app.models.audit_log import AuditLog
+from app.models.asset import Asset, AssetTag
+from app.models.finding import Finding
+from app.models.project import Project
+from app.models.scan import Scan, ScanJob
+from app.models.tenant import Tenant, TenantQuota
+from app.models.user import Role, User, UserRole
+
+__all__ = [
+    "AuditLog",
+    "Asset",
+    "AssetTag",
+    "Finding",
+    "Project",
+    "Scan",
+    "ScanJob",
+    "Tenant",
+    "TenantQuota",
+    "Role",
+    "User",
+    "UserRole",
+]
