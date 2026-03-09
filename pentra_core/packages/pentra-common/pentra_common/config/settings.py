@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = ["http://localhost:3000"]
 
     # ── Database (PostgreSQL / asyncpg) ──────────────────────────
-    database_url: str = "postgresql+asyncpg://pentra:pentra@localhost:5432/pentra_dev"
+    database_url: str = "postgresql+asyncpg://pentra:pentra@localhost:5433/pentra_dev"
     db_pool_size: int = 20
     db_max_overflow: int = 10
     db_echo: bool = False

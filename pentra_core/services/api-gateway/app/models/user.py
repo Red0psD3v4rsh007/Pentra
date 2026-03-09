@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Boolean, DateTime, String, Text, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
+from datetime import datetime
 from pentra_common.db.base import Base, TenantMixin, TimestampMixin
 
 
@@ -48,8 +48,7 @@ class User(Base, TenantMixin, TimestampMixin):
         return [ur.role.name for ur in self.user_roles if ur.role]
 
 
-# Import datetime for the type annotation above
-from datetime import datetime  # noqa: E402
+
 
 
 class Role(Base):
@@ -70,13 +69,20 @@ class UserRole(Base):
     __tablename__ = "user_roles"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
     )
     role_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True
+        UUID(as_uuid=True),
+        ForeignKey("roles.id", ondelete="CASCADE"),
+        primary_key=True,
     )
     tenant_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
 
     # Relationships

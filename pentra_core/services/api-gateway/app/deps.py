@@ -22,10 +22,11 @@ from collections.abc import AsyncGenerator
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pentra_common.auth.tenant_context import CurrentUser, get_current_user, require_roles
+from pentra_common.auth.tenant_context import CurrentUser, require_roles
 from pentra_common.db.rls import set_tenant_context
 from pentra_common.db.session import async_session_factory
 from pentra_common.events.publisher import EventPublisher
+from pentra_common.events.stream_publisher import StreamPublisher
 
 logger = logging.getLogger(__name__)
 
@@ -60,11 +61,11 @@ async def get_db_session(
             await session.close()
 
 
-# ── Event publisher ──────────────────────────────────────────────────
+# ── Event publisher (Pub/Sub — backward compat) ─────────────────────
 
 
 async def get_event_publisher(request: Request) -> EventPublisher:
-    """Retrieve the Redis event publisher from application state.
+    """Retrieve the Redis Pub/Sub event publisher from application state.
 
     Initialised during lifespan startup in ``main.py``.
     """
@@ -77,6 +78,39 @@ async def get_event_publisher(request: Request) -> EventPublisher:
     return publisher
 
 
+# ── Stream publisher (Redis Streams — durable events for MOD-04) ─────
+
+
+async def get_stream_publisher(request: Request) -> StreamPublisher:
+    """Retrieve the Redis Streams publisher from application state.
+
+    Used for durable event publishing (scan.created, scan.cancelled)
+    that requires acknowledgement and replay guarantees.
+    Initialised during lifespan startup in ``main.py``.
+    """
+    publisher: StreamPublisher | None = getattr(request.app.state, "stream_publisher", None)
+    if publisher is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stream publisher not available",
+        )
+    return publisher
+
+
+async def get_current_user(request: Request) -> CurrentUser:
+    """DEV MODE BYPASS — returns a fixed user for local development.
+
+    In production this will be replaced by JWT-based extraction
+    from ``pentra_common.auth.tenant_context``.
+    """
+    return CurrentUser(
+        user_id=uuid.UUID("11111111-1111-1111-1111-111111111111"),
+        tenant_id=uuid.UUID("22222222-2222-2222-2222-222222222222"),
+        email="dev@pentra.local",
+        roles=["owner"],
+        tier="pro",
+    )
+
 # ── Re-exports for convenience ───────────────────────────────────────
 # Routers import everything from deps.py:
 #   from app.deps import get_current_user, get_db_session, require_roles, ...
@@ -85,6 +119,7 @@ __all__ = [
     "get_current_user",
     "get_db_session",
     "get_event_publisher",
+    "get_stream_publisher",
     "require_roles",
     "CurrentUser",
 ]

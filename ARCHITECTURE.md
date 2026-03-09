@@ -2389,4 +2389,64 @@ MOD-02 Status: Completed
 Phase 1  Completed (pentra-common shared library)
 Phase 2  Completed (SQLAlchemy models + migrations + RLS)
 Phase 3A Completed (FastAPI core skeleton)
-Phase 3B Pending
+Phase 3B Completed (API Routers & Service Layer)
+
+---
+
+## Pentra — Autonomous Offensive Security Platform
+
+> Pentra is NOT a traditional vulnerability scanner. It is an autonomous offensive security platform designed to simulate realistic attacker behavior across the full kill chain.
+
+### Core Pipeline
+
+```
+Scanner Workers → Findings → Exploit Verification → Attack Graph Construction
+  → Exploit Planning → AI Reasoning → Reporting
+```
+
+Each stage produces **structured artifacts** that feed downstream stages:
+
+| Stage | Output Artifacts | Consumers |
+|---|---|---|
+| Recon | subdomains, hosts, DNS records | Enumeration |
+| Enumeration | services, endpoints, directories, technologies | Vuln Scanning |
+| Vuln Scanning | vulnerabilities (CVE, misconfig, exposure) | Exploit Verification |
+| Exploit Verification | verified exploits, credentials, access levels | Attack Graph Engine |
+| Attack Graph Construction | attack paths, privilege escalation chains | Exploit Planner |
+| Exploit Planning | attack scenarios, pivot strategies | AI Reasoning |
+| AI Reasoning | risk scores, business impact, remediation | Report Generation |
+
+### Attack Graph Engine (Future — MOD-04.5+)
+
+The Attack Graph Engine constructs a directed graph of exploitation paths:
+
+```
+[Exposed Service] → [Vulnerability] → [Exploit] → [Access Level]
+       ↓                                                ↓
+[Lateral Movement] → [Privilege Escalation] → [Critical Asset Access]
+```
+
+**Design principles:**
+- Nodes represent **security states** (access levels, credentials, footholds)
+- Edges represent **attack transitions** (exploits, pivots, escalations)
+- The engine discovers **all reachable states** from initial access
+- Scoring considers exploitability, impact, and business context
+
+### Artifact Taxonomy
+
+All scan outputs follow a structured taxonomy for cross-phase consumption:
+
+| Artifact Type | Schema | Examples |
+|---|---|---|
+| `subdomains` | `[{name, source, resolved_ips}]` | subfinder, amass output |
+| `hosts` | `[{ip, hostname, os_guess, ports}]` | nmap discovery |
+| `services` | `[{host, port, protocol, service, version}]` | nmap service detection |
+| `endpoints` | `[{url, method, status, content_type}]` | ffuf, httpx |
+| `vulnerabilities` | `[{cve, host, port, severity, evidence}]` | nuclei, zap, sqlmap |
+| `credentials` | `[{type, username, hash, cleartext, source}]` | exploit output |
+| `access_levels` | `[{host, level, method, credential_ref}]` | post-exploit |
+
+### Orchestrator → Attack Graph Integration
+
+The MOD-04 Scan Orchestrator stores artifacts per-node in the `scan_artifacts` table. Each `ScanNode` completion produces typed artifacts that are referenced by `storage_ref` (S3 key) and `artifact_type`. The future Attack Graph Engine (MOD-04.5) will consume these artifacts to construct exploitation path graphs.
+

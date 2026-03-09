@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse
 from pentra_common.config.settings import get_settings
 from pentra_common.db.session import async_engine
 from pentra_common.events.publisher import EventPublisher
+from pentra_common.events.stream_publisher import StreamPublisher
 from pentra_common.observability.logging import setup_logging
 
 from app.middleware.cors import configure_cors
@@ -52,15 +53,22 @@ async def lifespan(app: FastAPI):
         await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
     logger.info("Database connection verified")
 
-    # Initialise Redis event publisher (shared via app.state)
+    # Initialise Redis event publisher (Pub/Sub — backward compat)
     event_publisher = EventPublisher(redis_url=settings.redis_url)
     await event_publisher.connect()
     app.state.event_publisher = event_publisher
-    logger.info("Redis event publisher connected")
+    logger.info("Redis event publisher connected (Pub/Sub)")
+
+    # Initialise Redis Streams publisher (durable events for MOD-04)
+    stream_publisher = StreamPublisher(redis_url=settings.redis_url)
+    await stream_publisher.connect()
+    app.state.stream_publisher = stream_publisher
+    logger.info("Redis stream publisher connected (Streams)")
 
     yield
 
     # ── Shutdown ─────────────────────────────────────────────────
+    await stream_publisher.disconnect()
     await event_publisher.disconnect()
     await async_engine.dispose()
     logger.info("Pentra API Gateway shut down")
@@ -97,14 +105,15 @@ def create_app() -> FastAPI:
     )
     app.add_exception_handler(Exception, _generic_error_handler)
 
-    # ── Routers (Phase 3B — will be mounted here) ────────────────
-    # from app.routers import health, auth, tenants, projects, assets, scans
-    # app.include_router(health.router)
-    # app.include_router(auth.router, prefix="/auth", tags=["auth"])
-    # app.include_router(tenants.router, prefix=f"{settings.api_v1_prefix}/tenants", tags=["tenants"])
-    # app.include_router(projects.router, prefix=f"{settings.api_v1_prefix}/projects", tags=["projects"])
-    # app.include_router(assets.router, prefix=f"{settings.api_v1_prefix}/projects", tags=["assets"])
-    # app.include_router(scans.router, prefix=f"{settings.api_v1_prefix}/scans", tags=["scans"])
+    # ── Routers (Phase 3B) ───────────────────────────────────────
+    from app.routers import health, auth, tenants, projects, assets, scans
+
+    app.include_router(health.router)
+    app.include_router(auth.router, prefix="/auth")
+    app.include_router(tenants.router, prefix=f"{settings.api_v1_prefix}/tenants")
+    app.include_router(projects.router, prefix=f"{settings.api_v1_prefix}/projects")
+    app.include_router(assets.router, prefix=settings.api_v1_prefix)
+    app.include_router(scans.router, prefix=f"{settings.api_v1_prefix}/scans")
 
     return app
 

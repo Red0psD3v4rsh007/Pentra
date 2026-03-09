@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -17,17 +17,13 @@ class Base(DeclarativeBase):
 
 
 class TenantMixin:
-    """Mixin that adds a ``tenant_id`` column for Row-Level Security.
-
-    Every tenant-scoped table **must** inherit this mixin.  The RLS
-    policies created in the migration reference this column.
-    """
+    """Adds tenant_id FK to all tenant-scoped tables."""
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
-        comment="Tenant isolation — used by RLS policies",
     )
 
 

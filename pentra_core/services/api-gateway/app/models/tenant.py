@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Boolean, Enum, Integer, String, Text, text
+from sqlalchemy import Boolean, Enum, ForeignKey, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
+from datetime import datetime
 from pentra_common.db.base import Base, TimestampMixin
 
 
@@ -53,6 +53,7 @@ class TenantQuota(Base):
     )
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
     )

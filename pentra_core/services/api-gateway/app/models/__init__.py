@@ -8,6 +8,14 @@ the application::
 
 from app.models.audit_log import AuditLog
 from app.models.asset import Asset, AssetTag
+from app.models.attack_graph import (
+    JobDependency,
+    ScanArtifact,
+    ScanDAG,
+    ScanEdge,
+    ScanNode,
+    ScanPhase,
+)
 from app.models.finding import Finding
 from app.models.project import Project
 from app.models.scan import Scan, ScanJob
@@ -19,9 +27,15 @@ __all__ = [
     "Asset",
     "AssetTag",
     "Finding",
+    "JobDependency",
     "Project",
     "Scan",
+    "ScanArtifact",
+    "ScanDAG",
+    "ScanEdge",
     "ScanJob",
+    "ScanNode",
+    "ScanPhase",
     "Tenant",
     "TenantQuota",
     "Role",
