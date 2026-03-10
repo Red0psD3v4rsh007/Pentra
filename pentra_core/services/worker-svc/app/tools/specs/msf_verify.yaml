@@ -1,0 +1,13 @@
+name: msf_verify
+worker_family: exploit
+image: metasploitframework/metasploit-framework:latest
+command:
+  - msfconsole
+  - -x
+  - "resource {config_file}; exit"
+output_parser: json
+artifact_type: shell_access
+default_timeout: 600
+env_vars:
+  MSF_DBUSER: msf
+  MSF_DBPASS: msf

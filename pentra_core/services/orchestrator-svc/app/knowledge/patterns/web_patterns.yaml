@@ -1,0 +1,220 @@
+# Web Application Attack Patterns
+# Domain: web
+# Used by Pentra Offensive Knowledge Engine
+# Schema v2: includes confidence_score, priority, generated_artifacts
+
+patterns:
+
+  - name: endpoint_param_fuzz
+    domain: web
+    description: "Fuzz all endpoint parameters for injection and tampering vulnerabilities"
+    confidence_score: 0.6
+    priority: high
+    preconditions:
+      artifacts:
+        - type: endpoint
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        description: "Endpoint parameter fuzzing"
+    impact:
+      - data_exposure
+      - credential_leak
+    generated_artifacts:
+      - vulnerability
+
+  - name: sql_injection_discovery
+    domain: web
+    description: "Test endpoints with query parameters for SQL injection"
+    confidence_score: 0.7
+    priority: high
+    preconditions:
+      artifacts:
+        - type: endpoint
+        - type: service
+          filter: { label_contains: ["http", "https", "443", "80", "8080"] }
+    actions:
+      - tool: sqlmap
+        worker_family: exploit
+        timeout: 1200
+        description: "SQL injection parameter testing"
+    impact:
+      - database_access
+      - credential_leak
+    generated_artifacts:
+      - vulnerability
+      - credential
+
+  - name: xss_parameter_injection
+    domain: web
+    description: "Test endpoint parameters for cross-site scripting"
+    confidence_score: 0.5
+    priority: medium
+    preconditions:
+      artifacts:
+        - type: endpoint
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 600
+        description: "XSS parameter injection testing"
+    impact:
+      - session_hijack
+    generated_artifacts:
+      - vulnerability
+
+  - name: idor_enumeration
+    domain: web
+    description: "Test numeric parameters for insecure direct object reference"
+    confidence_score: 0.6
+    priority: high
+    preconditions:
+      artifacts:
+        - type: endpoint
+          filter: { label_contains: ["id=", "user", "account", "profile"] }
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        description: "IDOR enumeration on numeric parameters"
+    impact:
+      - data_exposure
+    generated_artifacts:
+      - vulnerability
+
+  - name: route_guess_discovery
+    domain: web
+    description: "Discover hidden routes and endpoints via path guessing and forced browsing"
+    confidence_score: 0.5
+    priority: medium
+    preconditions:
+      artifacts:
+        - type: endpoint
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 600
+        description: "Hidden route and endpoint discovery"
+    impact:
+      - admin_access
+      - data_exposure
+    generated_artifacts:
+      - endpoint
+
+  - name: admin_endpoint_discovery
+    domain: web
+    description: "Discover hidden admin endpoints via path guessing"
+    confidence_score: 0.5
+    priority: medium
+    preconditions:
+      artifacts:
+        - type: asset
+        - type: service
+          filter: { label_contains: ["http", "https"] }
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 600
+        description: "Admin path enumeration"
+    impact:
+      - admin_access
+    generated_artifacts:
+      - endpoint
+
+  - name: api_discovery
+    domain: web
+    description: "Enumerate undocumented API endpoints on discovered assets"
+    confidence_score: 0.5
+    priority: medium
+    preconditions:
+      artifacts:
+        - type: asset
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 600
+        description: "API endpoint enumeration"
+    impact:
+      - data_exposure
+      - credential_leak
+    generated_artifacts:
+      - endpoint
+
+  - name: api_fuzzing
+    domain: web
+    description: "Fuzz discovered API endpoints for unexpected behavior"
+    confidence_score: 0.6
+    priority: high
+    preconditions:
+      artifacts:
+        - type: endpoint
+          filter: { label_contains: ["api", "/v1", "/v2", "json", "graphql"] }
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 900
+        description: "API endpoint fuzzing"
+    impact:
+      - data_exposure
+      - credential_leak
+    generated_artifacts:
+      - vulnerability
+
+  - name: param_mutation_testing
+    domain: web
+    description: "Mutate query and body parameters around known vulnerabilities"
+    confidence_score: 0.6
+    priority: medium
+    preconditions:
+      artifacts:
+        - type: vulnerability
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        description: "Parameter mutation around vulnerability"
+    impact:
+      - data_exposure
+      - privilege_escalation
+    generated_artifacts:
+      - vulnerability
+
+  - name: auth_bypass
+    domain: web
+    description: "Test authentication mechanisms for bypass vulnerabilities"
+    confidence_score: 0.5
+    priority: high
+    preconditions:
+      artifacts:
+        - type: endpoint
+          filter: { label_contains: ["login", "auth", "signin", "token"] }
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 600
+        description: "Authentication bypass testing"
+    impact:
+      - admin_access
+      - privilege_escalation
+    generated_artifacts:
+      - credential
+
+  - name: ssrf_detection
+    domain: web
+    description: "Test URL parameters for server-side request forgery"
+    confidence_score: 0.5
+    priority: high
+    preconditions:
+      artifacts:
+        - type: endpoint
+          filter: { label_contains: ["url=", "redirect", "proxy", "fetch", "callback"] }
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 600
+        description: "SSRF detection via URL parameter manipulation"
+    impact:
+      - internal_access
+    generated_artifacts:
+      - vulnerability

@@ -1,0 +1,13 @@
+name: nmap_svc
+worker_family: network
+image: instrumentisto/nmap:latest
+command:
+  - nmap
+  - -sV
+  - -sC
+  - -oX
+  - "{output_dir}/nmap_svc.xml"
+  - "{target}"
+output_parser: xml_nmap
+artifact_type: services
+default_timeout: 900

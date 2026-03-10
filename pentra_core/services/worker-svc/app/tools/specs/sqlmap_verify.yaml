@@ -1,0 +1,17 @@
+name: sqlmap_verify
+worker_family: exploit
+image: pentra/sqlmap:latest
+command:
+  - sqlmap
+  - -u
+  - "{target}"
+  - --batch
+  - --level
+  - "1"
+  - --risk
+  - "1"
+  - --output-dir
+  - "{output_dir}"
+output_parser: raw
+artifact_type: database_access
+default_timeout: 1200

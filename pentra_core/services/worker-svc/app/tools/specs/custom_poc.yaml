@@ -1,0 +1,16 @@
+name: custom_poc
+worker_family: exploit
+image: pentra/custom-poc:latest
+command:
+  - python
+  - -m
+  - custom_poc
+  - --target
+  - "{target}"
+  - --config
+  - "{config_file}"
+  - --output
+  - "{output_dir}/poc_result.json"
+output_parser: json
+artifact_type: credential_leak
+default_timeout: 300

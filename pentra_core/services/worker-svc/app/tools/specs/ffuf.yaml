@@ -1,0 +1,16 @@
+name: ffuf
+worker_family: web
+image: ffuf/ffuf:latest
+command:
+  - ffuf
+  - -u
+  - "{target}/FUZZ"
+  - -w
+  - /usr/share/wordlists/dirb/common.txt
+  - -o
+  - "{output_dir}/ffuf.json"
+  - -of
+  - json
+output_parser: json
+artifact_type: endpoints
+default_timeout: 900

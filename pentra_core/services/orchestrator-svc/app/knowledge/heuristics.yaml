@@ -1,0 +1,295 @@
+# Heuristic Vulnerability Definitions
+# Used by MOD-11 Heuristic Vulnerability Engine
+# Defines vulnerability heuristics matched against artifacts
+
+heuristics:
+
+  # ── Parameter-based heuristics ──────────────────────────────────
+
+  - name: idor_numeric_param
+    description: "Test numeric parameters for insecure direct object reference"
+    category: access_control
+    confidence: 0.7
+    priority: high
+    preconditions:
+      node_type: endpoint
+      indicators:
+        - "id="
+        - "user_id="
+        - "account="
+        - "profile="
+        - "order="
+        - "item="
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        test_type: param_increment_test
+        description: "Increment numeric parameter to access adjacent records"
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        test_type: param_random_test
+        description: "Randomize numeric parameter to detect enumeration"
+    impact:
+      - data_exposure
+    vulnerability_class: IDOR
+
+  - name: param_type_confusion
+    description: "Test parameters with type-confused values"
+    category: injection
+    confidence: 0.5
+    priority: medium
+    preconditions:
+      node_type: endpoint
+      indicators:
+        - "="
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        test_type: type_confusion_test
+        description: "Send array/object where scalar expected"
+    impact:
+      - data_exposure
+    vulnerability_class: type_confusion
+
+  - name: mass_assignment
+    description: "Test for mass assignment by injecting extra parameters"
+    category: access_control
+    confidence: 0.5
+    priority: medium
+    preconditions:
+      node_type: endpoint
+      indicators:
+        - "api"
+        - "json"
+        - "user"
+        - "profile"
+        - "account"
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        test_type: mass_assignment_test
+        description: "Inject extra fields (role, admin, is_admin)"
+    impact:
+      - privilege_escalation
+    vulnerability_class: mass_assignment
+
+  # ── Authentication heuristics ───────────────────────────────────
+
+  - name: auth_bypass_token
+    description: "Test authentication tokens for bypass vulnerabilities"
+    category: authentication
+    confidence: 0.6
+    priority: critical
+    preconditions:
+      node_type: endpoint
+      indicators:
+        - "login"
+        - "auth"
+        - "token"
+        - "signin"
+        - "session"
+        - "oauth"
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 600
+        test_type: token_replay_test
+        description: "Replay expired/modified tokens"
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 600
+        test_type: token_mutation_test
+        description: "Mutate JWT claims or session tokens"
+    impact:
+      - authentication_bypass
+    vulnerability_class: auth_bypass
+
+  - name: default_credentials
+    description: "Test for default or common credentials on login endpoints"
+    category: authentication
+    confidence: 0.6
+    priority: high
+    preconditions:
+      node_type: endpoint
+      indicators:
+        - "login"
+        - "signin"
+        - "admin"
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        test_type: default_credential_test
+        description: "Try common default credentials"
+    impact:
+      - authentication_bypass
+      - admin_access
+    vulnerability_class: weak_credentials
+
+  # ── HTTP method heuristics ──────────────────────────────────────
+
+  - name: http_method_override
+    description: "Test for HTTP method override and verb tampering"
+    category: access_control
+    confidence: 0.5
+    priority: medium
+    preconditions:
+      node_type: endpoint
+      indicators:
+        - "api"
+        - "/v1"
+        - "/v2"
+        - "rest"
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 300
+        test_type: method_override_test
+        description: "Test PUT/DELETE/PATCH via X-HTTP-Method-Override"
+    impact:
+      - data_exposure
+      - privilege_escalation
+    vulnerability_class: method_tampering
+
+  - name: cors_misconfiguration
+    description: "Test for CORS misconfiguration allowing unauthorized origins"
+    category: access_control
+    confidence: 0.5
+    priority: medium
+    preconditions:
+      node_type: endpoint
+      indicators:
+        - "api"
+        - "http"
+        - "https"
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 300
+        test_type: cors_test
+        description: "Test CORS with attacker-controlled origins"
+    impact:
+      - data_exposure
+    vulnerability_class: cors_misconfiguration
+
+  # ── Information disclosure heuristics ───────────────────────────
+
+  - name: verbose_error_disclosure
+    description: "Trigger verbose error responses revealing internal details"
+    category: information_disclosure
+    confidence: 0.6
+    priority: medium
+    preconditions:
+      node_type: endpoint
+      indicators:
+        - "api"
+        - "="
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 300
+        test_type: error_trigger_test
+        description: "Send malformed input to trigger stack traces"
+    impact:
+      - information_disclosure
+    vulnerability_class: verbose_errors
+
+  - name: debug_endpoint_exposure
+    description: "Check for exposed debug and diagnostic endpoints"
+    category: information_disclosure
+    confidence: 0.5
+    priority: high
+    preconditions:
+      node_type: service
+      indicators:
+        - "http"
+        - "https"
+        - "web"
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 300
+        test_type: debug_endpoint_scan
+        description: "Probe for /debug, /status, /health, /metrics, /env endpoints"
+    impact:
+      - information_disclosure
+      - credential_leak
+    vulnerability_class: debug_exposure
+
+  # ── Rate limiting heuristics ────────────────────────────────────
+
+  - name: rate_limit_bypass
+    description: "Test rate limiting on sensitive endpoints"
+    category: access_control
+    confidence: 0.5
+    priority: medium
+    preconditions:
+      node_type: endpoint
+      indicators:
+        - "login"
+        - "auth"
+        - "password"
+        - "reset"
+        - "otp"
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 300
+        test_type: rate_limit_test
+        description: "Rapid requests to detect rate limiting absence"
+    impact:
+      - authentication_bypass
+    vulnerability_class: missing_rate_limit
+
+  # ── Business logic heuristics ───────────────────────────────────
+
+  - name: price_manipulation
+    description: "Test for price/quantity manipulation in e-commerce endpoints"
+    category: business_logic
+    confidence: 0.4
+    priority: medium
+    preconditions:
+      node_type: endpoint
+      indicators:
+        - "cart"
+        - "order"
+        - "payment"
+        - "price"
+        - "quantity"
+        - "checkout"
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        test_type: price_manipulation_test
+        description: "Modify price/quantity parameters to negative or zero"
+    impact:
+      - data_exposure
+    vulnerability_class: business_logic_flaw
+
+  - name: workflow_bypass
+    description: "Test for multi-step workflow bypass"
+    category: business_logic
+    confidence: 0.4
+    priority: medium
+    preconditions:
+      node_type: endpoint
+      indicators:
+        - "step"
+        - "wizard"
+        - "confirm"
+        - "verify"
+        - "checkout"
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        test_type: workflow_skip_test
+        description: "Skip intermediate workflow steps"
+    impact:
+      - authentication_bypass
+    vulnerability_class: workflow_bypass

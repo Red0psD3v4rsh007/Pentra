@@ -1,0 +1,175 @@
+# Offensive System Validation Scenarios
+# MOD-11.8: End-to-end attack scenarios for pipeline validation
+
+scenarios:
+
+  # ── Scenario 1: SQL Injection Discovery ─────────────────────────
+
+  - name: sql_injection_discovery
+    description: "Full pipeline from endpoint discovery to SQL injection exploitation"
+    initial_artifacts:
+      - type: endpoint
+        node_id: "ep_users"
+        label: "/api/users?id=1"
+        properties:
+          artifact_type: endpoints
+      - type: service
+        node_id: "svc_web"
+        label: "https:443"
+        properties:
+          artifact_type: services
+    expected_pipeline:
+      - step: heuristic_matching
+        expects: "idor_numeric_param matched"
+      - step: hypothesis_scoring
+        expects: "hypotheses scored"
+    expected_artifacts:
+      - vulnerability
+      - exploit_chain
+    expected_graph_nodes:
+      - endpoint
+      - vulnerability
+
+  # ── Scenario 2: IDOR via Workflow ───────────────────────────────
+
+  - name: idor_workflow
+    description: "IDOR detection through stateful workflow mutation"
+    initial_artifacts:
+      - type: endpoint
+        node_id: "ep_login"
+        label: "/api/login"
+        properties:
+          artifact_type: endpoints
+      - type: endpoint
+        node_id: "ep_profile"
+        label: "/api/users/profile?user_id=42"
+        properties:
+          artifact_type: endpoints
+      - type: endpoint
+        node_id: "ep_orders"
+        label: "/api/orders/create"
+        properties:
+          artifact_type: endpoints
+    expected_pipeline:
+      - step: heuristic_matching
+        expects: "auth and crud groups detected"
+      - step: workflow_mutation
+        mutation_types:
+          - modify_id
+          - cross_session
+    expected_artifacts:
+      - workflow_mutation_result
+    expected_graph_nodes:
+      - endpoint
+
+  # ── Scenario 3: Workflow Bypass ─────────────────────────────────
+
+  - name: workflow_bypass
+    description: "Detect payment/checkout workflow bypass"
+    initial_artifacts:
+      - type: endpoint
+        node_id: "ep_cart"
+        label: "/api/cart/add"
+        properties:
+          artifact_type: endpoints
+      - type: endpoint
+        node_id: "ep_checkout"
+        label: "/api/checkout?price=99"
+        properties:
+          artifact_type: endpoints
+      - type: endpoint
+        node_id: "ep_pay"
+        label: "/api/payment/confirm"
+        properties:
+          artifact_type: endpoints
+    expected_pipeline:
+      - step: heuristic_matching
+        expects: "payment group detected"
+      - step: workflow_mutation
+        mutation_types:
+          - skip_step
+          - swap_order
+    expected_artifacts:
+      - workflow_mutation_result
+
+  # ── Scenario 4: Credential Reuse ───────────────────────────────
+
+  - name: credential_reuse
+    description: "Detect credential reuse across services"
+    initial_artifacts:
+      - type: credential
+        node_id: "cred_admin"
+        label: "admin:P@ssw0rd"
+        properties:
+          artifact_type: credential_leak
+      - type: service
+        node_id: "svc_ssh"
+        label: "ssh:22"
+        properties:
+          artifact_type: services
+      - type: endpoint
+        node_id: "ep_admin_login"
+        label: "/admin/login"
+        properties:
+          artifact_type: endpoints
+    expected_pipeline:
+      - step: pattern_matching
+        expects: "credential_reuse pattern matched"
+      - step: recon_planning
+        expects: "service fingerprint scheduled"
+    expected_artifacts:
+      - access_level
+
+  # ── Scenario 5: Endpoint Discovery Chain ────────────────────────
+
+  - name: endpoint_discovery_chain
+    description: "Full recon → heuristic → exploit chain"
+    initial_artifacts:
+      - type: asset
+        node_id: "sub_web"
+        label: "web.target.com"
+        properties:
+          artifact_type: subdomains
+      - type: service
+        node_id: "svc_https"
+        label: "https:443"
+        properties:
+          artifact_type: services
+    expected_pipeline:
+      - step: recon_planning
+        expects: "subdomain analysis and web fingerprinting scheduled"
+      - step: heuristic_matching
+        expects: "debug endpoint check on service"
+    expected_artifacts:
+      - endpoints
+      - services
+
+  # ── Scenario 6: Exploit Refinement Loop ─────────────────────────
+
+  - name: exploit_refinement_loop
+    description: "WAF-blocked SQLi triggers adaptive refinement"
+    initial_artifacts:
+      - type: endpoint
+        node_id: "ep_search"
+        label: "/api/search?q=test"
+        properties:
+          artifact_type: endpoints
+    simulated_responses:
+      - attempt: 1
+        status_code: 403
+        body: "Blocked by web application firewall"
+      - attempt: 2
+        status_code: 500
+        body: "MySQL syntax error near encoded input"
+      - attempt: 3
+        status_code: 200
+        body: "user_id=1,email=admin@test.com"
+    expected_pipeline:
+      - step: heuristic_matching
+        expects: "param_type_confusion or verbose_error matched"
+      - step: hypothesis_scoring
+        expects: "hypotheses scored"
+      - step: exploit_refinement
+        expects: "WAF bypass mutations applied"
+    expected_artifacts:
+      - vulnerability

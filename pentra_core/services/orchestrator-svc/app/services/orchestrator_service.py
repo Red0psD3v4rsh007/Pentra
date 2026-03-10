@@ -1,13 +1,13 @@
 """Orchestrator service — facade coordinating all engine components.
 
 This is the central entry point for scan orchestration logic.
-It wires together:
-  DAGBuilder → PhaseController → JobDispatcher → StateManager
+It receives events from ScanConsumer and JobEventHandler and
+delegates pipeline execution to PipelineExecutor (MOD-04.5).
 
-And handles the full lifecycle:
-  scan.created → build DAG → dispatch phase 0
-  job.completed → update state → advance phase → dispatch next
-  job.failed → retry / fail → evaluate phase → advance or fail
+Event flow:
+  scan.created → build DAG → PipelineExecutor.start_pipeline()
+  job.completed → update state → PipelineExecutor.execute_after_completion()
+  job.failed → retry / fail → PipelineExecutor.execute_after_failure()
 """
 
 from __future__ import annotations
@@ -23,9 +23,11 @@ from app.engine.concurrency_controller import ConcurrencyController
 from app.engine.dag_builder import DAGBuilder
 from app.engine.dependency_resolver import DependencyResolver
 from app.engine.job_dispatcher import JobDispatcher
+from app.engine.pipeline_executor import PipelineExecutor
 from app.engine.phase_controller import PhaseController
 from app.engine.retry_manager import RetryManager
 from app.engine.state_manager import StateManager
+from app.engine.artifact_bus import ArtifactBus
 
 logger = logging.getLogger(__name__)
 
@@ -59,14 +61,14 @@ class OrchestratorService:
         1. Dedup event (idempotency check)
         2. Acquire distributed lock
         3. Build DAG
-        4. Activate first phase
-        5. Dispatch ready nodes
-        6. Update scan status: queued → validating
+        4. Start pipeline (activate phase 0, resolve, dispatch)
+        5. Update scan status: queued → validating
         """
         event_id = event.get("event_id", "")
         scan_id = uuid.UUID(event["scan_id"])
         tenant_id = uuid.UUID(event["tenant_id"])
         scan_type = event["scan_type"]
+        priority = event.get("priority", "normal")
         asset_type = event.get("asset_type", "web_app")
         target = event.get("target", "")
         config = event.get("config", {})
@@ -125,22 +127,17 @@ class OrchestratorService:
                     config=config,
                 )
 
-                # 2 — Activate first phase
-                controller = PhaseController(session)
-                ready_nodes = await controller.activate_first_phase(dag_id)
+                # 2 — Start pipeline (activate first phase → resolve → dispatch)
+                executor = PipelineExecutor(session, self._redis)
+                result = await executor.start_pipeline(
+                    dag_id=dag_id,
+                    scan_id=scan_id,
+                    tenant_id=tenant_id,
+                    target=target,
+                    priority=priority,
+                )
 
-                # 3 — Dispatch ready nodes
-                dispatcher = JobDispatcher(session, self._redis)
-                if ready_nodes:
-                    await dispatcher.dispatch_nodes(
-                        ready_nodes,
-                        scan_id=scan_id,
-                        tenant_id=tenant_id,
-                        target=target,
-                        config=config,
-                    )
-
-                # 4 — Transition scan status
+                # 3 — Transition scan status
                 state = StateManager(session)
                 await state.transition_scan(scan_id, "validating")
 
@@ -153,8 +150,8 @@ class OrchestratorService:
             await self._concurrency.mark_event_processed(event_id)
 
             logger.info(
-                "Scan orchestration started: scan=%s dag=%s type=%s nodes=%d",
-                scan_id, dag_id, scan_type, len(ready_nodes),
+                "Scan orchestration started: scan=%s dag=%s type=%s dispatched=%d",
+                scan_id, dag_id, scan_type, result["dispatched_count"],
             )
 
         except Exception:
@@ -168,11 +165,9 @@ class OrchestratorService:
     async def handle_job_completed(self, event: dict[str, Any]) -> None:
         """Handle a job.completed event from a worker.
 
-        1. Mark node as completed
-        2. Store artifact reference
-        3. Evaluate phase
-        4. If phase done → advance to next phase → dispatch new nodes
-        5. If DAG done → transition scan to completed
+        1. Mark node as completed + propagate edge data_refs
+        2. Delegate to PipelineExecutor for resolve → dispatch → advance
+        3. Handle DAG completion
         """
         event_id = event.get("event_id", "")
         scan_id = uuid.UUID(event["scan_id"])
@@ -208,42 +203,67 @@ class OrchestratorService:
                 dag_id = info["dag_id"]
                 phase_number = info["phase_number"]
 
-                # 2 — Store artifact
+                # 2 — Delegate to pipeline executor
+                executor = PipelineExecutor(session, self._redis)
+                result = await executor.execute_after_completion(
+                    dag_id=dag_id,
+                    scan_id=scan_id,
+                    tenant_id=tenant_id,
+                    node_id=node_id,
+                    phase_number=phase_number,
+                    output_ref=output_ref,
+                    output_summary=output_summary,
+                    tool=event.get("tool", "unknown"),
+                    target=event.get("target", ""),
+                    priority=event.get("priority", "normal"),
+                )
+
+                # 3 — MOD-06: Artifact bus — trigger exploit planning
                 tool = event.get("tool", "unknown")
-                await state.store_artifact(
-                    scan_id=scan_id, node_id=node_id, tenant_id=tenant_id,
-                    artifact_type=tool, storage_ref=output_ref,
+                artifact_type = output_summary.get("artifact_type", tool)
+                bus = ArtifactBus(session)
+                bus_result = await bus.process_completed_node(
+                    dag_id=dag_id,
+                    scan_id=scan_id,
+                    tenant_id=tenant_id,
+                    node_id=node_id,
+                    tool=tool,
+                    artifact_type=artifact_type,
+                    output_ref=output_ref,
+                    output_summary=output_summary,
                 )
 
-                # 3 — Update scan progress
-                progress = await state.update_scan_progress(scan_id)
-
-                # 4 — Evaluate phase and advance
-                controller = PhaseController(session)
-                dag_status, ready_nodes = await controller.evaluate_and_advance(
-                    dag_id, phase_number
+                # If exploit planner, strategy, or exploration created dynamic nodes, re-resolve
+                new_dynamic = (
+                    bus_result["dynamic_nodes_created"]
+                    + bus_result.get("strategy_nodes_created", 0)
+                    + bus_result.get("exploration_nodes_created", 0)
                 )
+                if new_dynamic > 0:
+                    newly_ready = await executor._resolver.resolve_ready_nodes(dag_id)
+                    if newly_ready:
+                        await executor._dispatcher.dispatch_nodes(
+                            newly_ready,
+                            scan_id=scan_id,
+                            tenant_id=tenant_id,
+                            target=event.get("target", ""),
+                            priority=event.get("priority", "normal"),
+                        )
 
-                # 5 — Dispatch new ready nodes
-                if ready_nodes:
-                    target = event.get("target", "")
-                    dispatcher = JobDispatcher(session, self._redis)
-                    await dispatcher.dispatch_nodes(
-                        ready_nodes,
-                        scan_id=scan_id, tenant_id=tenant_id,
-                        target=target,
-                    )
-
-                # 6 — Handle DAG completion
+                # 4 — Handle DAG completion
+                dag_status = result["dag_status"]
                 if dag_status == "completed":
                     await state.transition_scan(scan_id, "completed")
                     await self._concurrency.decrement_tenant_scans(tenant_id)
-                    logger.info("Scan %s COMPLETED (progress=%d%%)", scan_id, progress)
+                    logger.info(
+                        "Scan %s COMPLETED (progress=%d%%)",
+                        scan_id, result["progress"],
+                    )
                 elif dag_status == "failed":
                     await state.transition_scan(scan_id, "failed")
                     await self._concurrency.decrement_tenant_scans(tenant_id)
                 else:
-                    # Still running — ensure scan is in 'running' status
+                    # Still running
                     await state.transition_scan(scan_id, "running")
 
                 await session.commit()
@@ -262,9 +282,9 @@ class OrchestratorService:
 
         1. Mark node as failed
         2. Check retry eligibility
-        3. If retryable → reset node, wait backoff, dispatch
-        4. If not → evaluate phase
-        5. If phase failed → fail DAG and scan
+        3. If retryable → reset node, wait backoff, re-dispatch
+        4. If not → propagate failure + evaluate phase via PipelineExecutor
+        5. Handle DAG failure
         """
         event_id = event.get("event_id", "")
         scan_id = uuid.UUID(event["scan_id"])
@@ -304,25 +324,26 @@ class OrchestratorService:
                     max_retries=max_retries,
                     error_code=error_code,
                 ):
-                    # Reset node for retry
+                    # Reset node for retry (failed → pending)
                     await state.reset_node_for_retry(node_id)
                     await session.commit()
 
                     # Backoff
                     await self._retry_mgr.wait_for_backoff(retry_count)
 
-                    # Re-dispatch
+                    # Re-resolve and dispatch
                     async with self._session_factory() as session2:
                         await session2.execute(
                             text(f"SET LOCAL app.tenant_id = '{tenant_id}'")
                         )
                         resolver = DependencyResolver(session2)
-                        ready = await resolver.get_ready_nodes(dag_id)
+                        ready = await resolver.resolve_ready_nodes(dag_id)
                         if ready:
                             dispatcher = JobDispatcher(session2, self._redis)
                             await dispatcher.dispatch_nodes(
                                 ready, scan_id=scan_id, tenant_id=tenant_id,
                                 target=event.get("target", ""),
+                                priority=event.get("priority", "normal"),
                             )
                         await session2.commit()
 
@@ -330,25 +351,29 @@ class OrchestratorService:
                         "Node %s retry #%d scheduled", node_id, retry_count + 1
                     )
                 else:
-                    # No retry — evaluate phase status
-                    controller = PhaseController(session)
-                    dag_status, ready_nodes = await controller.evaluate_and_advance(
-                        dag_id, phase_number
+                    # No retry — permanent failure
+                    # Delegate to pipeline executor (propagates failure + evaluates)
+                    executor = PipelineExecutor(session, self._redis)
+                    result = await executor.execute_after_failure(
+                        dag_id=dag_id,
+                        scan_id=scan_id,
+                        tenant_id=tenant_id,
+                        node_id=node_id,
+                        phase_number=phase_number,
+                        target=event.get("target", ""),
+                        priority=event.get("priority", "normal"),
                     )
 
-                    if ready_nodes:
-                        dispatcher = JobDispatcher(session, self._redis)
-                        await dispatcher.dispatch_nodes(
-                            ready_nodes, scan_id=scan_id, tenant_id=tenant_id,
-                            target=event.get("target", ""),
-                        )
-
+                    dag_status = result["dag_status"]
                     if dag_status == "failed":
                         await state.transition_scan(scan_id, "failed")
                         await self._concurrency.decrement_tenant_scans(tenant_id)
                     elif dag_status == "completed":
                         await state.transition_scan(scan_id, "completed")
                         await self._concurrency.decrement_tenant_scans(tenant_id)
+
+                    # Update progress after failure propagation
+                    await state.update_scan_progress(scan_id)
 
                     await session.commit()
 

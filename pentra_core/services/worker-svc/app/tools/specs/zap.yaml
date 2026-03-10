@@ -1,0 +1,12 @@
+name: zap
+worker_family: web
+image: ghcr.io/zaproxy/zaproxy:stable
+command:
+  - zap-baseline.py
+  - -t
+  - "{target}"
+  - -J
+  - "{output_dir}/zap.json"
+output_parser: json
+artifact_type: vulnerabilities
+default_timeout: 1800

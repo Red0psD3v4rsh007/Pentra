@@ -1,0 +1,14 @@
+name: ai_triage
+worker_family: recon
+image: pentra/ai-triage:latest
+command:
+  - python
+  - -m
+  - ai_triage
+  - --input
+  - "{input_dir}"
+  - --output
+  - "{output_dir}/findings_scored.json"
+output_parser: json
+artifact_type: findings_scored
+default_timeout: 300

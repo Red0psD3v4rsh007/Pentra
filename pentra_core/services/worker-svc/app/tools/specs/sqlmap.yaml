@@ -1,0 +1,13 @@
+name: sqlmap
+worker_family: vuln
+image: pentra/sqlmap:latest
+command:
+  - sqlmap
+  - -u
+  - "{target}"
+  - --batch
+  - --output-dir
+  - "{output_dir}"
+output_parser: raw
+artifact_type: vulnerabilities
+default_timeout: 1800

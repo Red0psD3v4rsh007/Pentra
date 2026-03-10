@@ -50,7 +50,8 @@ class PhaseController:
         phase_num = row["phase_number"]
 
         # Mark phase as running
-        now = datetime.now(timezone.utc).isoformat()
+        # now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
         await self._session.execute(text("""
             UPDATE scan_phases SET status = 'running', started_at = :now
             WHERE id = :pid
@@ -65,7 +66,7 @@ class PhaseController:
         await self._session.flush()
 
         logger.info("Activated phase %d for DAG %s", phase_num, dag_id)
-        return await self._resolver.get_ready_nodes(dag_id)
+        return await self._resolver.resolve_ready_nodes(dag_id)
 
     async def evaluate_and_advance(
         self, dag_id: uuid.UUID, current_phase: int
@@ -84,11 +85,12 @@ class PhaseController:
 
         if phase_status == "running":
             # Phase still has active nodes — check for more ready nodes
-            ready = await self._resolver.get_ready_nodes(dag_id)
+            ready = await self._resolver.resolve_ready_nodes(dag_id)
             return "executing", ready
 
         # Phase is done — mark it
-        now = datetime.now(timezone.utc).isoformat()
+        # now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
         await self._session.execute(text("""
             UPDATE scan_phases SET status = :st, completed_at = :now
             WHERE dag_id = :did AND phase_number = :pn
@@ -146,5 +148,5 @@ class PhaseController:
         await self._session.flush()
 
         logger.info("Advanced to phase %d for DAG %s", next_num, dag_id)
-        ready = await self._resolver.get_ready_nodes(dag_id)
+        ready = await self._resolver.resolve_ready_nodes(dag_id)
         return "executing", ready

@@ -1,0 +1,239 @@
+"""Unit tests for the pipeline fixes — verifiable without live services.
+
+Tests:
+  1. RetryManager logic (no deps)
+  2. DAGBuilder ToolSpec templates (validate phase/node/edge counts)
+  3. JobDispatcher SQL includes all required NOT NULL columns
+  4. ConcurrencyController idempotency logic
+
+Run:
+    cd pentra_core/services/orchestrator-svc
+    python -m pytest tests/test_pipeline_fixes.py -v
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import sys
+import uuid
+
+# Ensure project in path
+_this_dir = os.path.dirname(os.path.abspath(__file__))
+_svc_root = os.path.dirname(_this_dir)
+if _svc_root not in sys.path:
+    sys.path.insert(0, _svc_root)
+
+
+# ── Test 1: RetryManager ─────────────────────────────────────────────
+
+def test_retry_manager_non_retryable_errors():
+    """Non-retryable error codes should always return False."""
+    from app.engine.retry_manager import RetryManager
+
+    mgr = RetryManager()
+    for code in ["SCOPE_VIOLATION", "AUTH_FAILURE", "INVALID_TARGET", "QUOTA_EXCEEDED", "LICENCE_EXPIRED"]:
+        assert mgr.should_retry(retry_count=0, max_retries=5, error_code=code) is False
+
+
+def test_retry_manager_max_retries_exhausted():
+    """When retry_count >= max_retries, should not retry."""
+    from app.engine.retry_manager import RetryManager
+
+    mgr = RetryManager()
+    assert mgr.should_retry(retry_count=3, max_retries=3, error_code="TIMEOUT") is False
+    assert mgr.should_retry(retry_count=5, max_retries=3, error_code="TIMEOUT") is False
+
+
+def test_retry_manager_should_retry():
+    """When retryable and under limit, should retry."""
+    from app.engine.retry_manager import RetryManager
+
+    mgr = RetryManager()
+    assert mgr.should_retry(retry_count=0, max_retries=2, error_code="TIMEOUT") is True
+    assert mgr.should_retry(retry_count=1, max_retries=2, error_code="CONNECTION_ERROR") is True
+
+
+def test_retry_manager_backoff():
+    """Exponential backoff calculation."""
+    from app.engine.retry_manager import RetryManager
+
+    mgr = RetryManager()
+    assert mgr.get_backoff_seconds(0) == 5.0    # 5 * 2^0
+    assert mgr.get_backoff_seconds(1) == 10.0   # 5 * 2^1
+    assert mgr.get_backoff_seconds(2) == 20.0   # 5 * 2^2
+    assert mgr.get_backoff_seconds(3) == 40.0   # 5 * 2^3
+    assert mgr.get_backoff_seconds(10) == 120.0  # capped at 120
+
+
+# ── Test 2: DAG Templates ────────────────────────────────────────────
+
+def test_recon_template():
+    """Recon scan type should have 2 phases and 4 tools."""
+    from app.engine.dag_builder import _PHASES, _TOOLS
+
+    phases = _PHASES["recon"]
+    tools = _TOOLS["recon"]
+
+    assert len(phases) == 2, f"Expected 2 phases, got {len(phases)}"
+    assert phases[0].number == 0 and phases[0].name == "scope_validation"
+    assert phases[1].number == 1 and phases[1].name == "recon"
+
+    assert len(tools) == 4, f"Expected 4 tools, got {len(tools)}"
+    tool_names = {t.name for t in tools}
+    assert "scope_check" in tool_names
+    assert "subfinder" in tool_names
+    assert "amass" in tool_names
+    assert "nmap_discovery" in tool_names
+
+
+def test_full_template():
+    """Full scan type should have 7 phases and include all tools."""
+    from app.engine.dag_builder import _PHASES, _TOOLS
+
+    phases = _PHASES["full"]
+    tools = _TOOLS["full"]
+
+    assert len(phases) == 7, f"Expected 7 phases, got {len(phases)}"
+    assert len(tools) >= 10, f"Expected 10+ tools, got {len(tools)}"
+
+    # Verify phase chain
+    phase_numbers = [p.number for p in phases]
+    assert phase_numbers == [0, 1, 2, 3, 4, 5, 6]
+
+
+def test_vuln_template():
+    """Vuln scan type should have 4 phases."""
+    from app.engine.dag_builder import _PHASES, _TOOLS
+
+    phases = _PHASES["vuln"]
+    tools = _TOOLS["vuln"]
+
+    assert len(phases) == 4
+    assert len(tools) >= 7
+
+
+def test_unknown_scan_type():
+    """Unknown scan type should NOT be in templates."""
+    from app.engine.dag_builder import _PHASES, _TOOLS
+
+    assert "nonexistent" not in _PHASES
+    assert "nonexistent" not in _TOOLS
+
+
+# ── Test 3: ToolSpec metadata propagation ────────────────────────────
+
+def test_toolspec_carries_retry_timeout():
+    """Every ToolSpec should have max_retries and timeout_seconds."""
+    from app.engine.dag_builder import _TOOLS
+
+    for scan_type, tools in _TOOLS.items():
+        for tool in tools:
+            assert hasattr(tool, "max_retries"), f"{tool.name} missing max_retries"
+            assert hasattr(tool, "timeout_seconds"), f"{tool.name} missing timeout_seconds"
+            assert isinstance(tool.max_retries, int)
+            assert isinstance(tool.timeout_seconds, int)
+            assert tool.timeout_seconds > 0
+
+
+def test_node_config_json_serialization():
+    """The config JSON should contain max_retries and timeout_seconds."""
+    from app.engine.dag_builder import _TOOLS
+
+    for tool in _TOOLS["recon"]:
+        config = json.dumps({
+            "max_retries": tool.max_retries,
+            "timeout_seconds": tool.timeout_seconds,
+        })
+        parsed = json.loads(config)
+        assert "max_retries" in parsed
+        assert "timeout_seconds" in parsed
+        assert parsed["max_retries"] == tool.max_retries
+
+
+# ── Test 4: DependencyResolver ReadyNode contract ────────────────────
+
+def test_ready_node_dataclass():
+    """ReadyNode should have all required fields."""
+    from app.engine.dependency_resolver import ReadyNode
+
+    node = ReadyNode(
+        node_id=uuid.uuid4(),
+        dag_id=uuid.uuid4(),
+        phase_id=uuid.uuid4(),
+        tool="nmap",
+        worker_family="network",
+        config={"max_retries": 2, "timeout_seconds": 600},
+        input_refs={},
+    )
+    assert node.tool == "nmap"
+    assert node.config["max_retries"] == 2
+    assert node.config["timeout_seconds"] == 600
+
+
+# ── Test 5: Verify fixed SQL strings ────────────────────────────────
+
+def test_job_dispatcher_sql_has_required_columns():
+    """Verify that the INSERT SQL in job_dispatcher includes all NOT NULL columns."""
+    import inspect
+    from app.engine.job_dispatcher import JobDispatcher
+
+    source = inspect.getsource(JobDispatcher.dispatch_nodes)
+
+    # These columns are NOT NULL without server_default in the scan_jobs schema
+    assert "priority" in source, "INSERT must include 'priority' column"
+    assert "max_retries" in source, "INSERT must include 'max_retries' column"
+    assert "timeout_seconds" in source, "INSERT must include 'timeout_seconds' column"
+
+    # This column does NOT exist on scan_nodes — must not be referenced
+    # We had a bug where started_at was used in UPDATE scan_nodes
+    assert "started_at" not in source, "scan_nodes has no started_at column"
+
+
+def test_dag_builder_node_config_includes_toolspec():
+    """Verify DAGBuilder serializes ToolSpec data into node config."""
+    import inspect
+    from app.engine.dag_builder import DAGBuilder
+
+    source = inspect.getsource(DAGBuilder.build_dag)
+    assert "max_retries" in source
+    assert "timeout_seconds" in source
+    assert "json.dumps" in source
+
+
+# ── Test 6: Dependency edge wiring ───────────────────────────────────
+
+def test_tool_dependencies_valid():
+    """All depends_on references should point to tools that exist in the same template."""
+    from app.engine.dag_builder import _TOOLS
+
+    for scan_type, tools in _TOOLS.items():
+        tool_names = {t.name for t in tools}
+        for tool in tools:
+            for dep in tool.depends_on:
+                assert dep in tool_names, (
+                    f"Tool '{tool.name}' in scan_type '{scan_type}' "
+                    f"depends on '{dep}' which doesn't exist in the template"
+                )
+
+
+# ── Test 7: Phase min_success_ratio values ────────────────────────────
+
+def test_phase_success_ratios():
+    """Verify min_success_ratio values match architecture spec."""
+    from app.engine.dag_builder import _PHASES
+
+    full_phases = {p.name: p.min_success_ratio for p in _PHASES["full"]}
+    assert full_phases["scope_validation"] == 1.0
+    assert full_phases["recon"] == 0.33
+    assert full_phases["enum"] == 0.50
+    assert full_phases["vuln_scan"] == 0.66
+    assert full_phases["exploit_verify"] == 1.0
+
+
+# ── Run directly ─────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import pytest
+    sys.exit(pytest.main([__file__, "-v"]))

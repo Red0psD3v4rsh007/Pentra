@@ -45,6 +45,7 @@ class JobDispatcher:
         scan_id: uuid.UUID,
         tenant_id: uuid.UUID,
         target: str,
+        priority: str = "normal",
         config: dict | None = None,
     ) -> list[uuid.UUID]:
         """Dispatch a batch of ready nodes to their worker streams.
@@ -62,21 +63,28 @@ class JobDispatcher:
         for node in nodes:
             job_id = uuid.uuid4()
 
-            # 1 — Create ScanJob
+            # 1 — Create ScanJob (include all NOT NULL columns)
             await self._session.execute(text("""
-                INSERT INTO scan_jobs (id, scan_id, tenant_id, phase, tool, status)
-                VALUES (:id, :sid, :tid, :phase, :tool, 'queued')
+                INSERT INTO scan_jobs
+                    (id, scan_id, tenant_id, phase, tool, status,
+                     priority, max_retries, timeout_seconds)
+                VALUES
+                    (:id, :sid, :tid, :phase, :tool, 'queued',
+                     :priority, :max_retries, :timeout)
             """), {
                 "id": str(job_id), "sid": str(scan_id), "tid": str(tenant_id),
                 "phase": await self._get_phase_number(node.phase_id),
                 "tool": node.tool,
+                "priority": priority,
+                "max_retries": node.config.get("max_retries", 2),
+                "timeout": node.config.get("timeout_seconds", 600),
             })
 
-            # 2 — Mark node as scheduled
+            # 2 — Mark node as scheduled (ready → scheduled)
             await self._session.execute(text("""
-                UPDATE scan_nodes SET status = 'scheduled', started_at = :now
-                WHERE id = :id AND status = 'pending'
-            """), {"id": str(node.node_id), "now": now})
+                UPDATE scan_nodes SET status = 'scheduled'
+                WHERE id = :id AND status = 'ready'
+            """), {"id": str(node.node_id)})
 
             # Link job to node (store job_id in the node for cross-reference)
             await self._session.execute(text("""

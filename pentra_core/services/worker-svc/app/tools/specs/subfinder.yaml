@@ -1,0 +1,13 @@
+name: subfinder
+worker_family: recon
+image: projectdiscovery/subfinder:latest
+command:
+  - subfinder
+  - -d
+  - "{target}"
+  - -o
+  - "{output_dir}/subdomains.json"
+  - -json
+output_parser: json
+artifact_type: subdomains
+default_timeout: 600

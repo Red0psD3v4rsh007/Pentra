@@ -1,0 +1,13 @@
+name: metasploit
+worker_family: exploit
+image: metasploitframework/metasploit-framework:latest
+command:
+  - msfconsole
+  - -x
+  - "resource {config_file}; exit"
+output_parser: json
+artifact_type: access_levels
+default_timeout: 1200
+env_vars:
+  MSF_DBUSER: msf
+  MSF_DBPASS: msf

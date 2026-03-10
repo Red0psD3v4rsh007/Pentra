@@ -1,9 +1,18 @@
 """State manager — tracks scan, DAG, phase, and node state transitions.
 
+Node state machine (MOD-04.5):
+  pending → ready       Dependencies satisfied
+  ready → running       Worker picked up job
+  running → completed   Tool finished successfully
+  running → failed      Tool error (may retry)
+  running → blocked     Blocked on new dependency (retry path)
+  blocked → ready       Dependency satisfied, can re-dispatch
+  pending → skipped     Upstream permanently failed
+
 Handles:
-  - Node completion: update status, populate edge data_refs, store artifacts
-  - Node/job failure: route retry decisions through scan_jobs table
-  - Scan-level progress calculation
+  - Node lifecycle transitions with guard validation
+  - Failure propagation: cascade-skip downstream dependents
+  - Scan-level progress calculation (completed + skipped = resolved)
   - Scan status transitions (queued → validating → running → ...)
 """
 
@@ -18,12 +27,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
+# ── Valid node state transitions ─────────────────────────────────────
+
+_NODE_TRANSITIONS: dict[str, set[str]] = {
+    "pending":   {"ready", "skipped"},
+    "ready":     {"scheduled", "running"},
+    "scheduled": {"running"},
+    "running":   {"completed", "failed", "blocked"},
+    "blocked":   {"ready"},
+    "failed":    {"pending"},  # retry path only
+}
+
 # ── Valid scan status transitions ────────────────────────────────────
 
 _SCAN_TRANSITIONS: dict[str, set[str]] = {
     "queued":      {"validating", "cancelled", "failed"},
     "validating":  {"running", "failed", "cancelled"},
-    "running":     {"running", "analyzing", "paused", "failed", "cancelled"},
+    "running":     {"running", "analyzing", "paused", "failed", "cancelled", "completed"},
     "paused":      {"running", "cancelled"},
     "analyzing":   {"reporting", "failed"},
     "reporting":   {"completed", "failed"},
@@ -38,18 +58,20 @@ class StateManager:
 
     # ── Node state ───────────────────────────────────────────────
 
+    async def mark_node_ready(self, node_id: uuid.UUID) -> None:
+        """Transition a node from pending → ready (dependencies satisfied)."""
+        await self._transition_node(node_id, from_status="pending", to_status="ready")
+        logger.debug("Node %s → ready", node_id)
+
     async def mark_node_scheduled(self, node_id: uuid.UUID) -> None:
         """Mark a node as scheduled (dispatched to worker stream)."""
-        await self._session.execute(text("""
-            UPDATE scan_nodes SET status = 'scheduled'
-            WHERE id = :id AND status = 'pending'
-        """), {"id": str(node_id)})
+        await self._transition_node(node_id, from_status="ready", to_status="scheduled")
 
     async def mark_node_running(self, node_id: uuid.UUID) -> None:
         """Mark a node as running (worker picked up the job)."""
         await self._session.execute(text("""
             UPDATE scan_nodes SET status = 'running'
-            WHERE id = :id AND status = 'scheduled'
+            WHERE id = :id AND status IN ('scheduled', 'ready')
         """), {"id": str(node_id)})
 
     async def mark_node_completed(
@@ -158,6 +180,78 @@ class StateManager:
         await self._session.flush()
         logger.info("Node %s reset for retry", node_id)
 
+    async def mark_node_skipped(
+        self, node_id: uuid.UUID, reason: str = "upstream_failed"
+    ) -> None:
+        """Mark a pending node as skipped (upstream permanently failed)."""
+        await self._session.execute(text("""
+            UPDATE scan_nodes SET status = 'skipped'
+            WHERE id = :id AND status = 'pending'
+        """), {"id": str(node_id)})
+        logger.info("Node %s SKIPPED: %s", node_id, reason)
+
+    async def mark_node_blocked(self, node_id: uuid.UUID) -> None:
+        """Mark a running node as blocked (waiting for re-resolved dep)."""
+        await self._transition_node(node_id, from_status="running", to_status="blocked")
+        logger.info("Node %s → blocked", node_id)
+
+    async def unblock_node(self, node_id: uuid.UUID) -> None:
+        """Transition a blocked node back to ready."""
+        await self._transition_node(node_id, from_status="blocked", to_status="ready")
+        logger.info("Node %s → ready (unblocked)", node_id)
+
+    async def propagate_failure(
+        self, node_id: uuid.UUID, dag_id: uuid.UUID
+    ) -> list[uuid.UUID]:
+        """Cascade-skip all downstream dependents of a permanently failed node.
+
+        Walks the scan_edges graph starting from node_id, marking every
+        reachable pending node as 'skipped'.  Returns list of skipped node IDs.
+        """
+        skipped: list[uuid.UUID] = []
+        frontier = [node_id]
+
+        while frontier:
+            current = frontier.pop()
+
+            # Find all direct downstream nodes that are still pending
+            result = await self._session.execute(text("""
+                SELECT DISTINCT e.target_node_id
+                FROM scan_edges e
+                JOIN scan_nodes n ON n.id = e.target_node_id
+                WHERE e.source_node_id = :nid
+                  AND e.dag_id = :did
+                  AND n.status = 'pending'
+            """), {"nid": str(current), "did": str(dag_id)})
+
+            for row in result.mappings().all():
+                child_id = uuid.UUID(str(row["target_node_id"]))
+                await self.mark_node_skipped(child_id, reason=f"upstream {current} failed")
+                skipped.append(child_id)
+                frontier.append(child_id)  # continue cascading
+
+        if skipped:
+            logger.info(
+                "Failure propagation from %s: %d nodes skipped",
+                node_id, len(skipped),
+            )
+        return skipped
+
+    async def _transition_node(
+        self, node_id: uuid.UUID, *, from_status: str, to_status: str
+    ) -> None:
+        """Generic guarded node state transition."""
+        result = await self._session.execute(text("""
+            UPDATE scan_nodes SET status = :to_st
+            WHERE id = :id AND status = :from_st
+            RETURNING id
+        """), {"id": str(node_id), "from_st": from_status, "to_st": to_status})
+        if result.rowcount == 0:
+            logger.warning(
+                "Node %s transition %s→%s failed (not in expected state)",
+                node_id, from_status, to_status,
+            )
+
     # ── Scan state ───────────────────────────────────────────────
 
     async def transition_scan(
@@ -198,11 +292,14 @@ class StateManager:
         return old_status
 
     async def update_scan_progress(self, scan_id: uuid.UUID) -> int:
-        """Recalculate and update scan progress percentage."""
+        """Recalculate and update scan progress percentage.
+
+        Progress = (completed + skipped) / total * 100
+        """
         result = await self._session.execute(text("""
             SELECT
                 COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE n.status = 'completed') AS done
+                COUNT(*) FILTER (WHERE n.status IN ('completed', 'skipped')) AS resolved
             FROM scan_nodes n
             JOIN scan_dags d ON d.id = n.dag_id
             WHERE d.scan_id = :sid
@@ -211,7 +308,7 @@ class StateManager:
         if row is None or int(row["total"]) == 0:
             return 0
 
-        progress = int(int(row["done"]) / int(row["total"]) * 100)
+        progress = int(int(row["resolved"]) / int(row["total"]) * 100)
         await self._session.execute(text("""
             UPDATE scans SET progress = :p WHERE id = :id
         """), {"p": progress, "id": str(scan_id)})

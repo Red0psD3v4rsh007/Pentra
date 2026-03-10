@@ -1,0 +1,86 @@
+# Cloud Attack Patterns
+# Domain: cloud
+# Used by Pentra Offensive Knowledge Engine
+# Schema v2: includes confidence_score, priority, generated_artifacts
+
+patterns:
+
+  - name: cloud_key_escalation
+    domain: cloud
+    description: "Use discovered API keys to attempt cloud privilege escalation"
+    confidence_score: 0.7
+    priority: critical
+    preconditions:
+      artifacts:
+        - type: credential
+          filter: { label_contains: ["aws", "api_key", "token", "secret", "cloud", "azure", "gcp"] }
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 600
+        description: "Cloud API key privilege escalation"
+    impact:
+      - privilege_escalation
+      - admin_access
+    generated_artifacts:
+      - privilege
+
+  - name: s3_bucket_exposure
+    domain: cloud
+    description: "Test for exposed S3 buckets linked to discovered assets"
+    confidence_score: 0.6
+    priority: high
+    preconditions:
+      artifacts:
+        - type: asset
+          filter: { label_contains: ["s3", "bucket", "aws", "storage"] }
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 300
+        description: "S3 bucket access testing"
+    impact:
+      - data_exposure
+      - credential_leak
+    generated_artifacts:
+      - credential
+
+  - name: config_leak_escalation
+    domain: cloud
+    description: "Analyze leaked configuration for cloud credentials and internal endpoints"
+    confidence_score: 0.6
+    priority: high
+    preconditions:
+      artifacts:
+        - type: vulnerability
+          filter: { artifact_type_contains: ["lfi", "config", "leak", "exposure"] }
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 600
+        description: "Configuration file credential extraction"
+    impact:
+      - credential_leak
+      - internal_access
+    generated_artifacts:
+      - credential
+
+  - name: metadata_endpoint_access
+    domain: cloud
+    description: "Attempt to access cloud metadata endpoints via SSRF"
+    confidence_score: 0.7
+    priority: critical
+    preconditions:
+      artifacts:
+        - type: vulnerability
+          filter: { artifact_type_contains: ["ssrf"] }
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        description: "Cloud metadata service access via SSRF"
+    impact:
+      - credential_leak
+      - privilege_escalation
+    generated_artifacts:
+      - credential

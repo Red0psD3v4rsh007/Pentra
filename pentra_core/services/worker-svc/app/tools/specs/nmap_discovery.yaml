@@ -1,0 +1,12 @@
+name: nmap_discovery
+worker_family: network
+image: instrumentisto/nmap:latest
+command:
+  - nmap
+  - -sn
+  - -oX
+  - "{output_dir}/nmap_discovery.xml"
+  - "{target}"
+output_parser: xml_nmap
+artifact_type: hosts
+default_timeout: 600

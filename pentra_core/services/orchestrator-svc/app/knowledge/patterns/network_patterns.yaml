@@ -1,0 +1,147 @@
+# Network Attack Patterns
+# Domain: network
+# Used by Pentra Offensive Knowledge Engine
+# Schema v2: includes confidence_score, priority, generated_artifacts
+
+patterns:
+
+  - name: credential_reuse_ssh
+    domain: network
+    description: "Attempt credential reuse against SSH services"
+    confidence_score: 0.8
+    priority: critical
+    preconditions:
+      artifacts:
+        - type: credential
+        - type: service
+          filter: { label_contains: ["ssh", "22"] }
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        description: "SSH credential reuse attempt"
+    impact:
+      - shell_access
+    generated_artifacts:
+      - credential
+      - privilege
+
+  - name: credential_reuse_ftp
+    domain: network
+    description: "Attempt credential reuse against FTP services"
+    confidence_score: 0.7
+    priority: high
+    preconditions:
+      artifacts:
+        - type: credential
+        - type: service
+          filter: { label_contains: ["ftp", "21"] }
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        description: "FTP credential reuse attempt"
+    impact:
+      - data_exposure
+    generated_artifacts:
+      - credential
+
+  - name: credential_reuse_rdp
+    domain: network
+    description: "Attempt credential reuse against RDP services"
+    confidence_score: 0.7
+    priority: high
+    preconditions:
+      artifacts:
+        - type: credential
+        - type: service
+          filter: { label_contains: ["rdp", "3389"] }
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        description: "RDP credential reuse attempt"
+    impact:
+      - shell_access
+    generated_artifacts:
+      - credential
+      - privilege
+
+  - name: credential_reuse_generic
+    domain: network
+    description: "Attempt credential reuse across all discovered services"
+    confidence_score: 0.6
+    priority: high
+    preconditions:
+      artifacts:
+        - type: credential
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        description: "Generic credential reuse attempt"
+    impact:
+      - shell_access
+      - data_exposure
+    generated_artifacts:
+      - credential
+
+  - name: service_pivot
+    domain: network
+    description: "Explore lateral movement between services on the same asset"
+    confidence_score: 0.5
+    priority: medium
+    preconditions:
+      artifacts:
+        - type: service
+        - type: service
+    actions:
+      - tool: custom_poc
+        worker_family: network
+        timeout: 600
+        description: "Service-to-service pivot exploration"
+    impact:
+      - lateral_movement
+    generated_artifacts:
+      - service
+
+  - name: smb_enumeration
+    domain: network
+    description: "Enumerate SMB shares for sensitive data and credentials"
+    confidence_score: 0.6
+    priority: high
+    preconditions:
+      artifacts:
+        - type: service
+          filter: { label_contains: ["smb", "445", "139"] }
+    actions:
+      - tool: custom_poc
+        worker_family: network
+        timeout: 600
+        description: "SMB share enumeration"
+    impact:
+      - data_exposure
+      - credential_leak
+    generated_artifacts:
+      - credential
+
+  - name: database_access_attempt
+    domain: network
+    description: "Attempt database access with discovered credentials"
+    confidence_score: 0.7
+    priority: critical
+    preconditions:
+      artifacts:
+        - type: credential
+        - type: service
+          filter: { label_contains: ["mysql", "3306", "postgres", "5432", "mssql", "1433"] }
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        description: "Database authentication attempt"
+    impact:
+      - database_access
+    generated_artifacts:
+      - credential
+      - privilege

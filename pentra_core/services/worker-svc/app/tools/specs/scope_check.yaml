@@ -1,0 +1,12 @@
+name: scope_check
+worker_family: recon
+image: pentra/scope-check:latest
+command:
+  - scope-check
+  - --target
+  - "{target}"
+  - --output
+  - "{output_dir}/scope.json"
+output_parser: json
+artifact_type: scope
+default_timeout: 30

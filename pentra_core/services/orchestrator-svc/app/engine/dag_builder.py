@@ -14,6 +14,7 @@ Each tool node specifies:
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -243,7 +244,10 @@ class DAGBuilder:
                 "id": str(nid), "did": str(dag_id),
                 "pid": str(phase_ids[tool.phase]), "tid": str(tenant_id),
                 "tool": tool.name, "family": tool.worker_family,
-                "config": "{}",
+                "config": json.dumps({
+                    "max_retries": tool.max_retries,
+                    "timeout_seconds": tool.timeout_seconds,
+                }),
             })
 
         # 4 — Create ScanEdges (data dependencies)

@@ -1,0 +1,14 @@
+name: report_gen
+worker_family: recon
+image: pentra/report-gen:latest
+command:
+  - python
+  - -m
+  - report_gen
+  - --input
+  - "{input_dir}"
+  - --output
+  - "{output_dir}/report.json"
+output_parser: json
+artifact_type: report
+default_timeout: 300

@@ -1,0 +1,13 @@
+name: amass
+worker_family: recon
+image: caffix/amass:latest
+command:
+  - amass
+  - enum
+  - -d
+  - "{target}"
+  - -json
+  - "{output_dir}/amass.json"
+output_parser: json
+artifact_type: subdomains
+default_timeout: 600

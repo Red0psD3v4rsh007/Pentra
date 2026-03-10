@@ -1,0 +1,205 @@
+# Reconnaissance Action Library
+# Used by MOD-10 Autonomous Recon Planner
+# Defines recon actions matched against asset classifications
+
+recon_actions:
+
+  # ── Subdomain recon ─────────────────────────────────────────────
+
+  - name: subdomain_analysis
+    description: "Analyze discovered subdomain for services and infrastructure"
+    target_asset_class: subdomain
+    priority: high
+    actions:
+      - tool: httpx
+        worker_family: recon
+        timeout: 300
+        description: "HTTP service probe on subdomain"
+      - tool: dns_bruteforce
+        worker_family: recon
+        timeout: 600
+        description: "DNS brute-force for additional subdomains"
+    impact:
+      - service_discovery
+      - subdomain_expansion
+    generated_artifacts:
+      - service
+      - subdomain
+
+  - name: subdomain_takeover_check
+    description: "Check subdomain for potential takeover vulnerabilities"
+    target_asset_class: subdomain
+    priority: medium
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 300
+        description: "Subdomain takeover detection"
+    impact:
+      - subdomain_takeover
+    generated_artifacts:
+      - vulnerability
+
+  # ── Web service recon ───────────────────────────────────────────
+
+  - name: web_service_fingerprint
+    description: "Fingerprint web service technologies and frameworks"
+    target_asset_class: web_service
+    priority: high
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 300
+        description: "Web technology fingerprinting"
+    impact:
+      - service_identification
+    generated_artifacts:
+      - service
+
+  - name: web_directory_discovery
+    description: "Discover hidden directories and files on web service"
+    target_asset_class: web_service
+    priority: high
+    actions:
+      - tool: ffuf
+        worker_family: web
+        timeout: 900
+        description: "Directory and file brute-force"
+    impact:
+      - endpoint_discovery
+    generated_artifacts:
+      - endpoint
+
+  - name: web_vhost_discovery
+    description: "Discover virtual hosts on web service"
+    target_asset_class: web_service
+    priority: medium
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 600
+        description: "Virtual host enumeration"
+    impact:
+      - subdomain_expansion
+    generated_artifacts:
+      - subdomain
+
+  # ── Network service recon ───────────────────────────────────────
+
+  - name: service_fingerprint
+    description: "Fingerprint network service version and configuration"
+    target_asset_class: network_service
+    priority: high
+    actions:
+      - tool: nmap
+        worker_family: network
+        timeout: 300
+        description: "Service version detection"
+    impact:
+      - service_identification
+    generated_artifacts:
+      - service
+
+  - name: service_banner_grab
+    description: "Grab service banners for version and configuration details"
+    target_asset_class: network_service
+    priority: medium
+    actions:
+      - tool: custom_poc
+        worker_family: network
+        timeout: 120
+        description: "Banner grabbing"
+    impact:
+      - service_identification
+    generated_artifacts:
+      - service
+
+  # ── API endpoint recon ──────────────────────────────────────────
+
+  - name: api_schema_discovery
+    description: "Discover API schema and documentation endpoints"
+    target_asset_class: api_endpoint
+    priority: high
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 600
+        description: "API schema and docs discovery"
+    impact:
+      - endpoint_discovery
+    generated_artifacts:
+      - endpoint
+
+  - name: api_method_enumeration
+    description: "Enumerate HTTP methods on API endpoints"
+    target_asset_class: api_endpoint
+    priority: medium
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 300
+        description: "HTTP method enumeration"
+    impact:
+      - endpoint_discovery
+    generated_artifacts:
+      - endpoint
+
+  # ── Cloud asset recon ───────────────────────────────────────────
+
+  - name: cloud_bucket_check
+    description: "Check cloud storage buckets for misconfiguration"
+    target_asset_class: cloud_asset
+    priority: high
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 300
+        description: "Cloud storage bucket access testing"
+    impact:
+      - data_exposure
+    generated_artifacts:
+      - vulnerability
+
+  - name: cloud_metadata_probe
+    description: "Probe for exposed cloud metadata endpoints"
+    target_asset_class: cloud_asset
+    priority: medium
+    actions:
+      - tool: custom_poc
+        worker_family: exploit
+        timeout: 300
+        description: "Cloud metadata endpoint probing"
+    impact:
+      - credential_leak
+    generated_artifacts:
+      - credential
+
+  # ── Web endpoint recon ──────────────────────────────────────────
+
+  - name: web_endpoint_crawl
+    description: "Crawl web endpoint for additional links and forms"
+    target_asset_class: web_endpoint
+    priority: medium
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 600
+        description: "Web endpoint spidering"
+    impact:
+      - endpoint_discovery
+    generated_artifacts:
+      - endpoint
+
+  - name: web_form_discovery
+    description: "Discover and analyze forms on web endpoints"
+    target_asset_class: web_endpoint
+    priority: medium
+    actions:
+      - tool: custom_poc
+        worker_family: web
+        timeout: 300
+        description: "Form parameter discovery"
+    impact:
+      - endpoint_discovery
+    generated_artifacts:
+      - endpoint
