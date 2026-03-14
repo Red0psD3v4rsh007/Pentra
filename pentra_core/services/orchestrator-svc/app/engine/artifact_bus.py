@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
@@ -34,6 +34,7 @@ from app.engine.graph_correlator import GraphCorrelator
 from app.engine.strategy_engine import StrategyEngine
 from app.engine.exploit_chain_generator import ExploitChainGenerator
 from app.engine.exploration_engine import ExplorationEngine
+from pentra_common.storage.artifacts import read_json_artifact
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,11 @@ _IMPACT_TRIGGER_TYPES = {"database_access", "shell_access", "credential_leak", "
 
 # Tools that produce exploit results
 _EXPLOIT_TOOLS = {"sqlmap", "metasploit", "custom_poc"}
+
+
+def _autonomy_disabled() -> bool:
+    value = os.getenv("PENTRA_DISABLE_AUTONOMY", "false").strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 class ArtifactBus:
@@ -89,11 +95,29 @@ class ArtifactBus:
             "graph_updated": False,
             "strategy_nodes_created": 0,
             "exploration_nodes_created": 0,
+            "findings_persisted": 0,
         }
+        scored = []
+        artifact = await self._load_artifact(output_ref, output_summary)
+        artifact_items = artifact.get("items", [])
+        artifact_findings = artifact.get("findings", [])
+        artifact_evidence = artifact.get("evidence", [])
+
+        if artifact_findings:
+            persisted = await self._persist_findings(
+                scan_id=scan_id,
+                tenant_id=tenant_id,
+                node_id=node_id,
+                findings=artifact_findings,
+                evidence=artifact_evidence,
+                output_ref=output_ref,
+            )
+            result["findings_persisted"] = persisted
+            await self._refresh_scan_result_summary(scan_id)
 
         # 1 — Vulnerability artifact triggers exploit planning
         if artifact_type in _EXPLOIT_TRIGGER_TYPES:
-            vuln_items = await self._load_artifact_items(output_ref, output_summary)
+            vuln_items = artifact_items
 
             if vuln_items:
                 created = await self._planner.plan_exploits(
@@ -114,7 +138,7 @@ class ArtifactBus:
 
         # 2 — Exploit tool output triggers impact verification
         if tool in _EXPLOIT_TOOLS:
-            impact_items = await self._load_artifact_items(output_ref, output_summary)
+            impact_items = artifact_items
 
             # Get the node config for vuln_type/impact_type
             node_config = await self._get_node_config(node_id)
@@ -159,89 +183,78 @@ class ArtifactBus:
                 if paths:
                     scorer = PathScorer(graph)
                     scored = scorer.score_paths(paths)
-                    # Store scoring summary in graph metadata
-                    graph_dict = graph.to_dict()
-                    graph_dict["path_summary"] = enumerator.get_path_summary(paths)
-                    graph_dict["scoring_summary"] = scorer.get_scoring_summary(scored)
+                    graph.path_summary = enumerator.get_path_summary(paths)
+                    graph.scoring_summary = scorer.get_scoring_summary(scored)
 
                 # Store updated graph as artifact
                 await self._graph_builder.store_graph(graph)
                 result["graph_updated"] = True
+                await self._refresh_scan_result_summary(scan_id)
 
-                # MOD-08 Phase 2: Strategy engine + exploit chain generation
-                if scored:
+                if _autonomy_disabled():
+                    logger.info(
+                        "Autonomy expansion disabled for scan %s; skipping strategy and exploration",
+                        scan_id,
+                    )
+                else:
+                    # MOD-08 Phase 2: Strategy engine + exploit chain generation
+                    if scored:
+                        try:
+                            strategy_eng = StrategyEngine(graph)
+                            strategy = strategy_eng.select_strategy(scored)
+
+                            if strategy and strategy.estimated_steps > 0:
+                                chain_gen = ExploitChainGenerator(self._session, graph)
+                                chain = chain_gen.generate_chain(strategy)
+
+                                if chain.steps:
+                                    chain_node_ids = await chain_gen.create_dynamic_nodes(
+                                        chain,
+                                        dag_id=dag_id,
+                                        scan_id=scan_id,
+                                        tenant_id=tenant_id,
+                                     )
+                                    result["strategy_nodes_created"] = len(chain_node_ids)
+
+                        except Exception:
+                            logger.exception(
+                                "Failed strategy/chain generation for scan %s", scan_id,
+                            )
+
+                    # MOD-09: Autonomous exploration
                     try:
-                        strategy_eng = StrategyEngine(graph)
-                        strategy = strategy_eng.select_strategy(scored)
-
-                        if strategy and strategy.estimated_steps > 0:
-                            chain_gen = ExploitChainGenerator(self._session, graph)
-                            chain = chain_gen.generate_chain(strategy)
-
-                            if chain.steps:
-                                chain_node_ids = await chain_gen.create_dynamic_nodes(
-                                    chain,
-                                    dag_id=dag_id,
-                                    scan_id=scan_id,
-                                    tenant_id=tenant_id,
-                                 )
-                                result["strategy_nodes_created"] = len(chain_node_ids)
-
+                        explorer = ExplorationEngine(self._session, graph)
+                        explore_result = await explorer.explore(
+                            dag_id=dag_id,
+                            scan_id=scan_id,
+                            tenant_id=tenant_id,
+                        )
+                        result["exploration_nodes_created"] = explore_result["exploration_nodes_created"]
                     except Exception:
                         logger.exception(
-                            "Failed strategy/chain generation for scan %s", scan_id,
+                            "Failed exploration for scan %s", scan_id,
                         )
-
-                # MOD-09: Autonomous exploration
-                try:
-                    explorer = ExplorationEngine(self._session, graph)
-                    explore_result = await explorer.explore(
-                        dag_id=dag_id,
-                        scan_id=scan_id,
-                        tenant_id=tenant_id,
-                    )
-                    result["exploration_nodes_created"] = explore_result["exploration_nodes_created"]
-                except Exception:
-                    logger.exception(
-                        "Failed exploration for scan %s", scan_id,
-                    )
 
         except Exception:
             logger.exception("Failed to update attack graph for scan %s", scan_id)
 
         return result
 
-    async def _load_artifact_items(
+    async def _load_artifact(
         self, output_ref: str, output_summary: dict | None,
-    ) -> list[dict]:
-        """Load artifact items from storage_ref or summary.
+    ) -> dict[str, Any]:
+        """Load the rich normalized artifact from storage when possible."""
+        payload = read_json_artifact(output_ref)
+        if isinstance(payload, dict):
+            return payload
 
-        In production: reads from S3 via output_ref.
-        In dev/test: uses output_summary or loads from local artifact store.
-        """
-        # Try to load from local artifact store first
-        import os
-        artifact_store = os.getenv("ARTIFACT_STORE_PATH", "/tmp/pentra/artifacts")
-
-        # output_ref = "artifacts/{tenant}/{scan}/{node}/{tool}.json"
-        if output_ref.startswith("artifacts/"):
-            local_path = Path(artifact_store) / output_ref.removeprefix("artifacts/")
-            if local_path.exists():
-                try:
-                    data = json.loads(local_path.read_text())
-                    if isinstance(data, dict) and "items" in data:
-                        return data["items"]
-                    elif isinstance(data, list):
-                        return data
-                except Exception:
-                    logger.warning("Failed to read artifact: %s", local_path)
-
-        # Fallback: use summary's item_count to infer
-        if output_summary and output_summary.get("item_count", 0) > 0:
-            # Return a minimal placeholder so the planner knows there are findings
-            return [{"type": output_summary.get("artifact_type", "unknown")}]
-
-        return []
+        summary = output_summary or {}
+        return {
+            "items": summary.get("preview_items", []),
+            "findings": summary.get("preview_findings", []),
+            "evidence": [],
+            "summary": summary.get("summary", {}),
+        }
 
     async def _get_node_config(self, node_id: uuid.UUID) -> dict:
         """Read a node's config JSONB."""
@@ -252,3 +265,175 @@ class ArtifactBus:
         if row is None:
             return {}
         return row if isinstance(row, dict) else json.loads(str(row))
+
+    async def _persist_findings(
+        self,
+        *,
+        scan_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        node_id: uuid.UUID,
+        findings: list[dict[str, Any]],
+        evidence: list[dict[str, Any]],
+        output_ref: str,
+    ) -> int:
+        """Persist canonical artifact findings into the findings table."""
+        job_result = await self._session.execute(
+            text(
+                """
+                SELECT job_id
+                FROM scan_nodes
+                WHERE id = :id
+                """
+            ),
+            {"id": str(node_id)},
+        )
+        job_id = job_result.scalar_one_or_none()
+
+        if job_id is not None:
+            await self._session.execute(
+                text(
+                    """
+                    DELETE FROM findings
+                    WHERE scan_id = :scan_id AND scan_job_id = :job_id
+                    """
+                ),
+                {"scan_id": str(scan_id), "job_id": str(job_id)},
+            )
+
+        evidence_index: dict[str, list[dict[str, Any]]] = {}
+        for evidence_item in evidence:
+            fingerprint = str(evidence_item.get("finding_fingerprint", ""))
+            if fingerprint:
+                evidence_index.setdefault(fingerprint, []).append(evidence_item)
+
+        inserted = 0
+        for finding in findings:
+            title = str(finding.get("title", "")).strip()
+            if not title:
+                continue
+
+            fingerprint = str(finding.get("fingerprint") or uuid.uuid4().hex)
+            evidence_payload = finding.get("evidence") or {}
+            if not isinstance(evidence_payload, dict):
+                evidence_payload = {}
+
+            evidence_payload = {
+                **evidence_payload,
+                "storage_ref": output_ref,
+                "references": [
+                    {
+                        "id": evidence_item.get("id"),
+                        "evidence_type": evidence_item.get("evidence_type"),
+                        "label": evidence_item.get("label"),
+                        "content_preview": evidence_item.get("content_preview"),
+                        "storage_ref": f"{output_ref}#{evidence_item.get('id')}",
+                    }
+                    for evidence_item in evidence_index.get(fingerprint, [])
+                ],
+            }
+
+            await self._session.execute(
+                text(
+                    """
+                    INSERT INTO findings (
+                        id, tenant_id, scan_id, scan_job_id, source_type,
+                        title, severity, confidence, cve_id, cvss_score,
+                        description, evidence, remediation, tool_source,
+                        is_false_positive, fp_probability, fingerprint
+                    ) VALUES (
+                        :id, :tenant_id, :scan_id, :scan_job_id, :source_type,
+                        :title, :severity, :confidence, :cve_id, :cvss_score,
+                        :description, CAST(:evidence AS jsonb), :remediation, :tool_source,
+                        false, :fp_probability, :fingerprint
+                    )
+                    """
+                ),
+                {
+                    "id": str(uuid.uuid4()),
+                    "tenant_id": str(tenant_id),
+                    "scan_id": str(scan_id),
+                    "scan_job_id": str(job_id) if job_id is not None else None,
+                    "source_type": str(finding.get("source_type", "scanner")),
+                    "title": title,
+                    "severity": str(finding.get("severity", "info")),
+                    "confidence": int(finding.get("confidence", 60) or 60),
+                    "cve_id": finding.get("cve_id"),
+                    "cvss_score": finding.get("cvss_score"),
+                    "description": finding.get("description"),
+                    "evidence": json.dumps(evidence_payload),
+                    "remediation": finding.get("remediation"),
+                    "tool_source": str(finding.get("tool_source", "unknown")),
+                    "fp_probability": finding.get("fp_probability"),
+                    "fingerprint": fingerprint,
+                },
+            )
+            inserted += 1
+
+        return inserted
+
+    async def _refresh_scan_result_summary(self, scan_id: uuid.UUID) -> None:
+        """Refresh the scan.result_summary JSON from persisted findings and artifacts."""
+        findings_result = await self._session.execute(
+            text(
+                """
+                SELECT severity, COUNT(*) AS total
+                FROM findings
+                WHERE scan_id = :scan_id
+                GROUP BY severity
+                """
+            ),
+            {"scan_id": str(scan_id)},
+        )
+
+        severity_counts = {key: 0 for key in ("critical", "high", "medium", "low", "info")}
+        for row in findings_result.mappings().all():
+            severity_counts[str(row["severity"])] = int(row["total"])
+
+        artifact_result = await self._session.execute(
+            text(
+                """
+                SELECT artifact_type,
+                       COALESCE((metadata->>'item_count')::int, 0) AS item_count,
+                       COALESCE((metadata->>'finding_count')::int, 0) AS finding_count,
+                       COALESCE((metadata->>'evidence_count')::int, 0) AS evidence_count
+                FROM scan_artifacts
+                WHERE scan_id = :scan_id
+                """
+            ),
+            {"scan_id": str(scan_id)},
+        )
+        artifact_rows = artifact_result.mappings().all()
+        artifact_types = [str(row["artifact_type"]) for row in artifact_rows]
+        evidence_count = sum(int(row["evidence_count"]) for row in artifact_rows)
+
+        attack_graph_result = await self._session.execute(
+            text(
+                """
+                SELECT COUNT(*) > 0
+                FROM scan_artifacts
+                WHERE scan_id = :scan_id AND artifact_type = 'attack_graph'
+                """
+            ),
+            {"scan_id": str(scan_id)},
+        )
+        attack_graph_ready = bool(attack_graph_result.scalar())
+
+        summary = {
+            "severity_counts": severity_counts,
+            "total_findings": sum(severity_counts.values()),
+            "artifact_count": len(artifact_rows),
+            "artifact_types": sorted(set(artifact_types)),
+            "evidence_count": evidence_count,
+            "attack_graph_ready": attack_graph_ready,
+        }
+
+        await self._session.execute(
+            text(
+                """
+                UPDATE scans
+                SET result_summary = CAST(:summary AS jsonb)
+                WHERE id = :scan_id
+                """
+            ),
+            {"scan_id": str(scan_id), "summary": json.dumps(summary)},
+        )

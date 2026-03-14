@@ -6,6 +6,7 @@ Usage::
 """
 
 from pentra_common.schemas.asset import *  # noqa: F401, F403
+from pentra_common.schemas.artifact import *  # noqa: F401, F403
 from pentra_common.schemas.common import *  # noqa: F401, F403
 from pentra_common.schemas.finding import *  # noqa: F401, F403
 from pentra_common.schemas.project import *  # noqa: F401, F403

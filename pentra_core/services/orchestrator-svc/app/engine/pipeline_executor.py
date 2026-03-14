@@ -84,7 +84,22 @@ class PipelineExecutor:
         # 1 — Store artifact
         await self._state.store_artifact(
             scan_id=scan_id, node_id=node_id, tenant_id=tenant_id,
-            artifact_type=tool, storage_ref=output_ref,
+            artifact_type=(output_summary or {}).get("artifact_type", tool),
+            storage_ref=output_ref,
+            content_type=(output_summary or {}).get("content_type", "application/json"),
+            size_bytes=int((output_summary or {}).get("size_bytes", 0) or 0),
+            checksum=(output_summary or {}).get("checksum"),
+            metadata={
+                "tool": tool,
+                "item_count": int((output_summary or {}).get("item_count", 0) or 0),
+                "finding_count": int((output_summary or {}).get("finding_count", 0) or 0),
+                "evidence_count": int((output_summary or {}).get("evidence_count", 0) or 0),
+                "severity_counts": (output_summary or {}).get("severity_counts", {}),
+                "summary": (output_summary or {}).get("summary", {}),
+                "items": (output_summary or {}).get("preview_items", []),
+                "findings": (output_summary or {}).get("preview_findings", []),
+                "duration_ms": int((output_summary or {}).get("duration_ms", 0) or 0),
+            },
         )
 
         # 2 — Resolve newly ready nodes (pending → ready)

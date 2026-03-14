@@ -16,11 +16,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pentra_common.events.stream_publisher import StreamPublisher
 from pentra_common.schemas import (
+    ArtifactSummaryResponse,
+    AttackGraphResponse,
+    EvidenceReferenceResponse,
     FindingResponse,
     PaginatedResponse,
     ScanCreate,
+    ScanReportResponse,
     ScanResponse,
     ScanJobResponse,
+    ScanTimelineEventResponse,
 )
 
 from app.deps import CurrentUser, get_current_user, get_db_session, get_stream_publisher
@@ -197,3 +202,89 @@ async def list_findings(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get(
+    "/{scan_id}/artifacts/summary",
+    response_model=list[ArtifactSummaryResponse],
+    summary="List normalized artifact summaries for a scan",
+)
+async def list_artifact_summaries(
+    scan_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> list[ArtifactSummaryResponse]:
+    summaries = await scan_service.list_artifact_summaries(
+        scan_id=scan_id,
+        session=session,
+    )
+    return [ArtifactSummaryResponse.model_validate(item) for item in summaries]
+
+
+@router.get(
+    "/{scan_id}/attack-graph",
+    response_model=AttackGraphResponse,
+    summary="Get the persisted attack graph for a scan",
+)
+async def get_attack_graph(
+    scan_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> AttackGraphResponse:
+    graph = await scan_service.get_attack_graph(scan_id=scan_id, session=session)
+    if graph is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attack graph not found",
+        )
+    return AttackGraphResponse.model_validate(graph)
+
+
+@router.get(
+    "/{scan_id}/timeline",
+    response_model=list[ScanTimelineEventResponse],
+    summary="Get scan timeline events",
+)
+async def get_scan_timeline(
+    scan_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> list[ScanTimelineEventResponse]:
+    timeline = await scan_service.get_scan_timeline(scan_id=scan_id, session=session)
+    return [ScanTimelineEventResponse.model_validate(item) for item in timeline]
+
+
+@router.get(
+    "/{scan_id}/evidence",
+    response_model=list[EvidenceReferenceResponse],
+    summary="List evidence references for a scan",
+)
+async def list_evidence(
+    scan_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> list[EvidenceReferenceResponse]:
+    evidence = await scan_service.list_evidence_references(
+        scan_id=scan_id,
+        session=session,
+    )
+    return [EvidenceReferenceResponse.model_validate(item) for item in evidence]
+
+
+@router.get(
+    "/{scan_id}/report",
+    response_model=ScanReportResponse,
+    summary="Build a scan report from persisted findings",
+)
+async def get_scan_report(
+    scan_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> ScanReportResponse:
+    report = await scan_service.get_scan_report(scan_id=scan_id, session=session)
+    if report is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Scan not found",
+        )
+    return ScanReportResponse.model_validate(report)

@@ -1,6 +1,12 @@
 Architecture Version: v1.0
 Last Updated Module: MOD-01
 
+Current worktree note:
+
+- This document mixes target-state architecture and historical implementation notes.
+- For live module status, use `SESSION_CONTEXT.md` and `MODULE_LOG.md`.
+- The active frontend workspace in the current worktree is `pentra_core/frontend/`.
+
 ## MOD-01 — Core Architecture
 
 # Pentra — System Architecture
@@ -77,15 +83,15 @@ graph TB
     CORE --> DATA
 ```
 
-| Layer | Responsibility |
-|---|---|
-| **Client** | Dashboard, CLI, external API consumers |
-| **Edge & Gateway** | TLS termination, WAF, rate limiting, routing |
-| **Core Platform** | Tenant management, authn/authz, asset CRUD, billing |
-| **Scan Orchestration** | Job scheduling, pipeline DAG construction, queue management |
-| **Worker Execution** | Isolated container execution of security tools |
-| **AI Analysis** | Vulnerability triage, dedup, exploit verification, report gen |
-| **Data & Storage** | Persistent state, caching, search, secrets |
+| Layer                  | Responsibility                                                |
+| ---------------------- | ------------------------------------------------------------- |
+| **Client**             | Dashboard, CLI, external API consumers                        |
+| **Edge & Gateway**     | TLS termination, WAF, rate limiting, routing                  |
+| **Core Platform**      | Tenant management, authn/authz, asset CRUD, billing           |
+| **Scan Orchestration** | Job scheduling, pipeline DAG construction, queue management   |
+| **Worker Execution**   | Isolated container execution of security tools                |
+| **AI Analysis**        | Vulnerability triage, dedup, exploit verification, report gen |
+| **Data & Storage**     | Persistent state, caching, search, secrets                    |
 
 ---
 
@@ -168,23 +174,23 @@ graph LR
 
 ### Service Contracts
 
-| Service | Protocol | Key Responsibility |
-|---|---|---|
-| `auth-svc` | gRPC | JWT issuance, RBAC, SAML/OIDC federation |
-| `tenant-svc` | gRPC | Org provisioning, plan limits, isolation config |
-| `billing-svc` | REST | Stripe integration, usage metering, invoices |
-| `notify-svc` | Async (SNS) | Email, Slack, webhook delivery |
-| `asset-svc` | REST/gRPC | Target CRUD, scope validation, asset tagging |
-| `scan-svc` | REST/gRPC | Scan CRUD, config profiles, status tracking |
-| `orchestrator-svc` | gRPC + SQS | DAG construction, phase sequencing, retry logic |
-| `scheduler-svc` | Internal | Cron-based recurring scans, event triggers |
-| `worker-controller` | gRPC | Pod lifecycle, resource allocation, health checks |
-| `*-adapter` | Sidecar gRPC | Tool-specific CLI wrapper, output normalization |
-| `triage-svc` | gRPC | AI-powered severity scoring, false-positive filtering |
-| `dedup-svc` | gRPC | Cross-scan deduplication, vulnerability correlation |
-| `exploit-verify-svc` | gRPC | Safe exploitation in sandbox, proof generation |
-| `report-svc` | REST | PDF/HTML generation, compliance mapping |
-| `llm-gateway-svc` | gRPC | LLM prompt orchestration, RAG over vuln knowledge |
+| Service              | Protocol     | Key Responsibility                                    |
+| -------------------- | ------------ | ----------------------------------------------------- |
+| `auth-svc`           | gRPC         | JWT issuance, RBAC, SAML/OIDC federation              |
+| `tenant-svc`         | gRPC         | Org provisioning, plan limits, isolation config       |
+| `billing-svc`        | REST         | Stripe integration, usage metering, invoices          |
+| `notify-svc`         | Async (SNS)  | Email, Slack, webhook delivery                        |
+| `asset-svc`          | REST/gRPC    | Target CRUD, scope validation, asset tagging          |
+| `scan-svc`           | REST/gRPC    | Scan CRUD, config profiles, status tracking           |
+| `orchestrator-svc`   | gRPC + SQS   | DAG construction, phase sequencing, retry logic       |
+| `scheduler-svc`      | Internal     | Cron-based recurring scans, event triggers            |
+| `worker-controller`  | gRPC         | Pod lifecycle, resource allocation, health checks     |
+| `*-adapter`          | Sidecar gRPC | Tool-specific CLI wrapper, output normalization       |
+| `triage-svc`         | gRPC         | AI-powered severity scoring, false-positive filtering |
+| `dedup-svc`          | gRPC         | Cross-scan deduplication, vulnerability correlation   |
+| `exploit-verify-svc` | gRPC         | Safe exploitation in sandbox, proof generation        |
+| `report-svc`         | REST         | PDF/HTML generation, compliance mapping               |
+| `llm-gateway-svc`    | gRPC         | LLM prompt orchestration, RAG over vuln knowledge     |
 
 ---
 
@@ -236,15 +242,15 @@ graph TD
 
 ### Phase Details
 
-| Phase | Parallelism | Timeout | Retry | Output |
-|---|---|---|---|---|
-| 0 — Scope Validation | 1 | 30s | 0 | scope.json |
-| 1 — Reconnaissance | Up to 3 concurrent | 10min | 2 | hosts.json, subdomains.json |
-| 2 — Enumeration | Up to 5 concurrent | 15min | 2 | services.json, directories.json |
-| 3 — Vulnerability Scanning | Up to 8 concurrent | 30min | 1 | findings_raw.json |
-| 4 — Exploit Verification | 1 (sequential, sandboxed) | 20min | 0 | exploits_verified.json |
-| 5 — AI Analysis | 1 | 5min | 1 | findings_scored.json |
-| 6 — Report Generation | 1 | 5min | 1 | report.pdf, report.html |
+| Phase                      | Parallelism               | Timeout | Retry | Output                          |
+| -------------------------- | ------------------------- | ------- | ----- | ------------------------------- |
+| 0 — Scope Validation       | 1                         | 30s     | 0     | scope.json                      |
+| 1 — Reconnaissance         | Up to 3 concurrent        | 10min   | 2     | hosts.json, subdomains.json     |
+| 2 — Enumeration            | Up to 5 concurrent        | 15min   | 2     | services.json, directories.json |
+| 3 — Vulnerability Scanning | Up to 8 concurrent        | 30min   | 1     | findings_raw.json               |
+| 4 — Exploit Verification   | 1 (sequential, sandboxed) | 20min   | 0     | exploits_verified.json          |
+| 5 — AI Analysis            | 1                         | 5min    | 1     | findings_scored.json            |
+| 6 — Report Generation      | 1                         | 5min    | 1     | report.pdf, report.html         |
 
 ### Orchestrator State Machine
 
@@ -331,15 +337,15 @@ Each worker pod runs a **sidecar architecture**:
 
 ### Capacity Planning (10,000 scans/day)
 
-| Metric | Value |
-|---|---|
-| Avg scan duration | 15 min |
-| Peak concurrent scans | ~420 (10k / 24h × 1hr overlap) |
-| Max concurrent worker pods | 500 |
-| Node pool: light (c6i.xlarge) | 20–40 nodes (auto-scaled) |
-| Node pool: heavy (c6i.2xlarge) | 15–30 nodes (auto-scaled) |
-| Node pool: exploit (m6i.xlarge, isolated) | 5–10 nodes |
-| Queue backpressure threshold | 1,000 pending jobs |
+| Metric                                    | Value                          |
+| ----------------------------------------- | ------------------------------ |
+| Avg scan duration                         | 15 min                         |
+| Peak concurrent scans                     | ~420 (10k / 24h × 1hr overlap) |
+| Max concurrent worker pods                | 500                            |
+| Node pool: light (c6i.xlarge)             | 20–40 nodes (auto-scaled)      |
+| Node pool: heavy (c6i.2xlarge)            | 15–30 nodes (auto-scaled)      |
+| Node pool: exploit (m6i.xlarge, isolated) | 5–10 nodes                     |
+| Queue backpressure threshold              | 1,000 pending jobs             |
 
 ### Scaling Strategy
 
@@ -366,13 +372,13 @@ graph LR
 
 ### AI Triage Engine
 
-| Component | Technology | Purpose |
-|---|---|---|
-| Embedding model | Sentence-BERT / OpenAI embeddings | Vectorize findings for similarity search |
-| Classification model | Fine-tuned transformer | Severity prediction, false-positive detection |
-| RAG knowledge base | pgvector on RDS + S3 docs | Retrieval-augmented generation for context |
-| LLM gateway | GPT-4o / Claude via `llm-gateway-svc` | Natural language report generation |
-| Attack chain mapper | Custom graph algorithm | Link related findings into exploitation paths |
+| Component            | Technology                            | Purpose                                       |
+| -------------------- | ------------------------------------- | --------------------------------------------- |
+| Embedding model      | Sentence-BERT / OpenAI embeddings     | Vectorize findings for similarity search      |
+| Classification model | Fine-tuned transformer                | Severity prediction, false-positive detection |
+| RAG knowledge base   | pgvector on RDS + S3 docs             | Retrieval-augmented generation for context    |
+| LLM gateway          | GPT-4o / Claude via `llm-gateway-svc` | Natural language report generation            |
+| Attack chain mapper  | Custom graph algorithm                | Link related findings into exploitation paths |
 
 ### AI Processing Flow
 
@@ -435,13 +441,13 @@ sequenceDiagram
 
 ### Data at Rest
 
-| Store | Data | Retention | Encryption |
-|---|---|---|---|
-| PostgreSQL (RDS) | Scans, findings, tenants, users | Indefinite | AES-256 (RDS encryption) |
-| S3 | Raw tool output, reports, evidence | 90 days (configurable) | SSE-S3 / SSE-KMS |
-| OpenSearch | Finding full-text, log aggregation | 30 days | Node-to-node TLS + at-rest |
-| Redis | Session cache, rate-limit counters | Ephemeral | In-transit TLS |
-| Vault | API keys, cloud creds, tool licenses | N/A | Seal/unseal with KMS |
+| Store            | Data                                 | Retention              | Encryption                 |
+| ---------------- | ------------------------------------ | ---------------------- | -------------------------- |
+| PostgreSQL (RDS) | Scans, findings, tenants, users      | Indefinite             | AES-256 (RDS encryption)   |
+| S3               | Raw tool output, reports, evidence   | 90 days (configurable) | SSE-S3 / SSE-KMS           |
+| OpenSearch       | Finding full-text, log aggregation   | 30 days                | Node-to-node TLS + at-rest |
+| Redis            | Session cache, rate-limit counters   | Ephemeral              | In-transit TLS             |
+| Vault            | API keys, cloud creds, tool licenses | N/A                    | Seal/unseal with KMS       |
 
 ---
 
@@ -499,20 +505,20 @@ graph TB
 
 ### AWS Services Map
 
-| Service | AWS Resource | Config |
-|---|---|---|
-| Compute — Platform | ECS Fargate | 2–4 vCPU / 8 GB per service |
-| Compute — Workers | EKS on EC2 | c6i.xlarge → c6i.4xlarge, Spot + OD |
-| Database | RDS PostgreSQL 15 | db.r6g.2xlarge, Multi-AZ, read replicas |
-| Cache | ElastiCache Redis 7 | cache.r6g.xlarge, cluster mode |
-| Search | OpenSearch 2.x | r6g.xlarge.search, 3 data + 2 master |
-| Queue | SQS (Standard) | High-throughput, DLQ configured |
-| Object Storage | S3 | Lifecycle policies, Intelligent-Tiering |
-| Secrets | Vault + KMS | Auto-unseal with KMS |
-| CDN | CloudFront | Static SPA + API acceleration |
-| DNS | Route 53 | Health-checked failover |
-| Monitoring | CloudWatch + Prometheus + Grafana | Custom dashboards, alerting |
-| CI/CD | CodePipeline + ArgoCD | GitOps for EKS deployments |
+| Service            | AWS Resource                      | Config                                  |
+| ------------------ | --------------------------------- | --------------------------------------- |
+| Compute — Platform | ECS Fargate                       | 2–4 vCPU / 8 GB per service             |
+| Compute — Workers  | EKS on EC2                        | c6i.xlarge → c6i.4xlarge, Spot + OD     |
+| Database           | RDS PostgreSQL 15                 | db.r6g.2xlarge, Multi-AZ, read replicas |
+| Cache              | ElastiCache Redis 7               | cache.r6g.xlarge, cluster mode          |
+| Search             | OpenSearch 2.x                    | r6g.xlarge.search, 3 data + 2 master    |
+| Queue              | SQS (Standard)                    | High-throughput, DLQ configured         |
+| Object Storage     | S3                                | Lifecycle policies, Intelligent-Tiering |
+| Secrets            | Vault + KMS                       | Auto-unseal with KMS                    |
+| CDN                | CloudFront                        | Static SPA + API acceleration           |
+| DNS                | Route 53                          | Health-checked failover                 |
+| Monitoring         | CloudWatch + Prometheus + Grafana | Custom dashboards, alerting             |
+| CI/CD              | CodePipeline + ArgoCD             | GitOps for EKS deployments              |
 
 ### Multi-AZ & DR
 
@@ -572,16 +578,16 @@ graph TB
 
 ### Security Controls per Zone
 
-| Zone | Controls |
-|---|---|
-| **Zone 0 → 1** | AWS WAF (OWASP rules, rate limiting, geo-blocking), CloudFront signed URLs |
-| **Zone 1 → 2** | TLS 1.3 termination at ALB, mutual TLS for internal, JWT validation |
-| **Zone 2 — App** | RBAC per tenant, request signing, input validation, CORS policies |
-| **Zone 2 → 3** | Service mesh mTLS (Istio), service-to-service IAM roles |
-| **Zone 3 → 4** | K8s NetworkPolicies (default-deny ingress), Pod Security Standards (restricted) |
-| **Zone 4 — Workers** | gVisor runtime sandbox, read-only rootfs, dropped all capabilities, no-new-privileges, ephemeral volumes, resource quotas (CPU/memory/PID limits) |
+| Zone                 | Controls                                                                                                                                                       |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Zone 0 → 1**       | AWS WAF (OWASP rules, rate limiting, geo-blocking), CloudFront signed URLs                                                                                     |
+| **Zone 1 → 2**       | TLS 1.3 termination at ALB, mutual TLS for internal, JWT validation                                                                                            |
+| **Zone 2 — App**     | RBAC per tenant, request signing, input validation, CORS policies                                                                                              |
+| **Zone 2 → 3**       | Service mesh mTLS (Istio), service-to-service IAM roles                                                                                                        |
+| **Zone 3 → 4**       | K8s NetworkPolicies (default-deny ingress), Pod Security Standards (restricted)                                                                                |
+| **Zone 4 — Workers** | gVisor runtime sandbox, read-only rootfs, dropped all capabilities, no-new-privileges, ephemeral volumes, resource quotas (CPU/memory/PID limits)              |
 | **Zone 5 — Exploit** | Isolated VPC subnet, Squid egress proxy (allow-listed targets only), no access to Zone 6, auto-destroy after use, time-boxed execution (max 5 min per exploit) |
-| **Zone 6 — Data** | VPC endpoints (no internet), security groups (port-level ACLs), encryption at rest + in transit, Vault dynamic credentials (TTL: 1 hour) |
+| **Zone 6 — Data**    | VPC endpoints (no internet), security groups (port-level ACLs), encryption at rest + in transit, Vault dynamic credentials (TTL: 1 hour)                       |
 
 ### Tenant Isolation Model
 
@@ -611,14 +617,14 @@ graph LR
     B_DATA -->|s3://pentra/tenant-b/| S3
 ```
 
-| Isolation Layer | Mechanism |
-|---|---|
-| **Compute** | K8s namespaces + resource quotas per tenant |
-| **Network** | NetworkPolicies block cross-namespace traffic |
-| **Database** | Row-level security (RLS) on `tenant_id` column |
-| **Object Storage** | S3 prefix per tenant + IAM policy boundary |
-| **Secrets** | Vault paths scoped per tenant (`secret/tenants/{id}/`) |
-| **API** | JWT contains `tenant_id`; all queries filtered |
+| Isolation Layer    | Mechanism                                              |
+| ------------------ | ------------------------------------------------------ |
+| **Compute**        | K8s namespaces + resource quotas per tenant            |
+| **Network**        | NetworkPolicies block cross-namespace traffic          |
+| **Database**       | Row-level security (RLS) on `tenant_id` column         |
+| **Object Storage** | S3 prefix per tenant + IAM policy boundary             |
+| **Secrets**        | Vault paths scoped per tenant (`secret/tenants/{id}/`) |
+| **API**            | JWT contains `tenant_id`; all queries filtered         |
 
 ---
 
@@ -694,35 +700,34 @@ sequenceDiagram
 
 ### Rate Limiting & Stealth
 
-| Control | Purpose | Implementation |
-|---|---|---|
-| **Requests/sec throttle** | Avoid IDS/WAF triggers on target | Configurable per scan profile (1–100 rps) |
-| **IP rotation** | Distribute requests across source IPs | Elastic IP pool + NAT gateway rotation |
-| **User-Agent rotation** | Evade simple signature blocks | Randomized UA per request |
-| **Jitter** | Prevent detection of automated patterns | Random delay ±20% between requests |
-| **Scan windows** | Avoid business-hour disruption | Tenant-configurable scheduling |
+| Control                   | Purpose                                 | Implementation                            |
+| ------------------------- | --------------------------------------- | ----------------------------------------- |
+| **Requests/sec throttle** | Avoid IDS/WAF triggers on target        | Configurable per scan profile (1–100 rps) |
+| **IP rotation**           | Distribute requests across source IPs   | Elastic IP pool + NAT gateway rotation    |
+| **User-Agent rotation**   | Evade simple signature blocks           | Randomized UA per request                 |
+| **Jitter**                | Prevent detection of automated patterns | Random delay ±20% between requests        |
+| **Scan windows**          | Avoid business-hour disruption          | Tenant-configurable scheduling            |
 
 ---
 
 ## Appendix: Technology Stack Summary
 
-| Layer | Technologies |
-|---|---|
-| **Frontend** | React, TypeScript, Vite, TanStack Query |
-| **API Gateway** | Kong / AWS API Gateway |
-| **Platform Services** | Go (high-throughput), Python (AI/ML) |
-| **Message Queue** | Amazon SQS, SNS |
-| **Container Runtime** | EKS, gVisor, containerd |
-| **Orchestration** | Custom DAG engine (Go) |
-| **AI/ML** | Python, PyTorch, LangChain, pgvector |
-| **LLM** | GPT-4o / Claude (via gateway) |
-| **Database** | PostgreSQL 15 (RDS), Redis 7 |
-| **Search** | OpenSearch 2.x |
-| **Secrets** | HashiCorp Vault, AWS KMS |
-| **Observability** | Prometheus, Grafana, OpenTelemetry, CloudWatch |
-| **CI/CD** | GitHub Actions, ArgoCD, Terraform |
-| **Security Tools** | Nmap, Nuclei, sqlmap, ZAP, Subfinder, Amass, ffuf, Metasploit |
-
+| Layer                 | Technologies                                                  |
+| --------------------- | ------------------------------------------------------------- |
+| **Frontend**          | React, TypeScript, Vite, TanStack Query                       |
+| **API Gateway**       | Kong / AWS API Gateway                                        |
+| **Platform Services** | Go (high-throughput), Python (AI/ML)                          |
+| **Message Queue**     | Amazon SQS, SNS                                               |
+| **Container Runtime** | EKS, gVisor, containerd                                       |
+| **Orchestration**     | Custom DAG engine (Go)                                        |
+| **AI/ML**             | Python, PyTorch, LangChain, pgvector                          |
+| **LLM**               | GPT-4o / Claude (via gateway)                                 |
+| **Database**          | PostgreSQL 15 (RDS), Redis 7                                  |
+| **Search**            | OpenSearch 2.x                                                |
+| **Secrets**           | HashiCorp Vault, AWS KMS                                      |
+| **Observability**     | Prometheus, Grafana, OpenTelemetry, CloudWatch                |
+| **CI/CD**             | GitHub Actions, ArgoCD, Terraform                             |
+| **Security Tools**    | Nmap, Nuclei, sqlmap, ZAP, Subfinder, Amass, ffuf, Metasploit |
 
 ## MOD-01.5 — Architecture Stress Test
 
@@ -734,18 +739,18 @@ sequenceDiagram
 
 ## Validation Summary
 
-| Risk Dimension | Verdict | Weaknesses Found | Severity |
-|---|---|---|---|
-| Scalability | ⚠️ Conditional Pass | 3 | High |
-| Bottleneck Analysis | ❌ Fail | 4 | Critical |
-| Scan Orchestration Failures | ⚠️ Conditional Pass | 2 | High |
-| AI Pipeline Overload | ❌ Fail | 3 | Critical |
-| Worker Scheduling | ⚠️ Conditional Pass | 2 | Medium |
-| Multi-Tenant Isolation | ❌ Fail | 3 | Critical |
-| AWS Cost Efficiency | ⚠️ Conditional Pass | 3 | High |
-| Scan Execution Security | ⚠️ Conditional Pass | 2 | High |
-| Exploit Containment | ❌ Fail | 1 | Critical |
-| **Total** | | **23 weaknesses** | |
+| Risk Dimension              | Verdict             | Weaknesses Found  | Severity |
+| --------------------------- | ------------------- | ----------------- | -------- |
+| Scalability                 | ⚠️ Conditional Pass | 3                 | High     |
+| Bottleneck Analysis         | ❌ Fail             | 4                 | Critical |
+| Scan Orchestration Failures | ⚠️ Conditional Pass | 2                 | High     |
+| AI Pipeline Overload        | ❌ Fail             | 3                 | Critical |
+| Worker Scheduling           | ⚠️ Conditional Pass | 2                 | Medium   |
+| Multi-Tenant Isolation      | ❌ Fail             | 3                 | Critical |
+| AWS Cost Efficiency         | ⚠️ Conditional Pass | 3                 | High     |
+| Scan Execution Security     | ⚠️ Conditional Pass | 2                 | High     |
+| Exploit Containment         | ❌ Fail             | 1                 | Critical |
+| **Total**                   |                     | **23 weaknesses** |          |
 
 ---
 
@@ -762,13 +767,13 @@ Reality:        Business-hour peak = 70% of scans in 10 hours
                 → 1.5x burst = 1,050 scans/hr spike
 ```
 
-| Metric | V1 Estimate | Corrected (Peak) | Gap |
-|---|---|---|---|
-| Concurrent scans | ~420 | ~700 sustained, ~1,050 burst | **+67% to +150%** |
-| Avg scan phases | 6 | 6 | — |
-| Jobs per scan | ~12 (avg tools) | ~12 | — |
-| Peak jobs/hr | ~5,000 | **~12,600** | +152% |
-| Peak jobs/min | ~83 | **~210** | +152% |
+| Metric           | V1 Estimate     | Corrected (Peak)             | Gap               |
+| ---------------- | --------------- | ---------------------------- | ----------------- |
+| Concurrent scans | ~420            | ~700 sustained, ~1,050 burst | **+67% to +150%** |
+| Avg scan phases  | 6               | 6                            | —                 |
+| Jobs per scan    | ~12 (avg tools) | ~12                          | —                 |
+| Peak jobs/hr     | ~5,000          | **~12,600**                  | +152%             |
+| Peak jobs/min    | ~83             | **~210**                     | +152%             |
 
 > [!CAUTION]
 > **W-1: The v1 capacity model underestimates peak concurrency by 67–150%.** The worker pool (500 max pods) and SQS throughput are undersized for real-world burst patterns.
@@ -783,14 +788,14 @@ Reality:        Business-hour peak = 70% of scans in 10 hours
 
 **Fix W-1 — Revised capacity model:**
 
-| Metric | Redesigned Value |
-|---|---|
-| Max concurrent worker pods | **800** (up from 500) |
-| Node pool: light | 30–60 nodes |
-| Node pool: heavy | 25–50 nodes |
-| Node pool: exploit | 8–15 nodes |
+| Metric                               | Redesigned Value                                 |
+| ------------------------------------ | ------------------------------------------------ |
+| Max concurrent worker pods           | **800** (up from 500)                            |
+| Node pool: light                     | 30–60 nodes                                      |
+| Node pool: heavy                     | 25–50 nodes                                      |
+| Node pool: exploit                   | 8–15 nodes                                       |
 | SQS → FIFO with high-throughput mode | 3,000 msg/sec/queue (partitioned by tenant tier) |
-| Queue backpressure threshold | 2,500 pending jobs |
+| Queue backpressure threshold         | 2,500 pending jobs                               |
 
 **Fix W-2 — Orchestrator sharding:**
 
@@ -881,12 +886,12 @@ graph TD
 
 **Fix W-6 — LLM optimization:**
 
-| Strategy | Impact |
-|---|---|
-| Pre-built report templates | Reduce LLM token usage by 60% |
-| Tiered LLM routing: GPT-4o-mini for Low/Medium findings, GPT-4o for Critical/High | Reduce cost by 40%, increase throughput by 3x |
-| Report caching: hash-based dedup for identical finding patterns | Avoid redundant LLM calls |
-| Batch API: submit reports in batches of 10 | 50% latency reduction on OpenAI batch endpoint |
+| Strategy                                                                          | Impact                                         |
+| --------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Pre-built report templates                                                        | Reduce LLM token usage by 60%                  |
+| Tiered LLM routing: GPT-4o-mini for Low/Medium findings, GPT-4o for Critical/High | Reduce cost by 40%, increase throughput by 3x  |
+| Report caching: hash-based dedup for identical finding patterns                   | Avoid redundant LLM calls                      |
+| Batch API: submit reports in batches of 10                                        | 50% latency reduction on OpenAI batch endpoint |
 
 **Fix W-7 — Event-driven phase coordination (replaces callbacks):**
 
@@ -927,12 +932,12 @@ Phase completion rule:
       apply retry policy
 ```
 
-| Phase | Min Success Ratio | Rationale |
-|---|---|---|
-| Recon | 1/3 (33%) | Any single tool provides enough seed data |
-| Enum | 1/2 (50%) | Either directory or service enum is useful |
-| Vuln Scan | 2/3 (66%) | Need majority coverage for credibility |
-| Exploit | 1/1 (100%) | Must succeed or skip entirely |
+| Phase     | Min Success Ratio | Rationale                                  |
+| --------- | ----------------- | ------------------------------------------ |
+| Recon     | 1/3 (33%)         | Any single tool provides enough seed data  |
+| Enum      | 1/2 (50%)         | Either directory or service enum is useful |
+| Vuln Scan | 2/3 (66%)         | Need majority coverage for credibility     |
+| Exploit   | 1/1 (100%)        | Must succeed or skip entirely              |
 
 **Fix W-9 — Priority queue architecture:**
 
@@ -992,13 +997,13 @@ graph LR
 
 **Fix W-11 — Local CVE mirror:**
 
-| Component | Design |
-|---|---|
-| NVD Mirror | Nightly sync of full NVD JSON feed → PostgreSQL table |
-| EPSS Mirror | Daily CSV download → PostgreSQL |
-| CISA KEV | Daily JSON sync → PostgreSQL |
-| Lookup | Local DB query (sub-1ms) instead of API call |
-| Freshness SLA | Max 24h stale (acceptable for CVE data) |
+| Component     | Design                                                |
+| ------------- | ----------------------------------------------------- |
+| NVD Mirror    | Nightly sync of full NVD JSON feed → PostgreSQL table |
+| EPSS Mirror   | Daily CSV download → PostgreSQL                       |
+| CISA KEV      | Daily JSON sync → PostgreSQL                          |
+| Lookup        | Local DB query (sub-1ms) instead of API call          |
+| Freshness SLA | Max 24h stale (acceptable for CVE data)               |
 
 **Fix W-12 — Multi-provider LLM failover:**
 
@@ -1093,13 +1098,13 @@ graph TD
     PG --> SAFETY_NET
 ```
 
-| Layer | Control |
-|---|---|
-| **L1 — Middleware** | Extract `tenant_id` from JWT, inject into all downstream calls |
-| **L2 — DB Session** | `SET app.tenant_id = ?` before every transaction |
-| **L3 — RLS** | PostgreSQL RLS policy on every tenant-scoped table |
-| **L4 — Query Hook** | ORM-level hook rejects any query without `tenant_id` in predicate |
-| **L5 — Audit** | Nightly job compares row counts per tenant vs access logs; flag anomalies |
+| Layer               | Control                                                                   |
+| ------------------- | ------------------------------------------------------------------------- |
+| **L1 — Middleware** | Extract `tenant_id` from JWT, inject into all downstream calls            |
+| **L2 — DB Session** | `SET app.tenant_id = ?` before every transaction                          |
+| **L3 — RLS**        | PostgreSQL RLS policy on every tenant-scoped table                        |
+| **L4 — Query Hook** | ORM-level hook rejects any query without `tenant_id` in predicate         |
+| **L5 — Audit**      | Nightly job compares row counts per tenant vs access logs; flag anomalies |
 
 **Fix W-16 — Tier-based namespace model (replaces per-tenant namespace):**
 
@@ -1114,11 +1119,11 @@ graph LR
     end
 ```
 
-| Tenant Tier | Namespace Strategy | Isolation |
-|---|---|---|
-| Free | Shared `tier-free` namespace | Pod labels + ResourceQuota per tenant |
-| Pro | Shared `tier-pro` namespace (5–10 tenants per NS) | LimitRange + PriorityClass |
-| Enterprise | **Dedicated namespace** per tenant | Full namespace isolation |
+| Tenant Tier | Namespace Strategy                                | Isolation                             |
+| ----------- | ------------------------------------------------- | ------------------------------------- |
+| Free        | Shared `tier-free` namespace                      | Pod labels + ResourceQuota per tenant |
+| Pro         | Shared `tier-pro` namespace (5–10 tenants per NS) | LimitRange + PriorityClass            |
+| Enterprise  | **Dedicated namespace** per tenant                | Full namespace isolation              |
 
 - Reduces total namespaces from ~1,000 to **~50–100**.
 - Enterprise tenants still get full isolation.
@@ -1154,44 +1159,44 @@ Enforcement:
 
 **Fix W-18 — Aggressive scale-to-near-zero:**
 
-| Strategy | Savings |
-|---|---|
-| Karpenter (replaces Cluster Autoscaler) | Faster scaling (30s vs 3–5min), better bin-packing |
-| Minimum nodes: light=2, heavy=2, exploit=0 | Reduce idle cost by 80% |
-| Warm pool: 5 pre-initialized EC2 in Spot fleet | Fast burst without keeping nodes running |
-| Graviton (c7g) instances for light workloads | 20% price reduction vs c6i |
+| Strategy                                       | Savings                                            |
+| ---------------------------------------------- | -------------------------------------------------- |
+| Karpenter (replaces Cluster Autoscaler)        | Faster scaling (30s vs 3–5min), better bin-packing |
+| Minimum nodes: light=2, heavy=2, exploit=0     | Reduce idle cost by 80%                            |
+| Warm pool: 5 pre-initialized EC2 in Spot fleet | Fast burst without keeping nodes running           |
+| Graviton (c7g) instances for light workloads   | 20% price reduction vs c6i                         |
 
 **Fix W-19 — NAT Gateway cost elimination:**
 
-| Strategy | Savings |
-|---|---|
-| VPC endpoints for S3 | Eliminate S3 NAT charges (~$300/mo) |
-| VPC endpoints for SQS, ECR | Eliminate queue/registry NAT charges |
-| Pre-bake tool databases into container images (ECR) | Eliminate runtime downloads |
-| Gateway endpoint for S3 (free), Interface endpoints for SQS ($0.01/hr) | Net saving: ~$500/mo |
+| Strategy                                                               | Savings                              |
+| ---------------------------------------------------------------------- | ------------------------------------ |
+| VPC endpoints for S3                                                   | Eliminate S3 NAT charges (~$300/mo)  |
+| VPC endpoints for SQS, ECR                                             | Eliminate queue/registry NAT charges |
+| Pre-bake tool databases into container images (ECR)                    | Eliminate runtime downloads          |
+| Gateway endpoint for S3 (free), Interface endpoints for SQS ($0.01/hr) | Net saving: ~$500/mo                 |
 
 **Fix W-20 — Replace OpenSearch with PostgreSQL full-text search:**
 
-| Before | After |
-|---|---|
+| Before                                 | After                                              |
+| -------------------------------------- | -------------------------------------------------- |
 | OpenSearch 3-node cluster (~$1,200/mo) | PostgreSQL GIN index + `tsvector` ($0 incremental) |
-| Separate search infrastructure | Unified data layer |
+| Separate search infrastructure         | Unified data layer                                 |
 
 - Keep OpenSearch **only** for log aggregation (use CloudWatch Logs Insights instead for further savings).
 - Finding search uses PostgreSQL `tsvector` with GIN indexing — handles 10K QPS at this data volume.
 
 ### Revised Monthly Cost Estimate
 
-| Component | V1 Cost | V2 Cost | Savings |
-|---|---|---|---|
-| EKS worker nodes | $18,000 | $9,500 | 47% |
-| RDS | $3,200 | $3,800 (Aurora) | -19% (justified by perf) |
-| NAT Gateway | $1,200 | $200 | 83% |
-| OpenSearch | $1,200 | $0 | 100% |
-| S3 | $500 | $400 | 20% |
-| LLM API | $3,000 | $1,800 | 40% |
-| Other (ElastiCache, Vault, etc.) | $2,000 | $1,800 | 10% |
-| **Total** | **~$29,100** | **~$17,500** | **40%** |
+| Component                        | V1 Cost      | V2 Cost         | Savings                  |
+| -------------------------------- | ------------ | --------------- | ------------------------ |
+| EKS worker nodes                 | $18,000      | $9,500          | 47%                      |
+| RDS                              | $3,200       | $3,800 (Aurora) | -19% (justified by perf) |
+| NAT Gateway                      | $1,200       | $200            | 83%                      |
+| OpenSearch                       | $1,200       | $0              | 100%                     |
+| S3                               | $500         | $400            | 20%                      |
+| LLM API                          | $3,000       | $1,800          | 40%                      |
+| Other (ElastiCache, Vault, etc.) | $2,000       | $1,800          | 10%                      |
+| **Total**                        | **~$29,100** | **~$17,500**    | **40%**                  |
 
 ---
 
@@ -1207,15 +1212,15 @@ Enforcement:
 
 **Fix W-21 — Tiered runtime isolation:**
 
-| Tool | Runtime | Rationale |
-|---|---|---|
-| Subfinder, Amass | gVisor | Pure HTTP/DNS — no raw sockets |
-| ffuf | gVisor | HTTP-only |
-| Nuclei | gVisor | HTTP-only templates (majority) |
-| Nmap | **runc + seccomp profile** | Requires raw sockets; custom seccomp allows only `CAP_NET_RAW` |
-| OWASP ZAP | **runc + seccomp profile** | JVM + proxy needs full syscall set |
-| sqlmap | gVisor | HTTP-only |
-| Metasploit | **Firecracker microVM** | Maximum isolation (see W-23 fix) |
+| Tool             | Runtime                    | Rationale                                                      |
+| ---------------- | -------------------------- | -------------------------------------------------------------- |
+| Subfinder, Amass | gVisor                     | Pure HTTP/DNS — no raw sockets                                 |
+| ffuf             | gVisor                     | HTTP-only                                                      |
+| Nuclei           | gVisor                     | HTTP-only templates (majority)                                 |
+| Nmap             | **runc + seccomp profile** | Requires raw sockets; custom seccomp allows only `CAP_NET_RAW` |
+| OWASP ZAP        | **runc + seccomp profile** | JVM + proxy needs full syscall set                             |
+| sqlmap           | gVisor                     | HTTP-only                                                      |
+| Metasploit       | **Firecracker microVM**    | Maximum isolation (see W-23 fix)                               |
 
 **Fix W-22 — Ephemeral tool injection:**
 
@@ -1261,15 +1266,15 @@ graph TB
     end
 ```
 
-| Control | V1 (gVisor + K8s) | V2 (Firecracker) |
-|---|---|---|
-| Isolation level | Container (shared kernel) | **microVM (dedicated kernel)** |
-| Kernel exploit blast radius | Entire node (multi-tenant) | **Single microVM only** |
-| Network isolation | K8s NetworkPolicy (bypassable) | **Host-level iptables** (hardware enforced) |
-| Lifecycle | Pod (may persist) | **Destroyed after each exploit** |
-| Infrastructure | Shared EKS nodes | **Dedicated bare-metal fleet** |
-| Startup time | ~2s | ~125ms (Firecracker) |
-| Cost | Shared | +$800/mo (3× i3.metal instances) |
+| Control                     | V1 (gVisor + K8s)              | V2 (Firecracker)                            |
+| --------------------------- | ------------------------------ | ------------------------------------------- |
+| Isolation level             | Container (shared kernel)      | **microVM (dedicated kernel)**              |
+| Kernel exploit blast radius | Entire node (multi-tenant)     | **Single microVM only**                     |
+| Network isolation           | K8s NetworkPolicy (bypassable) | **Host-level iptables** (hardware enforced) |
+| Lifecycle                   | Pod (may persist)              | **Destroyed after each exploit**            |
+| Infrastructure              | Shared EKS nodes               | **Dedicated bare-metal fleet**              |
+| Startup time                | ~2s                            | ~125ms (Firecracker)                        |
+| Cost                        | Shared                         | +$800/mo (3× i3.metal instances)            |
 
 **Exploit execution flow (revised):**
 
@@ -1388,33 +1393,34 @@ stateDiagram-v2
 
 ## Summary of All Changes
 
-| # | Weakness | Fix | Impact |
-|---|---|---|---|
-| W-1 | Capacity underestimated | Peak-adjusted capacity model | ↑ Reliability |
-| W-2 | Single orchestrator | Stateless sharded fleet + Redis state | ↑ Scalability |
-| W-3 | RDS write contention | Write buffer + Aurora + RDS Proxy | ↑ Throughput |
-| W-4 | S3 latency bottleneck | Redis Streams hybrid data channel | ↓ Latency |
-| W-5 | Synchronous AI pipeline | Async queue-buffered AI workers | ↑ Throughput |
-| W-6 | LLM throughput ceiling | Tiered routing + batch API + caching | ↓ Cost, ↑ Speed |
-| W-7 | Fragile callbacks | EventBridge event-driven coordination | ↑ Reliability |
-| W-8 | No partial-failure handling | Min-success-ratio per phase | ↑ Resilience |
-| W-9 | No scan priority | Priority queues + reserved pools | ↑ SLA adherence |
-| W-10 | No AI backpressure | Queue-depth alerting + throttle cascade | ↑ Stability |
-| W-11 | NVD API dependency | Local CVE/EPSS mirror | ↑ Reliability |
-| W-12 | No LLM failover | Multi-provider chain + template fallback | ↑ Availability |
-| W-13 | Spot interruption data loss | Tool-native checkpointing | ↑ Reliability |
-| W-14 | Cross-AZ scheduling overhead | AZ-affinity pod constraints | ↓ Latency, ↓ Cost |
-| W-15 | RLS bypass risk | 5-layer defense-in-depth | ↑ Security |
-| W-16 | Namespace explosion | Tier-based namespace model | ↑ Scalability |
-| W-17 | Noisy neighbor | Per-tenant concurrency limits | ↑ Fairness |
-| W-18 | Idle node waste | Karpenter + Graviton + near-zero scaling | ↓ Cost (47%) |
-| W-19 | NAT Gateway costs | VPC endpoints + pre-baked images | ↓ Cost (83%) |
-| W-20 | OpenSearch over-provisioned | PostgreSQL tsvector replacement | ↓ Cost (100%) |
-| W-21 | gVisor breaks Nmap | Tiered runtime (gVisor / runc+seccomp) | ↑ Compatibility |
-| W-22 | Exploit data in images | Ephemeral tool injection | ↑ Security |
-| W-23 | Container-level exploit isolation | Firecracker microVMs on dedicated hosts | ↑↑ Security |
+| #    | Weakness                          | Fix                                      | Impact            |
+| ---- | --------------------------------- | ---------------------------------------- | ----------------- |
+| W-1  | Capacity underestimated           | Peak-adjusted capacity model             | ↑ Reliability     |
+| W-2  | Single orchestrator               | Stateless sharded fleet + Redis state    | ↑ Scalability     |
+| W-3  | RDS write contention              | Write buffer + Aurora + RDS Proxy        | ↑ Throughput      |
+| W-4  | S3 latency bottleneck             | Redis Streams hybrid data channel        | ↓ Latency         |
+| W-5  | Synchronous AI pipeline           | Async queue-buffered AI workers          | ↑ Throughput      |
+| W-6  | LLM throughput ceiling            | Tiered routing + batch API + caching     | ↓ Cost, ↑ Speed   |
+| W-7  | Fragile callbacks                 | EventBridge event-driven coordination    | ↑ Reliability     |
+| W-8  | No partial-failure handling       | Min-success-ratio per phase              | ↑ Resilience      |
+| W-9  | No scan priority                  | Priority queues + reserved pools         | ↑ SLA adherence   |
+| W-10 | No AI backpressure                | Queue-depth alerting + throttle cascade  | ↑ Stability       |
+| W-11 | NVD API dependency                | Local CVE/EPSS mirror                    | ↑ Reliability     |
+| W-12 | No LLM failover                   | Multi-provider chain + template fallback | ↑ Availability    |
+| W-13 | Spot interruption data loss       | Tool-native checkpointing                | ↑ Reliability     |
+| W-14 | Cross-AZ scheduling overhead      | AZ-affinity pod constraints              | ↓ Latency, ↓ Cost |
+| W-15 | RLS bypass risk                   | 5-layer defense-in-depth                 | ↑ Security        |
+| W-16 | Namespace explosion               | Tier-based namespace model               | ↑ Scalability     |
+| W-17 | Noisy neighbor                    | Per-tenant concurrency limits            | ↑ Fairness        |
+| W-18 | Idle node waste                   | Karpenter + Graviton + near-zero scaling | ↓ Cost (47%)      |
+| W-19 | NAT Gateway costs                 | VPC endpoints + pre-baked images         | ↓ Cost (83%)      |
+| W-20 | OpenSearch over-provisioned       | PostgreSQL tsvector replacement          | ↓ Cost (100%)     |
+| W-21 | gVisor breaks Nmap                | Tiered runtime (gVisor / runc+seccomp)   | ↑ Compatibility   |
+| W-22 | Exploit data in images            | Ephemeral tool injection                 | ↑ Security        |
+| W-23 | Container-level exploit isolation | Firecracker microVMs on dedicated hosts  | ↑↑ Security       |
 
 ---
+
 ---
 
 ## MOD-02 — Monorepo & Base Infrastructure
@@ -2050,34 +2056,34 @@ graph TB
 
 ### Service Ownership Matrix
 
-| Service | Domain | Data Store | Queue (Produces) | Queue (Consumes) |
-|---|---|---|---|---|
-| `api-gateway` | Platform | — (stateless) | — | — |
-| `auth-svc` | Platform | PostgreSQL (users, roles) | — | — |
-| `tenant-svc` | Platform | PostgreSQL (tenants, quotas) | — | — |
-| `billing-svc` | Platform | PostgreSQL (invoices) | — | SNS billing events |
-| `notify-svc` | Platform | — | — | SNS notifications |
-| `scan-svc` | Scanning | PostgreSQL (scans) | Redis (scan-created) | — |
-| `asset-svc` | Scanning | PostgreSQL (assets) | — | — |
-| `orchestrator-svc` | Scanning | Redis (DAG state) | SQS P0–P3 queues | EventBridge (phase events) |
-| `scheduler-svc` | Scanning | PostgreSQL (schedules) | Redis (scan-trigger) | — |
-| `worker-controller` | Execution | — | — | SQS P0–P3 queues |
-| `*-worker` (×8) | Execution | S3 (artifacts) | EventBridge (phase-done) | Celery/Redis tasks |
-| `triage-svc` | Intelligence | PostgreSQL (findings) | — | SQS ai-intake |
-| `exploit-verify-svc` | Intelligence | S3 (proof artifacts) | SQS exploit-jobs | SQS exploit-results |
-| `report-svc` | Intelligence | S3 (reports) | — | Internal RPC |
-| `llm-gateway-svc` | Intelligence | pgvector (RAG) | — | Internal RPC |
+| Service              | Domain       | Data Store                   | Queue (Produces)         | Queue (Consumes)           |
+| -------------------- | ------------ | ---------------------------- | ------------------------ | -------------------------- |
+| `api-gateway`        | Platform     | — (stateless)                | —                        | —                          |
+| `auth-svc`           | Platform     | PostgreSQL (users, roles)    | —                        | —                          |
+| `tenant-svc`         | Platform     | PostgreSQL (tenants, quotas) | —                        | —                          |
+| `billing-svc`        | Platform     | PostgreSQL (invoices)        | —                        | SNS billing events         |
+| `notify-svc`         | Platform     | —                            | —                        | SNS notifications          |
+| `scan-svc`           | Scanning     | PostgreSQL (scans)           | Redis (scan-created)     | —                          |
+| `asset-svc`          | Scanning     | PostgreSQL (assets)          | —                        | —                          |
+| `orchestrator-svc`   | Scanning     | Redis (DAG state)            | SQS P0–P3 queues         | EventBridge (phase events) |
+| `scheduler-svc`      | Scanning     | PostgreSQL (schedules)       | Redis (scan-trigger)     | —                          |
+| `worker-controller`  | Execution    | —                            | —                        | SQS P0–P3 queues           |
+| `*-worker` (×8)      | Execution    | S3 (artifacts)               | EventBridge (phase-done) | Celery/Redis tasks         |
+| `triage-svc`         | Intelligence | PostgreSQL (findings)        | —                        | SQS ai-intake              |
+| `exploit-verify-svc` | Intelligence | S3 (proof artifacts)         | SQS exploit-jobs         | SQS exploit-results        |
+| `report-svc`         | Intelligence | S3 (reports)                 | —                        | Internal RPC               |
+| `llm-gateway-svc`    | Intelligence | pgvector (RAG)               | —                        | Internal RPC               |
 
 ### Inter-Service Communication
 
-| Pattern | Used For | Services |
-|---|---|---|
-| **REST (sync)** | CRUD operations, user-facing API | api-gateway ↔ scan-svc, asset-svc, report-svc |
-| **Redis Pub/Sub** | Lightweight internal events | scan-svc → orchestrator-svc |
-| **SQS** | Job queuing with priority | orchestrator → workers, AI intake |
-| **EventBridge** | Durable phase completion events | workers → orchestrator |
-| **Celery (Redis broker)** | Worker task dispatch | worker-controller → tool workers |
-| **Direct import** | Shared schemas, auth, DB helpers | All services ← pentra-common |
+| Pattern                   | Used For                         | Services                                      |
+| ------------------------- | -------------------------------- | --------------------------------------------- |
+| **REST (sync)**           | CRUD operations, user-facing API | api-gateway ↔ scan-svc, asset-svc, report-svc |
+| **Redis Pub/Sub**         | Lightweight internal events      | scan-svc → orchestrator-svc                   |
+| **SQS**                   | Job queuing with priority        | orchestrator → workers, AI intake             |
+| **EventBridge**           | Durable phase completion events  | workers → orchestrator                        |
+| **Celery (Redis broker)** | Worker task dispatch             | worker-controller → tool workers              |
+| **Direct import**         | Shared schemas, auth, DB helpers | All services ← pentra-common                  |
 
 ---
 
@@ -2114,15 +2120,15 @@ graph TD
 
 ### Build Rules
 
-| Rule | Detail |
-|---|---|
-| **Base images rebuilt weekly** | Picks up security patches, pushed to ECR |
-| **Service images built per-commit** | Only when files in that service's directory change |
-| **Multi-stage builds** | Build stage (compile deps) → Runtime stage (minimal) |
-| **No tool DBs in images** | Nuclei templates, Nmap scripts pulled at runtime, wiped on exit |
-| **Metasploit = ext4 rootfs** | Built separately, stored in S3, loaded by Firecracker |
-| **Image scanning** | Trivy scan on every push, block Critical/High CVEs |
-| **Tagging** | `{service}:{git-sha-short}` + `{service}:latest` + `{service}:{semver}` |
+| Rule                                | Detail                                                                  |
+| ----------------------------------- | ----------------------------------------------------------------------- |
+| **Base images rebuilt weekly**      | Picks up security patches, pushed to ECR                                |
+| **Service images built per-commit** | Only when files in that service's directory change                      |
+| **Multi-stage builds**              | Build stage (compile deps) → Runtime stage (minimal)                    |
+| **No tool DBs in images**           | Nuclei templates, Nmap scripts pulled at runtime, wiped on exit         |
+| **Metasploit = ext4 rootfs**        | Built separately, stored in S3, loaded by Firecracker                   |
+| **Image scanning**                  | Trivy scan on every push, block Critical/High CVEs                      |
+| **Tagging**                         | `{service}:{git-sha-short}` + `{service}:latest` + `{service}:{semver}` |
 
 ### ECR Repository Layout
 
@@ -2186,28 +2192,28 @@ graph TD
 
 ### Environment Differences
 
-| Resource | Dev | Staging | Prod |
-|---|---|---|---|
-| EKS nodes | 2 (light only) | 5 (light + heavy) | 30–60 (all pools, Karpenter) |
-| RDS | db.t4g.medium, single-AZ | db.r6g.large, Multi-AZ | Aurora r6g.2xlarge, Multi-AZ |
-| Redis | cache.t4g.small, single | cache.r6g.large, cluster | cache.r6g.xlarge, cluster |
-| SQS | 1 queue (all priorities) | 4 queues (P0–P3) | 4 queues + DLQs + ai-intake |
-| Firecracker | Disabled (mock) | 1 host (t3.metal) | 3–5 hosts (i3.metal) |
-| WAF | Disabled | Enabled (count mode) | Enabled (block mode) |
-| Monitoring | CloudWatch basic | CloudWatch + Prometheus | Full stack + alerting |
+| Resource    | Dev                      | Staging                  | Prod                         |
+| ----------- | ------------------------ | ------------------------ | ---------------------------- |
+| EKS nodes   | 2 (light only)           | 5 (light + heavy)        | 30–60 (all pools, Karpenter) |
+| RDS         | db.t4g.medium, single-AZ | db.r6g.large, Multi-AZ   | Aurora r6g.2xlarge, Multi-AZ |
+| Redis       | cache.t4g.small, single  | cache.r6g.large, cluster | cache.r6g.xlarge, cluster    |
+| SQS         | 1 queue (all priorities) | 4 queues (P0–P3)         | 4 queues + DLQs + ai-intake  |
+| Firecracker | Disabled (mock)          | 1 host (t3.metal)        | 3–5 hosts (i3.metal)         |
+| WAF         | Disabled                 | Enabled (count mode)     | Enabled (block mode)         |
+| Monitoring  | CloudWatch basic         | CloudWatch + Prometheus  | Full stack + alerting        |
 
 ### Kubernetes Manifest Strategy
 
 Kubernetes base manifests live in `pentra_core/infra/kubernetes/` and are consumed by Helm charts:
 
-| Directory | Purpose |
-|---|---|
-| `namespaces/` | Tier-based namespace definitions (free, pro, enterprise template) |
-| `network-policies/` | Default-deny, tier isolation, exploit egress rules |
-| `pod-security/` | Pod Security Standards (restricted for workers, baseline for platform) |
-| `resource-quotas/` | Per-tier CPU/memory/pod limits |
-| `runtime-classes/` | gVisor + runc-seccomp RuntimeClass definitions |
-| `keda/` | KEDA ScaledObject definitions for SQS-driven worker autoscaling |
+| Directory           | Purpose                                                                |
+| ------------------- | ---------------------------------------------------------------------- |
+| `namespaces/`       | Tier-based namespace definitions (free, pro, enterprise template)      |
+| `network-policies/` | Default-deny, tier isolation, exploit egress rules                     |
+| `pod-security/`     | Pod Security Standards (restricted for workers, baseline for platform) |
+| `resource-quotas/`  | Per-tier CPU/memory/pod limits                                         |
+| `runtime-classes/`  | gVisor + runc-seccomp RuntimeClass definitions                         |
+| `keda/`             | KEDA ScaledObject definitions for SQS-driven worker autoscaling        |
 
 ### Helm Deployment Model
 
@@ -2362,32 +2368,34 @@ This ensures consistent schema definitions, authentication logic, database helpe
 
 ## MOD-02 Compliance Check
 
-| Architectural Requirement (from MOD-01.5) | MOD-02 Implementation |
-|---|---|
-| Sharded orchestrators (W-2) | `pentra_core/services/orchestrator-svc/` with `shard_router.py`, Helm `replicas: 3–6` |
-| Redis state store (W-2) | `pentra_core/packages/pentra-common/queue/redis_client.py`, `state_manager.py` |
-| Priority SQS queues (W-9) | `pentra_core/infra/terraform/modules/sqs/queues.tf` (P0–P3 + DLQs) |
-| Firecracker exploit fleet (W-23) | `pentra_core/workers/metasploit-worker/` with `Dockerfile.microvm`, `pentra_core/infra/terraform/modules/firecracker/` |
-| AI dispatcher pipeline (W-5) | `pentra_core/services/triage-svc/dispatcher/`, SQS ai-intake queue |
-| EventBridge coordination (W-7) | `pentra_core/services/orchestrator-svc/events/`, workers publish phase events |
-| Tiered runtime isolation (W-21) | `pentra_core/infra/kubernetes/runtime-classes/`, per-worker seccomp profiles |
-| Tier-based namespaces (W-16) | `pentra_core/infra/kubernetes/namespaces/` (free, pro, ent-template) |
-| Per-tenant rate limiting (W-17) | `pentra_core/services/tenant-svc/quota_manager.py`, resource quotas per namespace |
-| LLM failover chain (W-12) | `pentra_core/services/llm-gateway-svc/providers/` (anthropic, openai, local_llama) |
-| VPC endpoints (W-19) | `pentra_core/infra/terraform/modules/networking/vpc.tf` |
-| Karpenter scaling (W-18) | `pentra_core/infra/terraform/modules/eks/karpenter.tf` |
-| Multi-stage Docker builds (W-22) | `pentra_core/infra/docker/base-images/`, ephemeral tool injection |
-
+| Architectural Requirement (from MOD-01.5) | MOD-02 Implementation                                                                                                  |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Sharded orchestrators (W-2)               | `pentra_core/services/orchestrator-svc/` with `shard_router.py`, Helm `replicas: 3–6`                                  |
+| Redis state store (W-2)                   | `pentra_core/packages/pentra-common/queue/redis_client.py`, `state_manager.py`                                         |
+| Priority SQS queues (W-9)                 | `pentra_core/infra/terraform/modules/sqs/queues.tf` (P0–P3 + DLQs)                                                     |
+| Firecracker exploit fleet (W-23)          | `pentra_core/workers/metasploit-worker/` with `Dockerfile.microvm`, `pentra_core/infra/terraform/modules/firecracker/` |
+| AI dispatcher pipeline (W-5)              | `pentra_core/services/triage-svc/dispatcher/`, SQS ai-intake queue                                                     |
+| EventBridge coordination (W-7)            | `pentra_core/services/orchestrator-svc/events/`, workers publish phase events                                          |
+| Tiered runtime isolation (W-21)           | `pentra_core/infra/kubernetes/runtime-classes/`, per-worker seccomp profiles                                           |
+| Tier-based namespaces (W-16)              | `pentra_core/infra/kubernetes/namespaces/` (free, pro, ent-template)                                                   |
+| Per-tenant rate limiting (W-17)           | `pentra_core/services/tenant-svc/quota_manager.py`, resource quotas per namespace                                      |
+| LLM failover chain (W-12)                 | `pentra_core/services/llm-gateway-svc/providers/` (anthropic, openai, local_llama)                                     |
+| VPC endpoints (W-19)                      | `pentra_core/infra/terraform/modules/networking/vpc.tf`                                                                |
+| Karpenter scaling (W-18)                  | `pentra_core/infra/terraform/modules/eks/karpenter.tf`                                                                 |
+| Multi-stage Docker builds (W-22)          | `pentra_core/infra/docker/base-images/`, ephemeral tool injection                                                      |
 
 ## MOD-01.5 — Architecture Validation
+
 (validation report + redesign)
 
 ## MOD-02 — Monorepo & Base Infrastructure
+
 MOD-02 Status: Completed
 
 ## MOD-03 — API Core
-Phase 1  Completed (pentra-common shared library)
-Phase 2  Completed (SQLAlchemy models + migrations + RLS)
+
+Phase 1 Completed (pentra-common shared library)
+Phase 2 Completed (SQLAlchemy models + migrations + RLS)
 Phase 3A Completed (FastAPI core skeleton)
 Phase 3B Completed (API Routers & Service Layer)
 
@@ -2406,15 +2414,15 @@ Scanner Workers → Findings → Exploit Verification → Attack Graph Construct
 
 Each stage produces **structured artifacts** that feed downstream stages:
 
-| Stage | Output Artifacts | Consumers |
-|---|---|---|
-| Recon | subdomains, hosts, DNS records | Enumeration |
-| Enumeration | services, endpoints, directories, technologies | Vuln Scanning |
-| Vuln Scanning | vulnerabilities (CVE, misconfig, exposure) | Exploit Verification |
-| Exploit Verification | verified exploits, credentials, access levels | Attack Graph Engine |
-| Attack Graph Construction | attack paths, privilege escalation chains | Exploit Planner |
-| Exploit Planning | attack scenarios, pivot strategies | AI Reasoning |
-| AI Reasoning | risk scores, business impact, remediation | Report Generation |
+| Stage                     | Output Artifacts                               | Consumers            |
+| ------------------------- | ---------------------------------------------- | -------------------- |
+| Recon                     | subdomains, hosts, DNS records                 | Enumeration          |
+| Enumeration               | services, endpoints, directories, technologies | Vuln Scanning        |
+| Vuln Scanning             | vulnerabilities (CVE, misconfig, exposure)     | Exploit Verification |
+| Exploit Verification      | verified exploits, credentials, access levels  | Attack Graph Engine  |
+| Attack Graph Construction | attack paths, privilege escalation chains      | Exploit Planner      |
+| Exploit Planning          | attack scenarios, pivot strategies             | AI Reasoning         |
+| AI Reasoning              | risk scores, business impact, remediation      | Report Generation    |
 
 ### Attack Graph Engine (Future — MOD-04.5+)
 
@@ -2427,6 +2435,7 @@ The Attack Graph Engine constructs a directed graph of exploitation paths:
 ```
 
 **Design principles:**
+
 - Nodes represent **security states** (access levels, credentials, footholds)
 - Edges represent **attack transitions** (exploits, pivots, escalations)
 - The engine discovers **all reachable states** from initial access
@@ -2436,39 +2445,43 @@ The Attack Graph Engine constructs a directed graph of exploitation paths:
 
 All scan outputs follow a structured taxonomy for cross-phase consumption:
 
-| Artifact Type | Schema | Examples |
-|---|---|---|
-| `subdomains` | `[{name, source, resolved_ips}]` | subfinder, amass output |
-| `hosts` | `[{ip, hostname, os_guess, ports}]` | nmap discovery |
-| `services` | `[{host, port, protocol, service, version}]` | nmap service detection |
-| `endpoints` | `[{url, method, status, content_type}]` | ffuf, httpx |
-| `vulnerabilities` | `[{cve, host, port, severity, evidence}]` | nuclei, zap, sqlmap |
-| `credentials` | `[{type, username, hash, cleartext, source}]` | exploit output |
-| `access_levels` | `[{host, level, method, credential_ref}]` | post-exploit |
+| Artifact Type     | Schema                                        | Examples                |
+| ----------------- | --------------------------------------------- | ----------------------- |
+| `subdomains`      | `[{name, source, resolved_ips}]`              | subfinder, amass output |
+| `hosts`           | `[{ip, hostname, os_guess, ports}]`           | nmap discovery          |
+| `services`        | `[{host, port, protocol, service, version}]`  | nmap service detection  |
+| `endpoints`       | `[{url, method, status, content_type}]`       | ffuf, httpx             |
+| `vulnerabilities` | `[{cve, host, port, severity, evidence}]`     | nuclei, zap, sqlmap     |
+| `credentials`     | `[{type, username, hash, cleartext, source}]` | exploit output          |
+| `access_levels`   | `[{host, level, method, credential_ref}]`     | post-exploit            |
 
 ### Orchestrator → Attack Graph Integration
 
 The MOD-04 Scan Orchestrator stores artifacts per-node in the `scan_artifacts` table. Each `ScanNode` completion produces typed artifacts that are referenced by `storage_ref` (S3 key) and `artifact_type`. The future Attack Graph Engine (MOD-04.5) will consume these artifacts to construct exploitation path graphs.
 
 ## MOD-04.5
+
 Scan Pipeline Engine
 Goal: DAG-based execution engine for pentest workflows.
 
 ---
 
 ## MOD-05
+
 Worker System
 Goal: Containerized workers executing offensive security tools.
 
 ---
 
 ## MOD-06
+
 Exploit Engine
 Goal: Controlled exploit verification and proof-of-concept generation.
 
 ---
 
 ## MOD-07
+
 Attack Graph Engine
 Goal: Convert artifacts into attack graphs and enumerate attack paths.
 
@@ -2480,6 +2493,7 @@ Components:
 ---
 
 ## MOD-08
+
 AI Offensive Reasoning
 Goal: Analyze attack graphs and generate offensive strategies.
 
@@ -2491,6 +2505,7 @@ Components:
 ---
 
 ## MOD-09
+
 Exploration Engine
 Goal: Autonomous attack exploration.
 
@@ -2502,6 +2517,7 @@ Capabilities:
 ---
 
 ## MOD-09.5
+
 Offensive Knowledge Engine
 Goal: Load YAML attack patterns.
 
@@ -2513,6 +2529,7 @@ Components:
 ---
 
 ## MOD-09.6
+
 Pattern Reasoning Engine
 Goal: Compose multi-step attack chains.
 
@@ -2524,6 +2541,7 @@ Components:
 ---
 
 ## MOD-09.7
+
 Pattern Unification
 Goal: Fully knowledge-driven attack pattern execution.
 
@@ -2535,73 +2553,92 @@ Capabilities:
 ---
 
 ## MOD-10
+
 Autonomous Recon Planner
 Goal: Plan reconnaissance actions based on asset discovery.
 
 ---
 
 ## MOD-11
+
 Heuristic Vulnerability Engine
 Goal: Discover vulnerabilities using adaptive heuristics.
 
 ---
 
 ## MOD-11.5
+
 Payload Intelligence Engine
 Goal: Intelligent payload mutation and evaluation.
 
 ---
 
 ## MOD-11.6
+
 Stateful Interaction Engine
 Goal: Detect workflow and state-logic vulnerabilities.
 
 ---
 
 ## MOD-11.7
+
 Adaptive Exploit Refinement Engine
 Goal: Refine exploits using feedback loops.
 
 ---
 
 ## MOD-11.8
+
 Offensive System Validation
 Goal: End-to-end offensive pipeline testing.
 
 ---
 
 ## MOD-12
+
 Offensive Reasoning Engine
 Goal: Attack planning and adaptive strategy control.
 
 ---
 
 ## MOD-12.5
+
 Attack Surface Intelligence Engine
 Goal: Cross-domain asset graph and risk scoring.
 
 ---
 
 ## MOD-12.6
+
 Hypothesis Graph Manager
 Goal: Deduplicate, prioritize, and control hypothesis explosion.
 
 ---
 
 ## MOD-12.7
+
 Attack Discovery Engine
 Goal: Generate novel attack hypotheses from behavioral signals.
 
 ---
 
 ## MOD-13
+
 AI Offensive Learning Engine
 Goal: Learn from attack results and improve future strategies.
 
 ---
 
 ## MOD-13.5
+
 AI Attack Reasoning Engine
 Goal: Use AI models to reason about attack graphs and suggest novel strategies.
 
 ---
+
+## MOD-14
+
+Frontend UI
+Goal: Next.js dashboard and attack graph visualization.
+
+Status note: module progress is tracked in `SESSION_CONTEXT.md` and `MODULE_LOG.md`.

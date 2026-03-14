@@ -95,6 +95,8 @@ class WorkerService:
         result = await self._runner.run(
             image=tool.image,
             command=command,
+            tool_name=tool_name,
+            target=target,
             job_id=job_id,
             worker_family=worker_family,
             timeout=timeout,
@@ -149,6 +151,17 @@ class WorkerService:
             "item_count": artifact["item_count"],
             "artifact_type": artifact["artifact_type"],
             "duration_ms": duration_ms,
+            "tool": tool_name,
+            "summary": artifact.get("summary", {}),
+            "finding_count": len(artifact.get("findings", [])),
+            "evidence_count": len(artifact.get("evidence", [])),
+            "severity_counts": artifact.get("summary", {}).get("severity_counts", {}),
+            "content_type": artifact.get("metadata", {}).get("content_type", "application/json"),
+            "checksum": artifact.get("metadata", {}).get("checksum"),
+            "size_bytes": artifact.get("metadata", {}).get("normalized_size_bytes")
+            or artifact.get("metadata", {}).get("raw_size_bytes", 0),
+            "preview_items": artifact.get("items", [])[:10],
+            "preview_findings": artifact.get("findings", [])[:10],
         }
 
         # 8 — Emit completion

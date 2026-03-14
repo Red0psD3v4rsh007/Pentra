@@ -129,7 +129,7 @@ async def seed() -> None:
                     name, asset_type, target, is_verified
                 ) VALUES (
                     :id, :tid, :pid, :uid,
-                    'Dev Web App', 'web_app', 'https://testapp.pentra.dev', true
+                    'Dev Web App', 'web_app', 'example.com', true
                 )
             """), {
                 "id": ASSET_ID, "tid": TENANT_ID,

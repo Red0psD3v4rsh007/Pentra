@@ -1,18 +1,4 @@
-"""Attack graph builder — constructs directed attack graphs from scan artifacts.
-
-MOD-07: Ingests artifacts from scan_artifacts. Maps them into graph nodes
-(asset, service, endpoint, vulnerability, credential, privilege) and
-creates edges representing attacker transitions (discovery, exploit,
-credential_usage, lateral_movement, privilege_escalation).
-
-The graph is built in-memory for fast traversal but is always
-reconstructible from scan_artifacts. The final graph is serialized
-as an artifact_type='attack_graph' in scan_artifacts.
-
-Graph Model:
-    Nodes: AttackNode(id, node_type, label, artifact_ref, properties)
-    Edges: AttackEdge(source, target, edge_type, properties)
-"""
+"""Attack graph builder — constructs directed attack graphs from scan artifacts."""
 
 from __future__ import annotations
 
@@ -26,10 +12,9 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pentra_common.storage.artifacts import read_json_artifact, write_json_artifact
+
 logger = logging.getLogger(__name__)
-
-
-# ── Graph data model ─────────────────────────────────────────────────
 
 
 @dataclass
@@ -37,9 +22,9 @@ class AttackNode:
     """A node in the attack graph."""
 
     id: str
-    node_type: str     # entrypoint | asset | service | endpoint | vulnerability | credential | privilege
-    label: str         # human-readable label
-    artifact_ref: str  # reference to scan_artifact storage_ref
+    node_type: str
+    label: str
+    artifact_ref: str
     properties: dict = field(default_factory=dict)
 
 
@@ -47,9 +32,9 @@ class AttackNode:
 class AttackEdge:
     """A directed edge in the attack graph."""
 
-    source: str        # source node id
-    target: str        # target node id
-    edge_type: str     # discovery | exploit | credential_usage | lateral_movement | privilege_escalation
+    source: str
+    target: str
+    edge_type: str
     properties: dict = field(default_factory=dict)
 
 
@@ -62,6 +47,8 @@ class AttackGraph:
     nodes: dict[str, AttackNode] = field(default_factory=dict)
     edges: list[AttackEdge] = field(default_factory=list)
     built_at: str = ""
+    path_summary: dict[str, Any] = field(default_factory=dict)
+    scoring_summary: dict[str, Any] = field(default_factory=dict)
 
     def add_node(self, node: AttackNode) -> None:
         self.nodes[node.id] = node
@@ -73,38 +60,41 @@ class AttackGraph:
         return node_id in self.nodes
 
     def get_neighbors(self, node_id: str) -> list[str]:
-        """Get all nodes reachable from the given node."""
-        return [e.target for e in self.edges if e.source == node_id]
+        return [edge.target for edge in self.edges if edge.source == node_id]
 
     def get_predecessors(self, node_id: str) -> list[str]:
-        """Get all nodes that lead to the given node."""
-        return [e.source for e in self.edges if e.target == node_id]
+        return [edge.source for edge in self.edges if edge.target == node_id]
 
-    def to_dict(self) -> dict:
-        """Serialize graph to a JSON-compatible dict."""
+    def to_dict(self) -> dict[str, Any]:
         return {
             "scan_id": self.scan_id,
             "tenant_id": self.tenant_id,
             "built_at": self.built_at,
             "node_count": len(self.nodes),
             "edge_count": len(self.edges),
-            "nodes": {nid: {
-                "id": n.id,
-                "node_type": n.node_type,
-                "label": n.label,
-                "artifact_ref": n.artifact_ref,
-                "properties": n.properties,
-            } for nid, n in self.nodes.items()},
-            "edges": [{
-                "source": e.source,
-                "target": e.target,
-                "edge_type": e.edge_type,
-                "properties": e.properties,
-            } for e in self.edges],
+            "path_summary": self.path_summary,
+            "scoring_summary": self.scoring_summary,
+            "nodes": {
+                node_id: {
+                    "id": node.id,
+                    "node_type": node.node_type,
+                    "label": node.label,
+                    "artifact_ref": node.artifact_ref,
+                    "properties": node.properties,
+                }
+                for node_id, node in self.nodes.items()
+            },
+            "edges": [
+                {
+                    "source": edge.source,
+                    "target": edge.target,
+                    "edge_type": edge.edge_type,
+                    "properties": edge.properties,
+                }
+                for edge in self.edges
+            ],
         }
 
-
-# ── Entrypoint definitions ───────────────────────────────────────────
 
 _ENTRYPOINTS = {
     "external_attacker": AttackNode(
@@ -130,8 +120,6 @@ _ENTRYPOINTS = {
     ),
 }
 
-# ── Artifact → node type mapping ─────────────────────────────────────
-
 _ARTIFACT_NODE_TYPE: dict[str, str] = {
     "subdomains": "asset",
     "hosts": "asset",
@@ -148,10 +136,7 @@ _ARTIFACT_NODE_TYPE: dict[str, str] = {
     "findings_scored": "vulnerability",
 }
 
-# ── Edge inference rules ─────────────────────────────────────────────
-
 _EDGE_RULES: list[tuple[str, str, str]] = [
-    # (source_type, target_type, edge_type)
     ("entrypoint", "asset", "discovery"),
     ("asset", "service", "discovery"),
     ("service", "endpoint", "discovery"),
@@ -164,18 +149,8 @@ _EDGE_RULES: list[tuple[str, str, str]] = [
 ]
 
 
-# ── Attack Graph Builder ─────────────────────────────────────────────
-
-
 class AttackGraphBuilder:
-    """Constructs an attack graph from scan artifacts.
-
-    Usage::
-
-        builder = AttackGraphBuilder(session)
-        graph = await builder.build(scan_id=..., tenant_id=...)
-        await builder.store_graph(graph)
-    """
+    """Constructs an attack graph from scan artifacts."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -186,36 +161,35 @@ class AttackGraphBuilder:
         scan_id: uuid.UUID,
         tenant_id: uuid.UUID,
     ) -> AttackGraph:
-        """Build a complete attack graph from all artifacts for a scan."""
         graph = AttackGraph(
             scan_id=str(scan_id),
             tenant_id=str(tenant_id),
             built_at=datetime.now(timezone.utc).isoformat(),
         )
 
-        # 1 — Add entrypoints
-        for ep in _ENTRYPOINTS.values():
-            graph.add_node(ep)
+        for entrypoint in _ENTRYPOINTS.values():
+            graph.add_node(entrypoint)
 
-        # 2 — Load all artifacts for this scan
         artifacts = await self._load_artifacts(scan_id)
-
         if not artifacts:
             logger.info("No artifacts found for scan %s — empty graph", scan_id)
             return graph
 
-        # 3 — Create nodes from artifacts
+        loaded_artifacts: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for artifact in artifacts:
-            nodes = self._artifact_to_nodes(artifact)
-            for node in nodes:
+            payload = self._load_artifact_payload(artifact)
+            loaded_artifacts.append((artifact, payload))
+            for node in self._artifact_to_nodes(artifact, payload):
                 graph.add_node(node)
 
-        # 4 — Infer edges between nodes
+        self._apply_relationships(graph, loaded_artifacts)
         self._infer_edges(graph)
 
         logger.info(
             "Attack graph built: scan=%s nodes=%d edges=%d",
-            scan_id, len(graph.nodes), len(graph.edges),
+            scan_id,
+            len(graph.nodes),
+            len(graph.edges),
         )
         return graph
 
@@ -227,71 +201,85 @@ class AttackGraphBuilder:
         new_artifact_type: str,
         new_artifact_ref: str,
     ) -> AttackGraph:
-        """Incrementally rebuild the graph after a new artifact appears.
-
-        For now, does full rebuild (fast enough for <10K nodes).
-        Future optimization: differential update.
-        """
         return await self.build(scan_id=scan_id, tenant_id=tenant_id)
 
-    async def store_graph(
-        self,
-        graph: AttackGraph,
-    ) -> uuid.UUID:
-        """Serialize and store the attack graph as a scan_artifact."""
-        graph_data = json.dumps(graph.to_dict(), default=str)
+    async def store_graph(self, graph: AttackGraph) -> uuid.UUID:
+        """Serialize and store the attack graph as a scan artifact."""
         artifact_id = uuid.uuid4()
-        scan_id = graph.scan_id
-        tenant_id = graph.tenant_id
+        storage_ref = f"graphs/{graph.tenant_id}/{graph.scan_id}/attack_graph.json"
+        size_bytes, checksum = write_json_artifact(storage_ref, graph.to_dict())
 
-        # Upsert: delete old attack_graph, insert new
-        await self._session.execute(text("""
-            DELETE FROM scan_artifacts
-            WHERE scan_id = :sid AND artifact_type = 'attack_graph'
-        """), {"sid": scan_id})
+        await self._session.execute(
+            text(
+                """
+                DELETE FROM scan_artifacts
+                WHERE scan_id = :sid AND artifact_type = 'attack_graph'
+                """
+            ),
+            {"sid": graph.scan_id},
+        )
 
-        await self._session.execute(text("""
-            INSERT INTO scan_artifacts (
-                id, scan_id, tenant_id,
-                artifact_type, storage_ref, metadata
-            ) VALUES (
-                :id, :sid, :tid,
-                'attack_graph', :ref,
-                CAST(:meta AS jsonb)
-            )
-        """), {
-            "id": str(artifact_id),
-            "sid": scan_id,
-            "tid": tenant_id,
-            "ref": f"graphs/{tenant_id}/{scan_id}/attack_graph.json",
-            "meta": graph_data,
-        })
+        await self._session.execute(
+            text(
+                """
+                INSERT INTO scan_artifacts (
+                    id, scan_id, tenant_id, artifact_type, storage_ref,
+                    content_type, size_bytes, checksum, metadata
+                ) VALUES (
+                    :id, :sid, :tid, 'attack_graph', :ref,
+                    'application/json', :size, :checksum, CAST(:meta AS jsonb)
+                )
+                """
+            ),
+            {
+                "id": str(artifact_id),
+                "sid": graph.scan_id,
+                "tid": graph.tenant_id,
+                "ref": storage_ref,
+                "size": size_bytes,
+                "checksum": checksum,
+                "meta": json.dumps(
+                    {
+                        "node_count": len(graph.nodes),
+                        "edge_count": len(graph.edges),
+                        "built_at": graph.built_at,
+                        "path_summary": graph.path_summary,
+                        "scoring_summary": graph.scoring_summary,
+                    }
+                ),
+            },
+        )
 
         await self._session.flush()
-        logger.info("Attack graph stored: artifact=%s nodes=%d edges=%d",
-                     artifact_id, len(graph.nodes), len(graph.edges))
+        logger.info(
+            "Attack graph stored: artifact=%s nodes=%d edges=%d",
+            artifact_id,
+            len(graph.nodes),
+            len(graph.edges),
+        )
         return artifact_id
 
-    # ── Internal helpers ──────────────────────────────────────────
-
-    async def _load_artifacts(self, scan_id: uuid.UUID) -> list[dict]:
-        """Load all artifacts for a scan from the database."""
-        result = await self._session.execute(text("""
-            SELECT id, artifact_type, storage_ref, metadata, node_id
-            FROM scan_artifacts
-            WHERE scan_id = :sid
-              AND artifact_type != 'attack_graph'
-            ORDER BY created_at
-        """), {"sid": str(scan_id)})
-
+    async def _load_artifacts(self, scan_id: uuid.UUID) -> list[dict[str, Any]]:
+        result = await self._session.execute(
+            text(
+                """
+                SELECT id, artifact_type, storage_ref, metadata, node_id
+                FROM scan_artifacts
+                WHERE scan_id = :sid
+                  AND artifact_type != 'attack_graph'
+                ORDER BY created_at
+                """
+            ),
+            {"sid": str(scan_id)},
+        )
         return [dict(row) for row in result.mappings().all()]
 
-    def _artifact_to_nodes(self, artifact: dict) -> list[AttackNode]:
-        """Convert a scan artifact into one or more attack graph nodes."""
-        artifact_type = artifact.get("artifact_type", "unknown")
-        node_type = _ARTIFACT_NODE_TYPE.get(artifact_type, "asset")
-        storage_ref = artifact.get("storage_ref", "")
-        artifact_id = str(artifact.get("id", ""))
+    def _load_artifact_payload(self, artifact: dict[str, Any]) -> dict[str, Any]:
+        storage_ref = str(artifact.get("storage_ref", ""))
+        payload = read_json_artifact(storage_ref)
+        if isinstance(payload, dict):
+            return payload
+
         metadata = artifact.get("metadata", {})
         if isinstance(metadata, str):
             try:
@@ -299,56 +287,161 @@ class AttackGraphBuilder:
             except Exception:
                 metadata = {}
 
-        nodes = []
+        return {
+            "items": metadata.get("items", []),
+            "findings": metadata.get("findings", []),
+            "relationships": metadata.get("relationships", []),
+            "summary": metadata.get("summary", {}),
+        }
 
-        # If metadata has items, create per-item nodes
-        items = metadata.get("items", []) if isinstance(metadata, dict) else []
+    def _artifact_to_nodes(
+        self,
+        artifact: dict[str, Any],
+        payload: dict[str, Any] | None = None,
+    ) -> list[AttackNode]:
+        """Convert an artifact into one or more graph nodes."""
+        payload = payload or self._load_artifact_payload(artifact)
+        artifact_type = str(artifact.get("artifact_type", "unknown"))
+        node_type = _ARTIFACT_NODE_TYPE.get(artifact_type, "asset")
+        storage_ref = str(artifact.get("storage_ref", ""))
+        artifact_id = str(artifact.get("id", ""))
+        findings = payload.get("findings", []) if isinstance(payload, dict) else []
+        items = payload.get("items", []) if isinstance(payload, dict) else []
 
-        if items and len(items) <= 50:  # cap to avoid explosion
-            for i, item in enumerate(items):
-                label = self._item_label(item, artifact_type, i)
-                node_id = f"{artifact_type}:{artifact_id}:{i}"
-                nodes.append(AttackNode(
-                    id=node_id,
-                    node_type=node_type,
-                    label=label,
-                    artifact_ref=storage_ref,
-                    properties={
-                        "artifact_type": artifact_type,
-                        "artifact_id": artifact_id,
-                        "item_index": i,
-                        **{k: v for k, v in item.items() if isinstance(v, (str, int, float, bool))},
-                    },
-                ))
-        else:
-            # Single aggregate node for the artifact
-            label = f"{artifact_type} ({artifact_type})"
-            node_id = f"{artifact_type}:{artifact_id}"
-            nodes.append(AttackNode(
-                id=node_id,
+        nodes: list[AttackNode] = []
+
+        if findings and artifact_type in {"vulnerabilities", "findings_scored"}:
+            for finding in findings:
+                fingerprint = str(finding.get("fingerprint") or artifact_id)
+                nodes.append(
+                    AttackNode(
+                        id=f"vulnerability:{fingerprint}",
+                        node_type="vulnerability",
+                        label=str(finding.get("title") or finding.get("target") or artifact_type),
+                        artifact_ref=storage_ref,
+                        properties={
+                            "artifact_type": artifact_type,
+                            "artifact_id": artifact_id,
+                            "severity": finding.get("severity"),
+                            "target": finding.get("target"),
+                            "endpoint": finding.get("endpoint"),
+                            "entity_key": finding.get("entity_key", f"vulnerability:{fingerprint}"),
+                            "fingerprint": fingerprint,
+                        },
+                    )
+                )
+            return nodes
+
+        if findings and artifact_type in {
+            "access_levels",
+            "database_access",
+            "shell_access",
+            "credential_leak",
+            "privilege_escalation",
+            "verified_impact",
+        }:
+            impact_type = "credential" if artifact_type == "credential_leak" else "privilege"
+            for finding in findings:
+                fingerprint = str(finding.get("fingerprint") or artifact_id)
+                target = str(finding.get("target") or artifact_type)
+                nodes.append(
+                    AttackNode(
+                        id=f"{impact_type}:{fingerprint}",
+                        node_type=impact_type,
+                        label=str(finding.get("title") or target),
+                        artifact_ref=storage_ref,
+                        properties={
+                            "artifact_type": artifact_type,
+                            "artifact_id": artifact_id,
+                            "severity": finding.get("severity"),
+                            "target": target,
+                            "entity_key": finding.get(
+                                "entity_key",
+                                f"{impact_type}:{target.lower()}",
+                            ),
+                        },
+                    )
+                )
+            return nodes
+
+        if items and len(items) <= 50:
+            for index, item in enumerate(items):
+                nodes.append(
+                    AttackNode(
+                        id=f"{artifact_type}:{artifact_id}:{index}",
+                        node_type=node_type,
+                        label=self._item_label(item, artifact_type, index),
+                        artifact_ref=storage_ref,
+                        properties={
+                            "artifact_type": artifact_type,
+                            "artifact_id": artifact_id,
+                            "item_index": index,
+                            "entity_key": item.get("entity_key"),
+                            **{
+                                key: value
+                                for key, value in item.items()
+                                if isinstance(value, (str, int, float, bool))
+                            },
+                        },
+                    )
+                )
+            return nodes
+
+        nodes.append(
+            AttackNode(
+                id=f"{artifact_type}:{artifact_id}",
                 node_type=node_type,
-                label=label,
+                label=f"{artifact_type} ({artifact_type})",
                 artifact_ref=storage_ref,
                 properties={
                     "artifact_type": artifact_type,
                     "artifact_id": artifact_id,
                     "item_count": len(items) if items else 1,
                 },
-            ))
-
+            )
+        )
         return nodes
 
-    def _item_label(self, item: dict, artifact_type: str, index: int) -> str:
-        """Generate a human-readable label for an artifact item."""
-        # Try common fields
-        for key in ("host", "name", "url", "matched-at", "target", "service", "port"):
+    def _item_label(self, item: dict[str, Any], artifact_type: str, index: int) -> str:
+        for key in ("title", "host", "name", "url", "matched-at", "target", "service", "port", "access_level"):
             if key in item and item[key]:
                 return str(item[key])[:80]
-
         return f"{artifact_type}[{index}]"
 
+    def _apply_relationships(
+        self,
+        graph: AttackGraph,
+        loaded_artifacts: list[tuple[dict[str, Any], dict[str, Any]]],
+    ) -> None:
+        entity_map: dict[str, list[str]] = {}
+        for node in graph.nodes.values():
+            entity_key = node.properties.get("entity_key")
+            if isinstance(entity_key, str) and entity_key:
+                entity_map.setdefault(entity_key, []).append(node.id)
+
+        for artifact, payload in loaded_artifacts:
+            relationships = payload.get("relationships", []) if isinstance(payload, dict) else []
+            for relationship in relationships:
+                source_key = str(relationship.get("source_key", ""))
+                target_key = str(relationship.get("target_key", ""))
+                edge_type = str(relationship.get("edge_type", "related"))
+                for source_id in entity_map.get(source_key, []):
+                    for target_id in entity_map.get(target_key, []):
+                        if source_id == target_id or self._edge_exists(graph, source_id, target_id, edge_type):
+                            continue
+                        graph.add_edge(
+                            AttackEdge(
+                                source=source_id,
+                                target=target_id,
+                                edge_type=edge_type,
+                                properties={
+                                    "inferred": False,
+                                    "artifact_ref": artifact.get("storage_ref"),
+                                },
+                            )
+                        )
+
     def _infer_edges(self, graph: AttackGraph) -> None:
-        """Infer edges between nodes based on type-based rules."""
         nodes_by_type: dict[str, list[AttackNode]] = {}
         for node in graph.nodes.values():
             nodes_by_type.setdefault(node.node_type, []).append(node)
@@ -356,26 +449,76 @@ class AttackGraphBuilder:
         for source_type, target_type, edge_type in _EDGE_RULES:
             sources = nodes_by_type.get(source_type, [])
             targets = nodes_by_type.get(target_type, [])
-
             if not sources or not targets:
                 continue
 
-            for src in sources:
-                for tgt in targets:
-                    if src.id == tgt.id:
+            for source in sources:
+                for target in targets:
+                    if source.id == target.id:
                         continue
+                    if self._edge_exists(graph, source.id, target.id, edge_type):
+                        continue
+                    if not self._should_link(source, target, edge_type):
+                        continue
+                    graph.add_edge(
+                        AttackEdge(
+                            source=source.id,
+                            target=target.id,
+                            edge_type=edge_type,
+                            properties={
+                                "inferred": True,
+                                "rule": f"{source_type}->{target_type}",
+                            },
+                        )
+                    )
 
-                    # For privilege_escalation, only connect different privileges
-                    if edge_type == "privilege_escalation":
-                        if src.properties.get("artifact_type") == tgt.properties.get("artifact_type"):
-                            continue
+    def _edge_exists(self, graph: AttackGraph, source_id: str, target_id: str, edge_type: str) -> bool:
+        return any(
+            edge.source == source_id and edge.target == target_id and edge.edge_type == edge_type
+            for edge in graph.edges
+        )
 
-                    graph.add_edge(AttackEdge(
-                        source=src.id,
-                        target=tgt.id,
-                        edge_type=edge_type,
-                        properties={
-                            "inferred": True,
-                            "rule": f"{source_type}→{target_type}",
-                        },
-                    ))
+    def _should_link(self, source: AttackNode, target: AttackNode, edge_type: str) -> bool:
+        if source.node_type == "entrypoint":
+            return target.node_type == "asset"
+
+        source_target = str(
+            source.properties.get("target")
+            or source.properties.get("host")
+            or source.properties.get("url")
+            or ""
+        ).lower()
+        target_target = str(
+            target.properties.get("target")
+            or target.properties.get("host")
+            or target.properties.get("url")
+            or target.properties.get("endpoint")
+            or ""
+        ).lower()
+        target_key = str(target.properties.get("entity_key") or "").lower()
+
+        if source.node_type == "asset" and target.node_type == "service":
+            if not target_key:
+                return True
+            return source_target in target_key or source.label.lower() in target_key
+
+        if source.node_type in {"asset", "service"} and target.node_type == "endpoint":
+            if not source_target and not target_target:
+                return True
+            return source_target in target_target or source.label.lower() in target_target
+
+        if source.node_type in {"asset", "endpoint"} and target.node_type == "vulnerability":
+            if not source_target or not target_target:
+                return True
+            return source_target in target_target
+
+        if source.node_type == "vulnerability" and target.node_type in {"credential", "privilege"}:
+            return edge_type == "exploit"
+
+        if source.node_type == "credential" and target.node_type in {"service", "privilege"}:
+            return not source_target or source_target in target_target
+
+        if source.node_type == "privilege" and target.node_type == "privilege":
+            return source.id != target.id
+
+        return True

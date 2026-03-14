@@ -10,7 +10,9 @@ from pydantic import BaseModel
 
 
 class ScanJobStatus(str, Enum):
+    queued = "queued"
     pending = "pending"
+    scheduled = "scheduled"
     assigned = "assigned"
     running = "running"
     completed = "completed"

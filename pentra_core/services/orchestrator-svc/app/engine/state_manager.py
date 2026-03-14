@@ -73,6 +73,11 @@ class StateManager:
             UPDATE scan_nodes SET status = 'running'
             WHERE id = :id AND status IN ('scheduled', 'ready')
         """), {"id": str(node_id)})
+        await self._session.execute(text("""
+            UPDATE scan_jobs
+            SET status = 'running', started_at = COALESCE(started_at, NOW())
+            WHERE id = (SELECT job_id FROM scan_nodes WHERE id = :nid)
+        """), {"nid": str(node_id)})
 
     async def mark_node_completed(
         self,
@@ -96,6 +101,14 @@ class StateManager:
             "ref": output_ref,
             "summary": summary_json,
         })
+
+        await self._session.execute(text("""
+            UPDATE scan_jobs
+            SET status = 'completed',
+                completed_at = NOW(),
+                output_ref = :ref
+            WHERE id = (SELECT job_id FROM scan_nodes WHERE id = :nid)
+        """), {"ref": output_ref, "nid": str(node_id)})
 
         # Propagate data_ref to all outgoing edges
         await self._session.execute(text("""
@@ -325,21 +338,29 @@ class StateManager:
         tenant_id: uuid.UUID,
         artifact_type: str,
         storage_ref: str,
+        content_type: str = "application/json",
         size_bytes: int = 0,
+        checksum: str | None = None,
+        metadata: dict | None = None,
     ) -> uuid.UUID:
         """Record a scan artifact produced by a node.
 
         These artifacts feed the future Attack Graph Engine.
         """
         aid = uuid.uuid4()
+        import json
+
         await self._session.execute(text("""
             INSERT INTO scan_artifacts (id, scan_id, node_id, tenant_id,
-                                        artifact_type, storage_ref, size_bytes)
-            VALUES (:id, :sid, :nid, :tid, :type, :ref, :size)
+                                        artifact_type, storage_ref, content_type,
+                                        size_bytes, checksum, metadata)
+            VALUES (:id, :sid, :nid, :tid, :type, :ref, :content_type,
+                    :size, :checksum, CAST(:metadata AS jsonb))
         """), {
             "id": str(aid), "sid": str(scan_id), "nid": str(node_id),
             "tid": str(tenant_id), "type": artifact_type,
-            "ref": storage_ref, "size": size_bytes,
+            "ref": storage_ref, "content_type": content_type, "size": size_bytes,
+            "checksum": checksum, "metadata": json.dumps(metadata or {}),
         })
         await self._session.flush()
         logger.info("Artifact stored: %s type=%s ref=%s", aid, artifact_type, storage_ref)
