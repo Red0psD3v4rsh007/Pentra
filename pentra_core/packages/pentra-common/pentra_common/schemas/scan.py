@@ -14,6 +14,7 @@ __all__ = [
     "SCAN_TERMINAL_STATES",
     "ScanPriority",
     "ScanCreate",
+    "ScanRetestCreate",
     "ScanUpdate",
     "ScanResponse",
 ]
@@ -66,6 +67,14 @@ class ScanCreate(BaseModel):
     config: dict | None = Field(
         default=None,
         description="Profile overrides: rate_limit, tool selection, etc.",
+    )
+
+
+class ScanRetestCreate(BaseModel):
+    priority: ScanPriority | None = None
+    config_overrides: dict | None = Field(
+        default=None,
+        description="Optional config overrides merged into the retest scan configuration.",
     )
 
 

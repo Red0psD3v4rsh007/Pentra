@@ -12,5 +12,5 @@ command:
   - --output
   - "{output_dir}/poc_result.json"
 output_parser: json
-artifact_type: credential_leak
+artifact_type: verified_impact
 default_timeout: 300

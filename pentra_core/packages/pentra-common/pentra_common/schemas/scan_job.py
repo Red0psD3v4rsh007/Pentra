@@ -18,6 +18,7 @@ class ScanJobStatus(str, Enum):
     completed = "completed"
     failed = "failed"
     skipped = "skipped"
+    blocked = "blocked"
 
 
 class ScanJobResponse(BaseModel):
@@ -32,6 +33,9 @@ class ScanJobResponse(BaseModel):
     completed_at: datetime | None = None
     error_message: str | None = None
     retry_count: int
+    execution_mode: str | None = None
+    execution_provenance: str | None = None
+    execution_reason: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

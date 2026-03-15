@@ -1,12 +1,19 @@
 name: ffuf
 worker_family: web
-image: ffuf/ffuf:latest
+image: parrotsec/ffuf:latest
 command:
-  - ffuf
   - -u
-  - "{target}/FUZZ"
+  - "{base_url}/FUZZ"
   - -w
-  - /usr/share/wordlists/dirb/common.txt
+  - "{ffuf_wordlist}"
+  - -rate
+  - "{ffuf_rate_limit}"
+  - -timeout
+  - "5"
+  - -maxtime
+  - "60"
+  - -mc
+  - all
   - -o
   - "{output_dir}/ffuf.json"
   - -of

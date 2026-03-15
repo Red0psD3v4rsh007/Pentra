@@ -27,7 +27,8 @@ import {
   ShieldCheck,
 } from "lucide-react"
 
-import { type ApiAttackGraph } from "@/lib/scans-store"
+import { AIAdvisoryPanel } from "@/components/scans/ai-advisory-panel"
+import { type AiAdvisoryMode, type ApiAttackGraph, type ApiScanAiReasoning } from "@/lib/scans-store"
 import { cn } from "@/lib/utils"
 
 type GraphNodeData = {
@@ -174,9 +175,21 @@ function buildGraphEdges(graph: ApiAttackGraph): Edge[] {
 
 interface AttackGraphTabProps {
   graph: ApiAttackGraph | null
+  advisory: ApiScanAiReasoning | null
+  advisoryMode: AiAdvisoryMode
+  onChangeAdvisoryMode: (mode: AiAdvisoryMode) => void
+  onRegenerateAdvisory: () => void
+  isRegeneratingAdvisory: boolean
 }
 
-export function AttackGraphTab({ graph }: AttackGraphTabProps) {
+export function AttackGraphTab({
+  graph,
+  advisory,
+  advisoryMode,
+  onChangeAdvisoryMode,
+  onRegenerateAdvisory,
+  isRegeneratingAdvisory,
+}: AttackGraphTabProps) {
   const initialNodes = useMemo(() => (graph ? buildGraphNodes(graph) : []), [graph])
   const initialEdges = useMemo(() => (graph ? buildGraphEdges(graph) : []), [graph])
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
@@ -241,6 +254,57 @@ export function AttackGraphTab({ graph }: AttackGraphTabProps) {
       </div>
 
       <div className="space-y-4">
+        <AIAdvisoryPanel
+          reasoning={advisory}
+          title="Attack Path Advisory"
+          description="Bounded AI analysis of the persisted graph. It explains risk and suggests safe next moves, but it does not dispatch jobs."
+          currentMode={advisoryMode}
+          onChangeMode={onChangeAdvisoryMode}
+          onRegenerate={onRegenerateAdvisory}
+          isRegenerating={isRegeneratingAdvisory}
+        >
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Summary
+              </p>
+              <p className="mt-2 text-sm leading-7 text-foreground">
+                {advisory?.attack_graph.summary}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Risk Overview
+              </p>
+              <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                {advisory?.attack_graph.risk_overview}
+              </p>
+            </div>
+
+            {advisory?.attack_graph.next_steps.length ? (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Suggested Next Steps
+                </p>
+                <div className="mt-2 space-y-2">
+                  {advisory.attack_graph.next_steps.map((step) => (
+                    <div key={`${step.title}-${step.confidence}`} className="rounded-lg bg-background p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium text-foreground">{step.title}</p>
+                        <span className="rounded-full bg-primary/10 px-2 py-1 text-[11px] text-primary">
+                          {step.confidence}%
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm text-muted-foreground">{step.rationale}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </AIAdvisoryPanel>
+
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-foreground">Graph Summary</h3>
           <div className="mt-3 grid gap-3">

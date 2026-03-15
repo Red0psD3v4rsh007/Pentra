@@ -33,6 +33,7 @@ _TIER_LIMITS: dict[str, int] = {
 }
 _UNAUTHENTICATED_LIMIT = 30  # per-IP fallback
 _WINDOW_SECONDS = 60
+_LOCAL_DEV_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -43,6 +44,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         settings = get_settings()
         self._redis: aioredis.Redis | None = None
         self._redis_url = settings.redis_url
+        self._app_env = settings.app_env
+        self._allow_local_dev_bypass = settings.allow_local_dev_rate_limit_bypass
 
     async def _get_redis(self) -> aioredis.Redis:
         """Lazy-initialise the Redis connection."""
@@ -59,6 +62,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path in ("/health", "/ready"):
             return await call_next(request)
 
+        client_ip = request.client.host if request.client else "unknown"
+        origin = request.headers.get("origin", "")
+        if self._is_local_dev_request(client_ip=client_ip, origin=origin):
+            return await call_next(request)
+
         # Determine rate limit key and threshold
         user = getattr(request.state, "user", None)
         if user is not None:
@@ -66,7 +74,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             tier = getattr(user, "tier", "free")
             limit = _TIER_LIMITS.get(tier, _UNAUTHENTICATED_LIMIT)
         else:
-            client_ip = request.client.host if request.client else "unknown"
             key = f"pentra:ratelimit:ip:{client_ip}"
             limit = _UNAUTHENTICATED_LIMIT
 
@@ -107,3 +114,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response.headers["X-RateLimit-Reset"] = str(ttl if ttl > 0 else _WINDOW_SECONDS)
 
         return response
+
+    def _is_local_dev_request(self, *, client_ip: str, origin: str) -> bool:
+        if self._app_env != "development" or not self._allow_local_dev_bypass:
+            return False
+
+        if client_ip in _LOCAL_DEV_HOSTS:
+            return True
+
+        return origin.startswith("http://localhost:") or origin.startswith(
+            "http://127.0.0.1:"
+        )

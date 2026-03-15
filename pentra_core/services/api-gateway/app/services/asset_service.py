@@ -49,12 +49,14 @@ async def create_asset(
             session.add(tag)
         await session.flush()
 
+    await session.refresh(asset, attribute_names=["tags"])
     return asset
 
 
 async def list_assets(
     *,
     project_id: uuid.UUID,
+    tenant_id: uuid.UUID,
     session: AsyncSession,
     page: int = 1,
     page_size: int = 20,
@@ -63,7 +65,11 @@ async def list_assets(
 
     Returns ``(items, total_count)``.
     """
-    base_filter = (Asset.project_id == project_id) & (Asset.is_active == True)  # noqa: E712
+    base_filter = (
+        (Asset.project_id == project_id)
+        & (Asset.tenant_id == tenant_id)
+        & (Asset.is_active == True)  # noqa: E712
+    )
 
     count_stmt = select(func.count()).select_from(Asset).where(base_filter)
     total = (await session.execute(count_stmt)).scalar_one()
@@ -81,11 +87,13 @@ async def list_assets(
 
 
 async def get_asset(
-    *, asset_id: uuid.UUID, session: AsyncSession
+    *, asset_id: uuid.UUID, tenant_id: uuid.UUID, session: AsyncSession
 ) -> Asset | None:
     """Fetch a single asset by ID (RLS enforces tenant scope)."""
     stmt = select(Asset).where(
-        Asset.id == asset_id, Asset.is_active == True  # noqa: E712
+        Asset.id == asset_id,
+        Asset.tenant_id == tenant_id,
+        Asset.is_active == True,  # noqa: E712
     )
     result = await session.execute(stmt)
     return result.unique().scalar_one_or_none()
@@ -94,13 +102,18 @@ async def get_asset(
 async def update_asset(
     *,
     asset_id: uuid.UUID,
+    tenant_id: uuid.UUID,
     name: str | None,
     description: str | None,
     tags: dict[str, str] | None,
     session: AsyncSession,
 ) -> Asset:
     """Update mutable asset fields and optionally replace tags."""
-    asset = await get_asset(asset_id=asset_id, session=session)
+    asset = await get_asset(
+        asset_id=asset_id,
+        tenant_id=tenant_id,
+        session=session,
+    )
     if asset is None:
         raise ValueError("Asset not found")
 
@@ -122,14 +135,19 @@ async def update_asset(
             session.add(tag)
 
     await session.flush()
+    await session.refresh(asset, attribute_names=["tags"])
     return asset
 
 
 async def delete_asset(
-    *, asset_id: uuid.UUID, session: AsyncSession
+    *, asset_id: uuid.UUID, tenant_id: uuid.UUID, session: AsyncSession
 ) -> None:
     """Soft-delete an asset by setting ``is_active = False``."""
-    asset = await get_asset(asset_id=asset_id, session=session)
+    asset = await get_asset(
+        asset_id=asset_id,
+        tenant_id=tenant_id,
+        session=session,
+    )
     if asset is None:
         raise ValueError("Asset not found")
 

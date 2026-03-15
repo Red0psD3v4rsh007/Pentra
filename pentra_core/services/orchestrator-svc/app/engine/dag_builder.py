@@ -19,9 +19,12 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from pentra_common.profiles import DEFAULT_EXTERNAL_WEB_API_PROFILE_ID
 
 logger = logging.getLogger(__name__)
 
@@ -135,14 +138,16 @@ def _build_vuln_tools() -> list[ToolSpec]:
     return recon + enum + vuln
 
 
-def _build_full_tools() -> list[ToolSpec]:
+def _build_full_tools(config: dict[str, Any] | None = None) -> list[ToolSpec]:
     """Build full scan type tool list (all 7 phases)."""
     vuln_tools = _build_vuln_tools()
-    exploit = [
-        ToolSpec("metasploit", "exploit", phase=4, timeout_seconds=1200, max_retries=0,
-                 depends_on=("nuclei",), data_keys=("vulnerabilities",),
-                 output_artifact_type="access_levels"),
-    ]
+    exploit: list[ToolSpec] = []
+    if _include_static_metasploit(config):
+        exploit = [
+            ToolSpec("metasploit", "exploit", phase=4, timeout_seconds=1200, max_retries=0,
+                     depends_on=("nuclei",), data_keys=("vulnerabilities",),
+                     output_artifact_type="access_levels"),
+        ]
     ai = [
         ToolSpec("ai_triage", "recon", phase=5, timeout_seconds=300, max_retries=1,
                  depends_on=("nuclei", "zap", "sqlmap"),
@@ -155,6 +160,113 @@ def _build_full_tools() -> list[ToolSpec]:
                  output_artifact_type="report"),
     ]
     return vuln_tools + exploit + ai + report
+
+
+def _build_external_web_api_recon_tools() -> list[ToolSpec]:
+    """Recon template for the External Web + API v1 profile."""
+    return [
+        ToolSpec("scope_check", "recon", phase=0, timeout_seconds=30, max_retries=0,
+                 output_artifact_type="scope"),
+        ToolSpec("subfinder", "recon", phase=1, timeout_seconds=600, max_retries=1,
+                 depends_on=("scope_check",), data_keys=("scope",),
+                 output_artifact_type="subdomains"),
+        ToolSpec("amass", "recon", phase=1, timeout_seconds=900, max_retries=1,
+                 depends_on=("scope_check",), data_keys=("scope",),
+                 output_artifact_type="subdomains"),
+        ToolSpec("nmap_discovery", "network", phase=1, timeout_seconds=600, max_retries=1,
+                 depends_on=("scope_check",), data_keys=("scope",),
+                 output_artifact_type="hosts"),
+        ToolSpec("httpx_probe", "web", phase=1, timeout_seconds=600, max_retries=1,
+                 depends_on=("subfinder", "amass"), data_keys=("subdomains", "subdomains"),
+                 output_artifact_type="endpoints"),
+    ]
+
+
+def _build_external_web_api_vuln_tools() -> list[ToolSpec]:
+    """Full pre-exploit profile for external web apps and APIs."""
+    recon = _build_external_web_api_recon_tools()
+    enum = [
+        ToolSpec("nmap_svc", "network", phase=2, timeout_seconds=900, max_retries=1,
+                 depends_on=("nmap_discovery",), data_keys=("hosts",),
+                 output_artifact_type="services"),
+        ToolSpec("web_interact", "web", phase=2, timeout_seconds=900, max_retries=1,
+                 depends_on=("httpx_probe",), data_keys=("endpoints",),
+                 output_artifact_type="endpoints"),
+        ToolSpec("ffuf", "web", phase=2, timeout_seconds=900, max_retries=1,
+                 depends_on=("httpx_probe",), data_keys=("endpoints",),
+                 output_artifact_type="endpoints"),
+    ]
+    vuln = [
+        ToolSpec("nuclei", "vuln", phase=3, timeout_seconds=1800, max_retries=1,
+                 depends_on=("httpx_probe", "ffuf", "nmap_svc"),
+                 data_keys=("endpoints", "endpoints", "services"),
+                 output_artifact_type="vulnerabilities"),
+        ToolSpec("zap", "web", phase=3, timeout_seconds=1200, max_retries=1,
+                 depends_on=("httpx_probe",), data_keys=("endpoints",),
+                 output_artifact_type="vulnerabilities"),
+        ToolSpec("sqlmap", "vuln", phase=3, timeout_seconds=1200, max_retries=0,
+                 depends_on=("ffuf",), data_keys=("endpoints",),
+                 output_artifact_type="vulnerabilities"),
+    ]
+    return recon + enum + vuln
+
+
+def _build_external_web_api_full_tools(config: dict[str, Any] | None = None) -> list[ToolSpec]:
+    vuln_tools = _build_external_web_api_vuln_tools()
+    exploit: list[ToolSpec] = []
+    if _include_static_metasploit(config):
+        exploit = [
+            ToolSpec("metasploit", "exploit", phase=4, timeout_seconds=1200, max_retries=0,
+                     depends_on=("nuclei",), data_keys=("vulnerabilities",),
+                     output_artifact_type="access_levels"),
+        ]
+    ai = [
+        ToolSpec("ai_triage", "recon", phase=5, timeout_seconds=300, max_retries=1,
+                 depends_on=("nuclei", "zap", "sqlmap"),
+                 data_keys=("vulnerabilities", "vulnerabilities", "vulnerabilities"),
+                 output_artifact_type="findings_scored"),
+    ]
+    report = [
+        ToolSpec("report_gen", "recon", phase=6, timeout_seconds=300, max_retries=1,
+                 depends_on=("ai_triage",), data_keys=("findings_scored",),
+                 output_artifact_type="report"),
+    ]
+    return vuln_tools + exploit + ai + report
+
+
+def _select_tools(scan_type: str, asset_type: str, config: dict[str, Any] | None) -> list[ToolSpec] | None:
+    """Choose either the generic template or the profile-specific toolchain."""
+    profile_id = str((config or {}).get("profile_id") or (config or {}).get("profile", {}).get("id") or "")
+    if asset_type in {"web_app", "api"} and profile_id == DEFAULT_EXTERNAL_WEB_API_PROFILE_ID:
+        if scan_type == "recon":
+            return _build_external_web_api_recon_tools()
+        if scan_type == "vuln":
+            return _build_external_web_api_vuln_tools()
+        if scan_type == "full":
+            return _build_external_web_api_full_tools(config)
+
+    if scan_type == "full":
+        return _build_full_tools(config)
+    return _TOOLS.get(scan_type)
+
+
+def _include_static_metasploit(config: dict[str, Any] | None) -> bool:
+    verification_policy = (config or {}).get("verification_policy", {})
+    if not isinstance(verification_policy, dict):
+        return True
+
+    if not verification_policy.get("enabled", False):
+        return True
+
+    mode = str(verification_policy.get("mode") or "").strip().lower()
+    allowed_tools = {
+        str(tool).strip().lower()
+        for tool in verification_policy.get("allowed_tools", [])
+        if str(tool).strip()
+    }
+    if mode == "safe_first" and "metasploit" not in allowed_tools and "msf_verify" not in allowed_tools:
+        return False
+    return True
 
 
 # Initialize composite templates
@@ -197,7 +309,7 @@ class DAGBuilder:
         Returns the ``dag_id`` of the created ScanDAG.
         """
         phases = _PHASES.get(scan_type)
-        tools = _TOOLS.get(scan_type)
+        tools = _select_tools(scan_type, asset_type, config)
 
         if phases is None or tools is None:
             raise ValueError(f"Unknown scan_type: {scan_type}")

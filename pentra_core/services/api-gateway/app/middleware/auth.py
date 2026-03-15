@@ -26,6 +26,8 @@ from starlette.responses import Response
 from pentra_common.auth.jwt import TokenError, decode_token
 from pentra_common.auth.tenant_context import CurrentUser
 
+from app.security.runtime_auth import build_dev_bypass_user, is_dev_auth_bypass_enabled
+
 logger = logging.getLogger(__name__)
 
 # Routes that never require authentication
@@ -86,5 +88,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 # Invalid token — don't block; let the route-level dependency
                 # raise 401 if authentication is required.
                 logger.debug("Invalid token on %s — proceeding unauthenticated", path)
+        elif is_dev_auth_bypass_enabled():
+            user = build_dev_bypass_user()
+            request.state.user = user
+            request.state.tenant_id = user.tenant_id
+            logger.debug(
+                "Development auth bypass active: user=%s tenant=%s",
+                user.user_id,
+                user.tenant_id,
+            )
 
         return await call_next(request)

@@ -242,12 +242,14 @@ class OrchestratorService:
                 if new_dynamic > 0:
                     newly_ready = await executor._resolver.resolve_ready_nodes(dag_id)
                     if newly_ready:
+                        scan_config = await executor._load_scan_config(scan_id)
                         await executor._dispatcher.dispatch_nodes(
                             newly_ready,
                             scan_id=scan_id,
                             tenant_id=tenant_id,
                             target=event.get("target", ""),
                             priority=event.get("priority", "normal"),
+                            config=scan_config,
                         )
 
                 # 4 — Handle DAG completion
@@ -340,10 +342,16 @@ class OrchestratorService:
                         ready = await resolver.resolve_ready_nodes(dag_id)
                         if ready:
                             dispatcher = JobDispatcher(session2, self._redis)
+                            config_result = await session2.execute(
+                                text("SELECT config FROM scans WHERE id = :id"),
+                                {"id": str(scan_id)},
+                            )
+                            scan_config = config_result.scalar_one_or_none()
                             await dispatcher.dispatch_nodes(
                                 ready, scan_id=scan_id, tenant_id=tenant_id,
                                 target=event.get("target", ""),
                                 priority=event.get("priority", "normal"),
+                                config=scan_config if isinstance(scan_config, dict) else {},
                             )
                         await session2.commit()
 

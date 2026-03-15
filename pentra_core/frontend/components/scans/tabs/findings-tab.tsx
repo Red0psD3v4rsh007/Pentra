@@ -19,11 +19,17 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { type ApiFinding } from "@/lib/scans-store"
+import {
+  formatExecutionProvenance,
+  formatExecutionReason,
+  type ApiFinding,
+  type ApiScanAiReasoning,
+} from "@/lib/scans-store"
 import { cn } from "@/lib/utils"
 
 interface FindingsTabProps {
   findings: ApiFinding[]
+  advisory: ApiScanAiReasoning | null
 }
 
 const severityColors: Record<
@@ -63,10 +69,24 @@ const sourceLabels: Record<ApiFinding["source_type"], string> = {
   ai_analysis: "AI Analysis",
 }
 
-export function FindingsTab({ findings }: FindingsTabProps) {
+const verificationStyles: Record<
+  NonNullable<ApiFinding["verification_state"]>,
+  { bg: string; text: string }
+> = {
+  detected: { bg: "bg-muted", text: "text-muted-foreground" },
+  suspected: { bg: "bg-medium/15", text: "text-medium" },
+  verified: { bg: "bg-low/15", text: "text-low" },
+}
+
+export function FindingsTab({ findings, advisory }: FindingsTabProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [severityFilter, setSeverityFilter] = useState<ApiFinding["severity"][]>([])
   const [sourceFilter, setSourceFilter] = useState<ApiFinding["source_type"][]>([])
+  const advisoryByFindingId = new Map(
+    (advisory?.findings ?? []).flatMap((item) =>
+      item.finding_id ? [[item.finding_id, item] as const] : []
+    )
+  )
 
   const filteredFindings = findings.filter((finding) => {
     if (severityFilter.length > 0 && !severityFilter.includes(finding.severity)) {
@@ -105,8 +125,8 @@ export function FindingsTab({ findings }: FindingsTabProps) {
           </EmptyMedia>
           <EmptyTitle>No persisted findings yet</EmptyTitle>
           <EmptyDescription>
-            The findings list is already wired to the live API. In the current local simulation
-            flow, jobs may finish before vulnerability findings are written.
+            Pentra is now showing persisted findings truthfully. If no findings are present, the
+            current scan either has not produced them yet or no persisted findings were generated.
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -188,101 +208,195 @@ export function FindingsTab({ findings }: FindingsTabProps) {
               <th className="w-10 px-4 py-3">#</th>
               <th className="px-4 py-3">Title</th>
               <th className="w-24 px-4 py-3">Severity</th>
+              <th className="w-28 px-4 py-3">State</th>
               <th className="w-20 px-4 py-3">CVSS</th>
               <th className="w-24 px-4 py-3">Confidence</th>
               <th className="w-32 px-4 py-3">Source</th>
+              <th className="w-32 px-4 py-3">Execution</th>
               <th className="w-28 px-4 py-3">Tool</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {filteredFindings.map((finding, index) => (
-              <Fragment key={finding.id}>
-                <tr
-                  onClick={() =>
-                    setExpandedId((current) => (current === finding.id ? null : finding.id))
-                  }
-                  className={cn(
-                    "cursor-pointer text-sm transition-colors",
-                    expandedId === finding.id ? "bg-elevated/50" : "hover:bg-elevated/50"
-                  )}
-                >
-                  <td className="px-4 py-3 font-mono text-muted-foreground">{index + 1}</td>
-                  <td className="px-4 py-3 font-medium text-foreground">{finding.title}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={cn(
-                        "rounded-md px-2 py-1 text-xs font-medium capitalize",
-                        severityColors[finding.severity].bg,
-                        severityColors[finding.severity].text
-                      )}
-                    >
-                      {finding.severity}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-sm text-foreground">
-                    {finding.cvss_score ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{finding.confidence}%</td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {sourceLabels[finding.source_type]}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                    {finding.tool_source}
-                  </td>
-                </tr>
+            {filteredFindings.map((finding, index) => {
+              const aiExplanation =
+                advisoryByFindingId.get(finding.id) ??
+                (advisory?.findings ?? []).find(
+                  (item) => item.title.toLowerCase() === finding.title.toLowerCase()
+                )
 
-                {expandedId === finding.id ? (
-                  <tr className="bg-background/80">
-                    <td colSpan={7} className="px-4 py-4">
-                      <div
+              return (
+                <Fragment key={finding.id}>
+                  <tr
+                    onClick={() =>
+                      setExpandedId((current) => (current === finding.id ? null : finding.id))
+                    }
+                    className={cn(
+                      "cursor-pointer text-sm transition-colors",
+                      expandedId === finding.id ? "bg-elevated/50" : "hover:bg-elevated/50"
+                    )}
+                  >
+                    <td className="px-4 py-3 font-mono text-muted-foreground">{index + 1}</td>
+                    <td className="px-4 py-3 font-medium text-foreground">{finding.title}</td>
+                    <td className="px-4 py-3">
+                      <span
                         className={cn(
-                          "rounded-lg border-l-4 p-4",
-                          severityColors[finding.severity].border
+                          "rounded-md px-2 py-1 text-xs font-medium capitalize",
+                          severityColors[finding.severity].bg,
+                          severityColors[finding.severity].text
                         )}
                       >
-                        <div className="grid gap-4 lg:grid-cols-2">
-                          <div className="space-y-3">
-                            <DetailBlock label="Description">
-                              {finding.description ?? "No description captured."}
-                            </DetailBlock>
-                            <DetailBlock label="Remediation">
-                              {finding.remediation ?? "No remediation guidance captured yet."}
-                            </DetailBlock>
-                          </div>
-
-                          <div className="space-y-3">
-                            <DetailBlock label="Metadata">
-                              <div className="space-y-1">
-                                <p>CVE: {finding.cve_id ?? "Not assigned"}</p>
-                                <p>
-                                  False positive: {finding.is_false_positive ? "Yes" : "No"}
-                                </p>
-                                <p>
-                                  FP probability:{" "}
-                                  {finding.fp_probability !== null
-                                    ? `${finding.fp_probability}%`
-                                    : "Not scored"}
-                                </p>
-                              </div>
-                            </DetailBlock>
-
-                            <DetailBlock label="Evidence">
-                              {finding.evidence ? (
-                                <pre className="max-h-48 overflow-auto rounded-md bg-background p-3 text-xs text-muted-foreground">
-                                  {JSON.stringify(finding.evidence, null, 2)}
-                                </pre>
-                              ) : (
-                                "No structured evidence stored."
-                              )}
-                            </DetailBlock>
-                          </div>
-                        </div>
-                      </div>
+                        {finding.severity}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {finding.verification_state ? (
+                        <span
+                          className={cn(
+                            "rounded-md px-2 py-1 text-xs font-medium capitalize",
+                            verificationStyles[finding.verification_state].bg,
+                            verificationStyles[finding.verification_state].text
+                          )}
+                        >
+                          {finding.verification_state}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">unknown</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-sm text-foreground">
+                      {finding.cvss_score ?? "-"}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{finding.confidence}%</td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {sourceLabels[finding.source_type]}
+                    </td>
+                    <td className="px-4 py-3">
+                      {finding.execution_provenance ? (
+                        <span
+                          title={formatExecutionReason(finding.execution_reason)}
+                          className={cn(
+                            "rounded-md px-2 py-1 text-xs font-medium",
+                            finding.execution_provenance === "live" && "bg-low/10 text-low",
+                            finding.execution_provenance === "simulated" && "bg-amber-100 text-amber-800",
+                            finding.execution_provenance === "blocked" && "bg-critical/10 text-critical",
+                            finding.execution_provenance === "inferred" && "bg-primary/10 text-primary"
+                          )}
+                        >
+                          {formatExecutionProvenance(finding.execution_provenance)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">unknown</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                      {finding.tool_source}
                     </td>
                   </tr>
-                ) : null}
-              </Fragment>
-            ))}
+
+                  {expandedId === finding.id ? (
+                    <tr className="bg-background/80">
+                      <td colSpan={9} className="px-4 py-4">
+                        <div
+                          className={cn(
+                            "rounded-lg border-l-4 p-4",
+                            severityColors[finding.severity].border
+                          )}
+                        >
+                          <div className="grid gap-4 lg:grid-cols-2">
+                            <div className="space-y-3">
+                              <DetailBlock label="Description">
+                                {finding.description ?? "No description captured."}
+                              </DetailBlock>
+                              <DetailBlock label="Remediation">
+                                {finding.remediation ?? "No remediation guidance captured yet."}
+                              </DetailBlock>
+                              {aiExplanation ? (
+                                <DetailBlock label="AI Advisory">
+                                  <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                                    <p>{aiExplanation.why_it_matters}</p>
+                                    <p className="text-muted-foreground">
+                                      {aiExplanation.business_impact}
+                                    </p>
+                                    <div className="flex flex-wrap gap-2 text-xs">
+                                      <span className="rounded-full bg-primary/10 px-2 py-1 text-primary">
+                                        triage {aiExplanation.triage_priority}
+                                      </span>
+                                      <span className="rounded-full bg-muted px-2 py-1 text-muted-foreground">
+                                        confidence {aiExplanation.confidence}%
+                                      </span>
+                                    </div>
+                                    <p className="text-muted-foreground">
+                                      {aiExplanation.exploitability_assessment}
+                                    </p>
+                                    {aiExplanation.next_steps.length ? (
+                                      <ul className="space-y-1 text-sm text-foreground">
+                                        {aiExplanation.next_steps.map((step) => (
+                                          <li key={step}>- {step}</li>
+                                        ))}
+                                      </ul>
+                                    ) : null}
+                                  </div>
+                                </DetailBlock>
+                              ) : null}
+                            </div>
+
+                            <div className="space-y-3">
+                              <DetailBlock label="Metadata">
+                                <div className="space-y-1">
+                                  <p>CVE: {finding.cve_id ?? "Not assigned"}</p>
+                                  <p>
+                                    False positive: {finding.is_false_positive ? "Yes" : "No"}
+                                  </p>
+                                  <p>
+                                    FP probability:{" "}
+                                    {finding.fp_probability !== null
+                                      ? `${finding.fp_probability}%`
+                                      : "Not scored"}
+                                  </p>
+                                  <p>
+                                    Verification state:{" "}
+                                    {finding.verification_state ?? "Unknown"}
+                                  </p>
+                                  <p>
+                                    Execution provenance:{" "}
+                                    {formatExecutionProvenance(finding.execution_provenance)}
+                                  </p>
+                                  <p>
+                                    Execution reason: {formatExecutionReason(finding.execution_reason)}
+                                  </p>
+                                  <p>
+                                    Verification confidence:{" "}
+                                    {finding.verification_confidence !== null
+                                      ? `${finding.verification_confidence}%`
+                                      : "Not scored"}
+                                  </p>
+                                  <p>
+                                    Verified at:{" "}
+                                    {finding.verified_at
+                                      ? new Date(finding.verified_at).toLocaleString()
+                                      : "Not verified"}
+                                  </p>
+                                </div>
+                              </DetailBlock>
+
+                              <DetailBlock label="Evidence">
+                                {finding.evidence ? (
+                                  <pre className="max-h-48 overflow-auto rounded-md bg-background p-3 text-xs text-muted-foreground">
+                                    {JSON.stringify(finding.evidence, null, 2)}
+                                  </pre>
+                                ) : (
+                                  "No structured evidence stored."
+                                )}
+                              </DetailBlock>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
+              )
+            })}
           </tbody>
         </table>
       )}

@@ -2,9 +2,14 @@ name: nuclei
 worker_family: vuln
 image: projectdiscovery/nuclei:latest
 command:
-  - nuclei
-  - -u
-  - "{target}"
+  - -l
+  - "{nuclei_targets_file}"
+  - -t
+  - "{nuclei_templates_dir}"
+  - -rl
+  - "{nuclei_rate_limit}"
+  - -disable-update-check
+  - -silent
   - -jsonl
   - -o
   - "{output_dir}/nuclei.json"

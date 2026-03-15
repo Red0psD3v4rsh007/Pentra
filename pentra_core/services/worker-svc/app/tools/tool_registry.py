@@ -17,10 +17,16 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 logger = logging.getLogger(__name__)
+
+
+class _FormatContext(dict):
+    def __missing__(self, key: str) -> str:
+        return ""
 
 # ── Data model ───────────────────────────────────────────────────────
 
@@ -97,15 +103,27 @@ def render_command(
     output_dir: str,
     input_dir: str = "",
     config_file: str = "",
+    context: dict[str, Any] | None = None,
 ) -> list[str]:
     """Render a tool's command template with runtime values."""
-    return [
-        part.format(
-            target=target,
-            output_dir=output_dir,
-            input_dir=input_dir,
-            config_file=config_file,
+    values = _FormatContext(
+        {
+        "target": target,
+        "output_dir": output_dir,
+        "input_dir": input_dir,
+        "config_file": config_file,
+        }
+    )
+    if context:
+        values.update(
+            {
+                key: value if isinstance(value, str) else str(value)
+                for key, value in context.items()
+            }
         )
+
+    return [
+        part.format_map(values)
         for part in tool.command
     ]
 

@@ -142,6 +142,30 @@ class WorkflowMutator:
 
     def _mutation_to_hypothesis(self, mutation: WorkflowMutation, wf: WorkflowGraph) -> Hypothesis:
         """Convert a workflow mutation into a hypothesis."""
+        target_node = self._graph.nodes.get(mutation.target_endpoint_id)
+        target_url = ""
+        if target_node is not None:
+            target_url = str(
+                target_node.properties.get("url")
+                or target_node.properties.get("endpoint")
+                or target_node.properties.get("target")
+                or target_node.label
+            )
+
+        sequence_urls: list[str] = []
+        for transition in wf.transitions:
+            node = self._graph.nodes.get(transition.endpoint_id)
+            if node is None:
+                continue
+            url = str(
+                node.properties.get("url")
+                or node.properties.get("endpoint")
+                or node.properties.get("target")
+                or node.label
+            ).strip()
+            if url and url not in sequence_urls:
+                sequence_urls.append(url)
+
         return Hypothesis(
             hypothesis_id=f"workflow:{mutation.mutation_id}",
             hypothesis_type=f"workflow_{mutation.mutation_type}",
@@ -156,6 +180,10 @@ class WorkflowMutator:
                 "original_steps": len(mutation.original_sequence),
                 "mutated_steps": len(mutation.mutated_sequence),
                 "mutation_id": mutation.mutation_id,
+                "target_url": target_url,
+                "sequence_urls": sequence_urls,
+                "artifact_type_override": "vulnerabilities",
+                "vulnerability_class": "workflow_mutation",
                 "no_persist": True,
             },
             required_artifacts=["endpoint"],

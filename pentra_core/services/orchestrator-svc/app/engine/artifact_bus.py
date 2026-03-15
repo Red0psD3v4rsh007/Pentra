@@ -1,7 +1,7 @@
 """Artifact bus — event-driven artifact propagation and exploit triggering.
 
 MOD-06: Called after a node completes.  Inspects the completed artifact:
-  - If artifact_type is 'vulnerabilities': triggers ExploitPlanner
+  - If artifact_type is 'vulnerabilities' or high-signal 'endpoints': triggers ExploitPlanner
   - If artifact_type is exploit output: triggers ImpactVerifier
 
 MOD-07: Every artifact completion triggers incremental attack graph update.
@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import text
@@ -39,13 +40,13 @@ from pentra_common.storage.artifacts import read_json_artifact
 logger = logging.getLogger(__name__)
 
 # Artifact types that trigger exploit planning
-_EXPLOIT_TRIGGER_TYPES = {"vulnerabilities"}
+_EXPLOIT_TRIGGER_TYPES = {"vulnerabilities", "endpoints"}
 
 # Artifact types that trigger impact verification
 _IMPACT_TRIGGER_TYPES = {"database_access", "shell_access", "credential_leak", "privilege_escalation"}
 
 # Tools that produce exploit results
-_EXPLOIT_TOOLS = {"sqlmap", "metasploit", "custom_poc"}
+_EXPLOIT_TOOLS = {"sqlmap_verify", "metasploit", "msf_verify", "custom_poc"}
 
 
 def _autonomy_disabled() -> bool:
@@ -102,6 +103,7 @@ class ArtifactBus:
         artifact_items = artifact.get("items", [])
         artifact_findings = artifact.get("findings", [])
         artifact_evidence = artifact.get("evidence", [])
+        scan_config = await self._load_scan_config(scan_id)
 
         if artifact_findings:
             persisted = await self._persist_findings(
@@ -127,6 +129,7 @@ class ArtifactBus:
                     source_node_id=node_id,
                     source_output_ref=output_ref,
                     vulnerability_items=vuln_items,
+                    scan_config=scan_config,
                 )
                 result["dynamic_nodes_created"] = len(created)
 
@@ -137,7 +140,7 @@ class ArtifactBus:
                     )
 
         # 2 — Exploit tool output triggers impact verification
-        if tool in _EXPLOIT_TOOLS:
+        if tool in _EXPLOIT_TOOLS and artifact_type not in (_IMPACT_TRIGGER_TYPES | {"verified_impact"}):
             impact_items = artifact_items
 
             # Get the node config for vuln_type/impact_type
@@ -240,6 +243,24 @@ class ArtifactBus:
 
         return result
 
+    async def _load_scan_config(self, scan_id: uuid.UUID) -> dict[str, Any]:
+        result = await self._session.execute(
+            text(
+                """
+                SELECT config
+                FROM scans
+                WHERE id = :scan_id
+                """
+            ),
+            {"scan_id": str(scan_id)},
+        )
+        row = result.scalar_one_or_none()
+        if isinstance(row, dict):
+            return row
+        if isinstance(row, str) and row.strip():
+            return json.loads(row)
+        return {}
+
     async def _load_artifact(
         self, output_ref: str, output_summary: dict | None,
     ) -> dict[str, Any]:
@@ -300,6 +321,23 @@ class ArtifactBus:
                 {"scan_id": str(scan_id), "job_id": str(job_id)},
             )
 
+        existing_result = await self._session.execute(
+            text(
+                """
+                SELECT id, fingerprint, source_type, severity, confidence, title,
+                       cve_id, cvss_score, description, remediation, tool_source, evidence
+                FROM findings
+                WHERE scan_id = :scan_id
+                """
+            ),
+            {"scan_id": str(scan_id)},
+        )
+        existing_by_fingerprint = {
+            str(row["fingerprint"]): dict(row)
+            for row in existing_result.mappings().all()
+            if row.get("fingerprint")
+        }
+
         evidence_index: dict[str, list[dict[str, Any]]] = {}
         for evidence_item in evidence:
             fingerprint = str(evidence_item.get("finding_fingerprint", ""))
@@ -332,6 +370,70 @@ class ArtifactBus:
                 ],
             }
 
+            source_type = str(finding.get("source_type", "scanner"))
+            severity = str(finding.get("severity", "info"))
+            confidence = int(finding.get("confidence", 60) or 60)
+            tool_source = str(finding.get("tool_source", "unknown"))
+            if source_type == "exploit_verify":
+                metadata = evidence_payload.get("metadata") or {}
+                if not isinstance(metadata, dict):
+                    metadata = {}
+                metadata.setdefault("verified_at", datetime.now(timezone.utc).isoformat())
+                evidence_payload["metadata"] = metadata
+
+            existing = existing_by_fingerprint.get(fingerprint)
+            if existing is not None:
+                merged = _merge_finding_record(
+                    existing=existing,
+                    candidate={
+                        "source_type": source_type,
+                        "severity": severity,
+                        "confidence": confidence,
+                        "title": title,
+                        "cve_id": finding.get("cve_id"),
+                        "cvss_score": finding.get("cvss_score"),
+                        "description": finding.get("description"),
+                        "remediation": finding.get("remediation"),
+                        "tool_source": tool_source,
+                        "evidence": evidence_payload,
+                    },
+                )
+
+                await self._session.execute(
+                    text(
+                        """
+                        UPDATE findings
+                        SET source_type = :source_type,
+                            severity = :severity,
+                            confidence = :confidence,
+                            title = :title,
+                            cve_id = :cve_id,
+                            cvss_score = :cvss_score,
+                            description = :description,
+                            evidence = CAST(:evidence AS jsonb),
+                            remediation = :remediation,
+                            tool_source = :tool_source
+                        WHERE id = :id
+                        """
+                    ),
+                    {
+                        "id": str(existing["id"]),
+                        "source_type": merged["source_type"],
+                        "severity": merged["severity"],
+                        "confidence": merged["confidence"],
+                        "title": merged["title"],
+                        "cve_id": merged["cve_id"],
+                        "cvss_score": merged["cvss_score"],
+                        "description": merged["description"],
+                        "evidence": json.dumps(merged["evidence"]),
+                        "remediation": merged["remediation"],
+                        "tool_source": merged["tool_source"],
+                    },
+                )
+                existing_by_fingerprint[fingerprint] = {**existing, **merged}
+                inserted += 1
+                continue
+
             await self._session.execute(
                 text(
                     """
@@ -353,20 +455,33 @@ class ArtifactBus:
                     "tenant_id": str(tenant_id),
                     "scan_id": str(scan_id),
                     "scan_job_id": str(job_id) if job_id is not None else None,
-                    "source_type": str(finding.get("source_type", "scanner")),
+                    "source_type": source_type,
                     "title": title,
-                    "severity": str(finding.get("severity", "info")),
-                    "confidence": int(finding.get("confidence", 60) or 60),
+                    "severity": severity,
+                    "confidence": confidence,
                     "cve_id": finding.get("cve_id"),
                     "cvss_score": finding.get("cvss_score"),
                     "description": finding.get("description"),
                     "evidence": json.dumps(evidence_payload),
                     "remediation": finding.get("remediation"),
-                    "tool_source": str(finding.get("tool_source", "unknown")),
+                    "tool_source": tool_source,
                     "fp_probability": finding.get("fp_probability"),
                     "fingerprint": fingerprint,
                 },
             )
+            existing_by_fingerprint[fingerprint] = {
+                "fingerprint": fingerprint,
+                "source_type": source_type,
+                "severity": severity,
+                "confidence": confidence,
+                "title": title,
+                "cve_id": finding.get("cve_id"),
+                "cvss_score": finding.get("cvss_score"),
+                "description": finding.get("description"),
+                "remediation": finding.get("remediation"),
+                "tool_source": tool_source,
+                "evidence": evidence_payload,
+            }
             inserted += 1
 
         return inserted
@@ -376,23 +491,33 @@ class ArtifactBus:
         findings_result = await self._session.execute(
             text(
                 """
-                SELECT severity, COUNT(*) AS total
+                SELECT severity, evidence, COUNT(*) AS total
                 FROM findings
                 WHERE scan_id = :scan_id
-                GROUP BY severity
+                GROUP BY severity, evidence
                 """
             ),
             {"scan_id": str(scan_id)},
         )
 
         severity_counts = {key: 0 for key in ("critical", "high", "medium", "low", "info")}
+        verification_counts = {"verified": 0, "suspected": 0, "detected": 0}
         for row in findings_result.mappings().all():
-            severity_counts[str(row["severity"])] = int(row["total"])
+            severity = str(row["severity"])
+            severity_counts[severity] = severity_counts.get(severity, 0) + int(row["total"])
+            evidence = row.get("evidence") or {}
+            if isinstance(evidence, dict):
+                classification = evidence.get("classification") or {}
+                if isinstance(classification, dict):
+                    state = str(classification.get("verification_state") or "detected")
+                    if state in verification_counts:
+                        verification_counts[state] += int(row["total"])
 
         artifact_result = await self._session.execute(
             text(
                 """
                 SELECT artifact_type,
+                       metadata,
                        COALESCE((metadata->>'item_count')::int, 0) AS item_count,
                        COALESCE((metadata->>'finding_count')::int, 0) AS finding_count,
                        COALESCE((metadata->>'evidence_count')::int, 0) AS evidence_count
@@ -405,6 +530,19 @@ class ArtifactBus:
         artifact_rows = artifact_result.mappings().all()
         artifact_types = [str(row["artifact_type"]) for row in artifact_rows]
         evidence_count = sum(int(row["evidence_count"]) for row in artifact_rows)
+        execution_summary = {"live": 0, "simulated": 0, "blocked": 0, "inferred": 0}
+        for row in artifact_rows:
+            artifact_type = str(row["artifact_type"])
+            if artifact_type in {"attack_graph", "report", "ai_reasoning"}:
+                execution_summary["inferred"] += 1
+                continue
+
+            metadata = row.get("metadata") or {}
+            if not isinstance(metadata, dict):
+                metadata = {}
+            provenance = str(metadata.get("execution_provenance") or "").strip().lower()
+            if provenance in execution_summary:
+                execution_summary[provenance] += 1
 
         attack_graph_result = await self._session.execute(
             text(
@@ -420,11 +558,13 @@ class ArtifactBus:
 
         summary = {
             "severity_counts": severity_counts,
+            "verification_counts": verification_counts,
             "total_findings": sum(severity_counts.values()),
             "artifact_count": len(artifact_rows),
             "artifact_types": sorted(set(artifact_types)),
             "evidence_count": evidence_count,
             "attack_graph_ready": attack_graph_ready,
+            "execution_summary": execution_summary,
         }
 
         await self._session.execute(
@@ -437,3 +577,133 @@ class ArtifactBus:
             ),
             {"scan_id": str(scan_id), "summary": json.dumps(summary)},
         )
+
+
+def _merge_finding_record(
+    *,
+    existing: dict[str, Any],
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
+    existing_evidence = existing.get("evidence") or {}
+    candidate_evidence = candidate.get("evidence") or {}
+    if not isinstance(existing_evidence, dict):
+        existing_evidence = {}
+    if not isinstance(candidate_evidence, dict):
+        candidate_evidence = {}
+
+    merged_evidence = _merge_evidence_payload(
+        existing_evidence,
+        candidate_evidence,
+        existing_tool_source=existing.get("tool_source"),
+        candidate_tool_source=candidate.get("tool_source"),
+    )
+    use_candidate = _source_rank(str(candidate.get("source_type", "scanner"))) >= _source_rank(
+        str(existing.get("source_type", "scanner"))
+    )
+
+    merged = {
+        "source_type": candidate["source_type"] if use_candidate else existing.get("source_type"),
+        "severity": _better_severity(existing.get("severity"), candidate.get("severity")),
+        "confidence": max(int(existing.get("confidence", 0) or 0), int(candidate.get("confidence", 0) or 0)),
+        "title": candidate.get("title") if use_candidate else existing.get("title"),
+        "cve_id": candidate.get("cve_id") or existing.get("cve_id"),
+        "cvss_score": candidate.get("cvss_score") or existing.get("cvss_score"),
+        "description": _prefer_text(existing.get("description"), candidate.get("description")),
+        "remediation": _prefer_text(existing.get("remediation"), candidate.get("remediation")),
+        "tool_source": candidate.get("tool_source") if use_candidate else existing.get("tool_source"),
+        "evidence": merged_evidence,
+    }
+    return merged
+
+
+def _merge_evidence_payload(
+    existing: dict[str, Any],
+    candidate: dict[str, Any],
+    *,
+    existing_tool_source: str | None = None,
+    candidate_tool_source: str | None = None,
+) -> dict[str, Any]:
+    merged = dict(existing)
+
+    for key in ("target", "endpoint", "request", "response", "payload", "exploit_result", "storage_ref", "account"):
+        current = merged.get(key)
+        candidate_value = candidate.get(key)
+        if not current and candidate_value:
+            merged[key] = candidate_value
+
+    existing_references = existing.get("references") or []
+    candidate_references = candidate.get("references") or []
+    if not isinstance(existing_references, list):
+        existing_references = []
+    if not isinstance(candidate_references, list):
+        candidate_references = []
+
+    seen: set[str] = set()
+    merged_refs: list[dict[str, Any]] = []
+    for reference in existing_references + candidate_references:
+        if not isinstance(reference, dict):
+            continue
+        signature = json.dumps(
+            {
+                "id": reference.get("id"),
+                "type": reference.get("evidence_type"),
+                "preview": reference.get("content_preview"),
+                "ref": reference.get("storage_ref"),
+            },
+            sort_keys=True,
+        )
+        if signature in seen:
+            continue
+        seen.add(signature)
+        merged_refs.append(reference)
+    merged["references"] = merged_refs
+
+    existing_classification = existing.get("classification") or {}
+    candidate_classification = candidate.get("classification") or {}
+    if not isinstance(existing_classification, dict):
+        existing_classification = {}
+    if not isinstance(candidate_classification, dict):
+        candidate_classification = {}
+    merged["classification"] = {
+        **existing_classification,
+        **{key: value for key, value in candidate_classification.items() if value not in (None, "", [], {})},
+    }
+
+    metadata = existing.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    tool_sources = set(metadata.get("tool_sources", []))
+    tool_sources.update(
+        source
+        for source in (existing_tool_source, candidate_tool_source)
+        if source
+    )
+    metadata["tool_sources"] = sorted(tool_sources)
+    merged["metadata"] = metadata
+    return merged
+
+
+def _source_rank(source_type: str) -> int:
+    return {"scanner": 1, "ai_analysis": 2, "exploit_verify": 3}.get(source_type, 0)
+
+
+def _better_severity(existing: str | None, candidate: str | None) -> str:
+    return candidate if _severity_rank(candidate) > _severity_rank(existing) else str(existing or candidate or "info")
+
+
+def _severity_rank(severity: str | None) -> int:
+    return {
+        "critical": 5,
+        "high": 4,
+        "medium": 3,
+        "low": 2,
+        "info": 1,
+    }.get(str(severity or "info"), 0)
+
+
+def _prefer_text(existing: Any, candidate: Any) -> Any:
+    if not existing:
+        return candidate
+    if candidate and len(str(candidate)) > len(str(existing)):
+        return candidate
+    return existing

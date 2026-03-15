@@ -1,114 +1,23 @@
 "use client"
 
-import { useState } from "react"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { TopBar } from "@/components/dashboard/top-bar"
-import { 
-  FileText,
+import Link from "next/link"
+import { useEffect, useMemo, useState } from "react"
+import {
+  CheckCircle,
+  Download,
   FileJson,
   FileSpreadsheet,
-  File,
-  Plus,
-  Download,
+  FileText,
   Search,
-  Calendar,
-  ChevronRight,
-  Clock,
+  Shield,
   Target,
-  CheckCircle
 } from "lucide-react"
+
+import { DashboardSidebar } from "@/components/dashboard/sidebar"
+import { TopBar } from "@/components/dashboard/top-bar"
+import { Spinner } from "@/components/ui/spinner"
+import { downloadScanReportExport, listScans, type ReportExportFormat, type Scan } from "@/lib/scans-store"
 import { cn } from "@/lib/utils"
-
-// Mock data for reports
-const REPORTS = [
-  {
-    id: "RPT-001",
-    name: "Q4 2024 Security Assessment",
-    format: "pdf",
-    scope: "Full Infrastructure",
-    target: "acmecorp.com",
-    generatedAt: "2024-12-15T14:30:00Z",
-    size: "2.4 MB",
-    status: "completed",
-    findings: { critical: 3, high: 12, medium: 24, low: 18 },
-  },
-  {
-    id: "RPT-002",
-    name: "API Security Audit Export",
-    format: "json",
-    scope: "API Endpoints",
-    target: "api.acmecorp.com",
-    generatedAt: "2024-12-14T09:15:00Z",
-    size: "856 KB",
-    status: "completed",
-    findings: { critical: 1, high: 5, medium: 8, low: 4 },
-  },
-  {
-    id: "RPT-003",
-    name: "Vulnerability Data Export",
-    format: "csv",
-    scope: "All Findings",
-    target: "*.acmecorp.com",
-    generatedAt: "2024-12-13T16:45:00Z",
-    size: "1.1 MB",
-    status: "completed",
-    findings: { critical: 4, high: 17, medium: 32, low: 22 },
-  },
-  {
-    id: "RPT-004",
-    name: "Executive Summary Report",
-    format: "pdf",
-    scope: "High-Level Overview",
-    target: "acmecorp.com",
-    generatedAt: "2024-12-12T11:00:00Z",
-    size: "945 KB",
-    status: "completed",
-    findings: { critical: 3, high: 12, medium: 24, low: 18 },
-  },
-  {
-    id: "RPT-005",
-    name: "Compliance Export (SOC2)",
-    format: "pdf",
-    scope: "Compliance Mapping",
-    target: "acmecorp.com",
-    generatedAt: "2024-12-10T08:30:00Z",
-    size: "3.2 MB",
-    status: "completed",
-    findings: { critical: 2, high: 8, medium: 15, low: 10 },
-  },
-  {
-    id: "RPT-006",
-    name: "Weekly Scan Summary",
-    format: "json",
-    scope: "Weekly Delta",
-    target: "*.acmecorp.com",
-    generatedAt: "2024-12-09T12:00:00Z",
-    size: "234 KB",
-    status: "completed",
-    findings: { critical: 0, high: 2, medium: 6, low: 3 },
-  },
-]
-
-const formatConfig = {
-  pdf: {
-    icon: FileText,
-    label: "PDF",
-    bgClass: "bg-critical/10",
-    textClass: "text-critical",
-  },
-  json: {
-    icon: FileJson,
-    label: "JSON",
-    bgClass: "bg-primary/10",
-    textClass: "text-primary",
-  },
-  csv: {
-    icon: FileSpreadsheet,
-    label: "CSV",
-    bgClass: "bg-low/10",
-    textClass: "text-low",
-  },
-}
 
 function formatDate(dateString: string) {
   const date = new Date(dateString)
@@ -127,17 +36,70 @@ function formatTime(dateString: string) {
   })
 }
 
-export default function ReportsPage() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [formatFilter, setFormatFilter] = useState<string>("all")
+const exportFormats: Array<{ id: "all" | ReportExportFormat; label: string; icon?: typeof FileText }> = [
+  { id: "all", label: "All" },
+  { id: "markdown", label: "MD", icon: FileText },
+  { id: "json", label: "JSON", icon: FileJson },
+  { id: "csv", label: "CSV", icon: FileSpreadsheet },
+]
 
-  const filteredReports = REPORTS.filter((report) => {
-    const matchesSearch =
-      report.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      report.target.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesFormat = formatFilter === "all" || report.format === formatFilter
-    return matchesSearch && matchesFormat
-  })
+export default function ReportsPage() {
+  const [reports, setReports] = useState<Scan[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
+  const [formatFilter, setFormatFilter] = useState<"all" | ReportExportFormat>("all")
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function load() {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const response = await listScans({ status: "completed", pageSize: 100 })
+        if (!cancelled) {
+          setReports(response.items)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load reports.")
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const filteredReports = useMemo(() => {
+    return reports.filter((report) => {
+      const matchesSearch =
+        report.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        report.target.toLowerCase().includes(searchQuery.toLowerCase())
+      return matchesSearch
+    })
+  }, [reports, searchQuery])
+
+  async function handleDownload(scanId: string, format: ReportExportFormat) {
+    setDownloading(`${scanId}:${format}`)
+    try {
+      await downloadScanReportExport(scanId, format)
+    } finally {
+      setDownloading(null)
+    }
+  }
+
+  const uniqueTargets = new Set(reports.map((report) => report.target)).size
+  const criticalReports = reports.filter((report) => report.findings.critical > 0).length
 
   return (
     <div className="min-h-screen bg-background">
@@ -147,27 +109,21 @@ export default function ReportsPage() {
         <TopBar title="Reports" />
 
         <main className="p-6">
-          {/* Header */}
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6 flex items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-semibold text-foreground">Reports & Exports</h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Generate and download security assessment reports
+                Real scan reports, exports, and engineering-ready offensive summaries.
               </p>
             </div>
-            <button className="flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/20">
-              <Plus className="h-4 w-4" />
-              Generate Report
-            </button>
           </div>
 
-          {/* Stats Row */}
           <div className="mb-6 grid grid-cols-4 gap-4">
             {[
-              { icon: FileText, label: "Total Reports", value: REPORTS.length, color: "text-foreground" },
-              { icon: Calendar, label: "This Month", value: REPORTS.filter(r => new Date(r.generatedAt).getMonth() === 11).length, color: "text-primary" },
-              { icon: CheckCircle, label: "Completed", value: REPORTS.filter(r => r.status === "completed").length, color: "text-low" },
-              { icon: Target, label: "Unique Targets", value: [...new Set(REPORTS.map(r => r.target))].length, color: "text-high" },
+              { icon: FileText, label: "Completed Reports", value: reports.length, color: "text-foreground" },
+              { icon: Shield, label: "Critical Present", value: criticalReports, color: "text-critical" },
+              { icon: CheckCircle, label: "Buyer Ready", value: reports.length, color: "text-low" },
+              { icon: Target, label: "Unique Targets", value: uniqueTargets, color: "text-high" },
             ].map((stat) => (
               <div key={stat.label} className="rounded-lg border border-border bg-card p-4">
                 <div className="flex items-center gap-3">
@@ -185,165 +141,149 @@ export default function ReportsPage() {
             ))}
           </div>
 
-          {/* Filter/Action Bar */}
           <div className="mb-6 flex items-center gap-3">
-            <div className="relative flex-1 max-w-md">
+            <div className="relative max-w-md flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
                 placeholder="Search reports..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-10 w-full rounded-md border border-border bg-card pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                className="h-10 w-full rounded-md border border-border bg-card pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
-            
+
             <div className="flex items-center gap-2">
-              {["all", "pdf", "json", "csv"].map((format) => (
+              {exportFormats.map((format) => (
                 <button
-                  key={format}
-                  onClick={() => setFormatFilter(format)}
+                  key={format.id}
+                  onClick={() => setFormatFilter(format.id)}
                   className={cn(
                     "rounded-md px-3 py-2 text-sm font-medium transition-all",
-                    formatFilter === format
+                    formatFilter === format.id
                       ? "bg-primary text-primary-foreground"
                       : "border border-border text-muted-foreground hover:bg-elevated hover:text-foreground"
                   )}
                 >
-                  {format === "all" ? "All" : format.toUpperCase()}
+                  {format.label}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Reports Table */}
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-elevated/50">
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Report
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Format
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Scope / Target
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Findings
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Generated
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Size
-                  </th>
-                  <th className="w-10 px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredReports.map((report) => {
-                  const format = formatConfig[report.format as keyof typeof formatConfig]
-                  const FormatIcon = format.icon
-                  const totalFindings = 
-                    report.findings.critical + 
-                    report.findings.high + 
-                    report.findings.medium + 
-                    report.findings.low
+          <div className="overflow-hidden rounded-lg border border-border bg-card">
+            {isLoading ? (
+              <div className="flex items-center justify-center gap-3 p-10 text-sm text-muted-foreground">
+                <Spinner className="h-5 w-5" />
+                Loading real reports from completed scans...
+              </div>
+            ) : error ? (
+              <div className="p-6 text-sm text-critical">{error}</div>
+            ) : filteredReports.length === 0 ? (
+              <div className="p-10 text-center text-sm text-muted-foreground">
+                No completed scan reports match your current search.
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border bg-elevated/50">
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Report
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Target
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Findings
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Generated
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Export
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Open
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filteredReports.map((report) => {
+                    const generatedAt = report.completedAt || report.updatedAt
+                    const preferredFormats: ReportExportFormat[] =
+                      formatFilter === "all" ? ["markdown", "json", "csv"] : [formatFilter]
 
-                  return (
-                    <tr
-                      key={report.id}
-                      className="group transition-colors hover:bg-elevated/50"
-                    >
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className={cn(
-                            "flex h-10 w-10 items-center justify-center rounded-lg",
-                            format.bgClass
-                          )}>
-                            <FormatIcon className={cn("h-5 w-5", format.textClass)} />
-                          </div>
+                    return (
+                      <tr key={report.id} className="group transition-colors hover:bg-elevated/50">
+                        <td className="px-4 py-4">
                           <div>
-                            <span className="font-medium text-foreground group-hover:text-primary transition-colors">
-                              {report.name}
-                            </span>
-                            <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                              {report.id}
-                            </p>
+                            <p className="text-sm font-medium text-foreground">{report.name}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{report.id}</p>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className={cn(
-                          "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium",
-                          format.bgClass,
-                          format.textClass
-                        )}>
-                          {format.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div>
-                          <span className="text-sm text-foreground">{report.scope}</span>
-                          <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                            {report.target}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-1.5">
-                          {report.findings.critical > 0 && (
-                            <span className="rounded bg-critical/15 px-1.5 py-0.5 text-xs font-medium text-critical">
-                              {report.findings.critical}
-                            </span>
-                          )}
-                          {report.findings.high > 0 && (
-                            <span className="rounded bg-high/15 px-1.5 py-0.5 text-xs font-medium text-high">
-                              {report.findings.high}
-                            </span>
-                          )}
-                          {report.findings.medium > 0 && (
-                            <span className="rounded bg-medium/15 px-1.5 py-0.5 text-xs font-medium text-medium">
-                              {report.findings.medium}
-                            </span>
-                          )}
-                          {report.findings.low > 0 && (
-                            <span className="rounded bg-low/15 px-1.5 py-0.5 text-xs font-medium text-low">
-                              {report.findings.low}
-                            </span>
-                          )}
-                          <span className="ml-1 text-xs text-muted-foreground">
-                            ({totalFindings})
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Clock className="h-3.5 w-3.5" />
+                        </td>
+                        <td className="px-4 py-4">
                           <div>
-                            <span>{formatDate(report.generatedAt)}</span>
-                            <span className="mx-1 text-border">|</span>
-                            <span>{formatTime(report.generatedAt)}</span>
+                            <p className="text-sm text-foreground">{report.target}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{report.profile}</p>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className="font-mono text-sm text-muted-foreground">
-                          {report.size}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4">
-                        <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all hover:bg-primary/10 hover:text-primary group-hover:opacity-100">
-                          <Download className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex flex-wrap gap-2">
+                            {report.findings.critical > 0 ? (
+                              <span className="rounded-md bg-critical/10 px-2 py-1 text-xs text-critical">
+                                C {report.findings.critical}
+                              </span>
+                            ) : null}
+                            {report.findings.high > 0 ? (
+                              <span className="rounded-md bg-high/10 px-2 py-1 text-xs text-high">
+                                H {report.findings.high}
+                              </span>
+                            ) : null}
+                            {report.findings.medium > 0 ? (
+                              <span className="rounded-md bg-medium/10 px-2 py-1 text-xs text-medium">
+                                M {report.findings.medium}
+                              </span>
+                            ) : null}
+                            {report.findings.low > 0 ? (
+                              <span className="rounded-md bg-low/10 px-2 py-1 text-xs text-low">
+                                L {report.findings.low}
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-sm text-muted-foreground">
+                          <div>{formatDate(generatedAt)}</div>
+                          <div className="mt-1 text-xs">{formatTime(generatedAt)}</div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex flex-wrap gap-2">
+                            {preferredFormats.map((format) => (
+                              <button
+                                key={`${report.id}:${format}`}
+                                onClick={() => void handleDownload(report.id, format)}
+                                disabled={downloading !== null}
+                                className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                {downloading === `${report.id}:${format}` ? "..." : format.toUpperCase()}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <Link
+                            href={`/scans/${report.id}?tab=report`}
+                            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-all hover:bg-primary/90"
+                          >
+                            Open Report
+                          </Link>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
         </main>
       </div>

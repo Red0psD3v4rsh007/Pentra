@@ -18,6 +18,7 @@ Security controls:
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import os
@@ -26,6 +27,11 @@ import shutil
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
+
+from app.engine.web_interaction_runner import WebInteractionRunner
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +41,33 @@ WORK_DIR_BASE = os.getenv("WORKER_WORK_DIR", "/tmp/pentra/jobs")
 MEMORY_LIMIT = os.getenv("CONTAINER_MEMORY_LIMIT", "2g")
 CPU_LIMIT = float(os.getenv("CONTAINER_CPU_LIMIT", "2.0"))
 NETWORK_MODE_DEFAULT = os.getenv("CONTAINER_NETWORK_MODE", "bridge")
-EXECUTION_MODE = os.getenv("WORKER_EXECUTION_MODE", "auto").lower()
+EXECUTION_MODE = os.getenv("WORKER_EXECUTION_MODE", "hybrid").lower()
+LIVE_EXECUTION_TOOLS = frozenset(
+    tool.strip()
+    for tool in os.getenv(
+        "WORKER_LIVE_TOOLS",
+        "scope_check,httpx_probe,ffuf,nuclei,sqlmap,sqlmap_verify,custom_poc,web_interact",
+    ).split(",")
+    if tool.strip()
+)
+LIVE_TARGET_POLICY = os.getenv("WORKER_LIVE_TARGET_POLICY", "local_only").lower()
+MAX_LIVE_TIMEOUT = int(os.getenv("WORKER_LIVE_MAX_TIMEOUT_SECONDS", "900"))
 
 # Exploit family gets no network access
 _FAMILY_NETWORK: dict[str, str] = {
     "exploit": "none",
 }
+_DEFAULT_HTTP_PROBE_PATHS = ["/", "/graphql", "/openapi.json"]
+_DEFAULT_CONTENT_PATHS = [
+    "graphql",
+    "openapi.json",
+    "api/v1/auth/login",
+    "api/v1/users/2",
+    "internal/debug",
+]
+_MODE_DEMO_SIMULATED = "demo_simulated"
+_MODE_CONTROLLED_LIVE_LOCAL = "controlled_live_local"
+_MODE_CONTROLLED_LIVE_SCOPED = "controlled_live_scoped"
 
 
 @dataclass
@@ -52,6 +79,20 @@ class ContainerResult:
     stderr: str
     output_dir: str
     timed_out: bool = False
+    execution_mode: str = _MODE_CONTROLLED_LIVE_LOCAL
+    execution_provenance: str = "live"
+    execution_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class ExecutionDecision:
+    mode: str
+    provenance: str
+    reason: str | None = None
+
+    @property
+    def live(self) -> bool:
+        return self.provenance == "live"
 
 
 class ContainerRunner:
@@ -72,24 +113,25 @@ class ContainerRunner:
 
     def __init__(self) -> None:
         self._docker = None
+        self._web_runner = WebInteractionRunner()
 
-    async def _get_docker(self):
+    async def _get_docker(self, *, execution_mode: str):
         """Lazy-initialize Docker client."""
+        if execution_mode == _MODE_DEMO_SIMULATED:
+            logger.info("Worker execution mode forced to demo simulation")
+            return "simulation"
+
+        if self._docker == "simulation":
+            self._docker = None
+
         if self._docker is None:
-            if EXECUTION_MODE == "simulate":
-                logger.info("Worker execution mode forced to simulation")
-                self._docker = "simulation"
-                return self._docker
             try:
                 import docker
                 self._docker = docker.from_env()
                 logger.info("Docker client initialized")
             except Exception:
-                if EXECUTION_MODE == "docker":
-                    logger.exception("Docker execution mode requested but Docker is unavailable")
-                    raise
-                logger.warning("Docker not available — using simulation mode")
-                self._docker = "simulation"
+                logger.exception("Docker is unavailable for execution mode %s", execution_mode)
+                raise RuntimeError(f"Docker unavailable for execution mode {execution_mode}") from None
         return self._docker
 
     async def run(
@@ -104,6 +146,7 @@ class ContainerRunner:
         timeout: int = 600,
         env_vars: dict[str, str] | None = None,
         input_refs: dict[str, str] | None = None,
+        scan_config: dict[str, object] | None = None,
     ) -> ContainerResult:
         """Execute a tool inside a Docker container.
 
@@ -122,14 +165,75 @@ class ContainerRunner:
             for key, ref in input_refs.items():
                 (input_dir / f"{key}.ref").write_text(ref)
 
-        docker = await self._get_docker()
+        scan_config = scan_config or {}
+        (work_dir / "config.json").write_text(json.dumps(scan_config, indent=2, default=str))
+        self._prepare_runtime_inputs(
+            tool_name=tool_name,
+            target=target,
+            input_dir=input_dir,
+            scan_config=scan_config,
+        )
 
+        decision = self._resolve_execution_decision(
+            tool_name=tool_name,
+            target=target,
+            scan_config=scan_config,
+        )
+        if decision.provenance == "blocked":
+            return self._blocked(
+                tool_name=tool_name,
+                output_dir=str(output_dir),
+                reason=str(decision.reason or "not_supported"),
+                execution_mode=decision.mode,
+                job_id=job_id,
+            )
+
+        if decision.provenance == "simulated":
+            return await self._simulate(
+                tool_name=tool_name,
+                target=target,
+                command=command, output_dir=str(output_dir),
+                timeout=timeout, job_id=job_id,
+                execution_mode=decision.mode,
+                reason=decision.reason,
+            )
+
+        if tool_name == "scope_check":
+            return await self._run_scope_check(
+                target=target,
+                output_dir=str(output_dir),
+                job_id=job_id,
+                scan_config=scan_config,
+                execution_mode=decision.mode,
+            )
+
+        if tool_name == "custom_poc":
+            return await self._run_custom_poc_verifier(
+                target=target,
+                output_dir=str(output_dir),
+                job_id=job_id,
+                scan_config=scan_config,
+                execution_mode=decision.mode,
+            )
+
+        if tool_name == "web_interact":
+            return await self._run_web_interact(
+                target=target,
+                output_dir=str(output_dir),
+                job_id=job_id,
+                scan_config=scan_config,
+                execution_mode=decision.mode,
+            )
+
+        docker = await self._get_docker(execution_mode=decision.mode)
         if docker == "simulation":
             return await self._simulate(
                 tool_name=tool_name,
                 target=target,
                 command=command, output_dir=str(output_dir),
                 timeout=timeout, job_id=job_id,
+                execution_mode=decision.mode,
+                reason="demo_simulated_mode",
             )
 
         return await self._run_docker(
@@ -139,9 +243,11 @@ class ContainerRunner:
             work_dir=str(work_dir),
             output_dir=str(output_dir),
             worker_family=worker_family,
-            timeout=timeout,
+            timeout=min(timeout, MAX_LIVE_TIMEOUT),
             env_vars=env_vars or {},
             job_id=job_id,
+            target=target,
+            execution_mode=decision.mode,
         )
 
     async def _run_docker(
@@ -156,9 +262,15 @@ class ContainerRunner:
         timeout: int,
         env_vars: dict[str, str],
         job_id: uuid.UUID,
+        target: str,
+        execution_mode: str,
     ) -> ContainerResult:
         """Run inside a real Docker container."""
-        network_mode = _FAMILY_NETWORK.get(worker_family, NETWORK_MODE_DEFAULT)
+        network_mode = self._resolve_network_mode(
+            worker_family=worker_family,
+            target=target,
+            live_execution=True,
+        )
         container_name = f"pentra-job-{str(job_id)[:8]}"
 
         try:
@@ -210,6 +322,7 @@ class ContainerRunner:
             stderr = (await asyncio.to_thread(container.logs, stdout=False, stderr=True)).decode(
                 "utf-8", errors="replace"
             )
+            self._write_container_logs(output_dir=output_dir, stdout=stdout, stderr=stderr)
 
             # Cleanup container
             try:
@@ -228,6 +341,8 @@ class ContainerRunner:
                 stderr=stderr[-5_000:],
                 output_dir=output_dir,
                 timed_out=timed_out,
+                execution_mode=execution_mode,
+                execution_provenance="live",
             )
 
         except Exception as e:
@@ -238,7 +353,358 @@ class ContainerRunner:
                 stderr=str(e)[:5_000],
                 output_dir=output_dir,
                 timed_out=False,
+                execution_mode=execution_mode,
+                execution_provenance="live",
+                execution_reason="container_execution_error",
             )
+
+    def _resolve_execution_decision(
+        self,
+        *,
+        tool_name: str,
+        target: str,
+        scan_config: dict[str, object],
+    ) -> ExecutionDecision:
+        mode = self._execution_mode(scan_config)
+        if mode == _MODE_DEMO_SIMULATED:
+            return ExecutionDecision(
+                mode=mode,
+                provenance="simulated",
+                reason="demo_simulated_mode",
+            )
+
+        allowed_tools = self._allowed_live_tools(scan_config)
+        if tool_name not in allowed_tools:
+            logger.info("Tool %s not in live allowlist; blocking live execution", tool_name)
+            return ExecutionDecision(
+                mode=mode,
+                provenance="blocked",
+                reason="not_supported",
+            )
+
+        if not self._target_allowed_for_live(target=target, scan_config=scan_config, mode=mode):
+            logger.info("Target %s blocked by live target policy", target)
+            return ExecutionDecision(
+                mode=mode,
+                provenance="blocked",
+                reason="target_policy_blocked",
+            )
+
+        return ExecutionDecision(mode=mode, provenance="live")
+
+    def _execution_mode(self, scan_config: dict[str, object]) -> str:
+        execution = scan_config.get("execution", {})
+        if isinstance(execution, dict) and execution.get("mode"):
+            return _normalize_execution_mode(str(execution["mode"]))
+        return _normalize_execution_mode(EXECUTION_MODE)
+
+    def _allowed_live_tools(self, scan_config: dict[str, object]) -> set[str]:
+        execution = scan_config.get("execution", {})
+        if not isinstance(execution, dict):
+            return set(LIVE_EXECUTION_TOOLS)
+
+        configured = execution.get("allowed_live_tools", [])
+        if not isinstance(configured, list):
+            return set(LIVE_EXECUTION_TOOLS)
+
+        allowed = {str(tool).strip() for tool in configured if str(tool).strip()}
+        return allowed or set(LIVE_EXECUTION_TOOLS)
+
+    def _target_allowed_for_live(
+        self,
+        *,
+        target: str,
+        scan_config: dict[str, object],
+        mode: str,
+    ) -> bool:
+        execution = scan_config.get("execution", {})
+        if mode == _MODE_CONTROLLED_LIVE_LOCAL:
+            policy = "local_only"
+        elif mode == _MODE_CONTROLLED_LIVE_SCOPED:
+            policy = "in_scope"
+        else:
+            policy = LIVE_TARGET_POLICY
+        if isinstance(execution, dict) and execution.get("target_policy"):
+            policy = str(execution["target_policy"]).strip().lower()
+
+        host = _host_from_target(target)
+        if policy == "local_only":
+            return _is_local_host(host)
+
+        if policy == "in_scope":
+            return _host_in_scope(host=host, scan_config=scan_config)
+
+        return True
+
+    def _prepare_runtime_inputs(
+        self,
+        *,
+        tool_name: str,
+        target: str,
+        input_dir: Path,
+        scan_config: dict[str, object],
+    ) -> None:
+        base_url = _base_url_from_target(target)
+        selected_checks = scan_config.get("selected_checks", {})
+        if not isinstance(selected_checks, dict):
+            selected_checks = {}
+
+        if tool_name == "httpx_probe":
+            http_probe_paths = selected_checks.get("http_probe_paths", _DEFAULT_HTTP_PROBE_PATHS)
+            paths = [
+                _join_url(base_url, str(path))
+                for path in http_probe_paths
+                if str(path).strip()
+            ]
+            (input_dir / "httpx_targets.txt").write_text("\n".join(paths) + "\n")
+
+        if tool_name == "ffuf":
+            content_paths = selected_checks.get("content_paths", _DEFAULT_CONTENT_PATHS)
+            entries = [
+                _normalize_wordlist_entry(str(path))
+                for path in content_paths
+                if str(path).strip()
+            ]
+            bounded_entries = entries[:20]
+            (input_dir / "ffuf_wordlist.txt").write_text("\n".join(bounded_entries) + "\n")
+
+        if tool_name == "nuclei":
+            templates_dir = input_dir / "nuclei-templates"
+            templates_dir.mkdir(parents=True, exist_ok=True)
+            (input_dir / "nuclei_targets.txt").write_text(f"{base_url}\n")
+
+            for filename, content in _build_phase3_nuclei_templates().items():
+                (templates_dir / filename).write_text(content)
+
+    async def _run_scope_check(
+        self,
+        *,
+        target: str,
+        output_dir: str,
+        job_id: uuid.UUID,
+        scan_config: dict[str, object],
+        execution_mode: str,
+    ) -> ContainerResult:
+        targeting = scan_config.get("targeting", {})
+        if not isinstance(targeting, dict):
+            targeting = {}
+        execution = scan_config.get("execution", {})
+        if not isinstance(execution, dict):
+            execution = {}
+        payload = {
+            "target": target,
+            "asset_type": str(targeting.get("asset_type") or "web_app"),
+            "in_scope": self._target_allowed_for_live(
+                target=target,
+                scan_config=scan_config,
+                mode=execution_mode,
+            ),
+            "target_policy": str(
+                execution.get("target_policy")
+                or ("local_only" if execution_mode == _MODE_CONTROLLED_LIVE_LOCAL else "in_scope")
+            ),
+        }
+        output_path = Path(output_dir) / "scope.json"
+        output_path.write_text(json.dumps(payload, indent=2))
+        return ContainerResult(
+            exit_code=0,
+            stdout=json.dumps({"tool": "scope_check", "job_id": str(job_id), "status": "completed"}),
+            stderr="",
+            output_dir=output_dir,
+            timed_out=False,
+            execution_mode=execution_mode,
+            execution_provenance="live",
+        )
+
+    async def _run_custom_poc_verifier(
+        self,
+        *,
+        target: str,
+        output_dir: str,
+        job_id: uuid.UUID,
+        scan_config: dict[str, object],
+        execution_mode: str,
+    ) -> ContainerResult:
+        workflow_mutation = str(scan_config.get("workflow_mutation") or "").strip().lower()
+        if workflow_mutation:
+            return await self._run_workflow_mutation_probe(
+                target=target,
+                output_dir=output_dir,
+                job_id=job_id,
+                scan_config=scan_config,
+                execution_mode=execution_mode,
+            )
+
+        verification_context = scan_config.get("verification_context", {})
+        if not isinstance(verification_context, dict):
+            verification_context = {}
+
+        verify_type = str(verification_context.get("verify_type") or "custom_poc").strip().lower()
+        if verify_type != "idor_read":
+            logger.info("custom_poc verify_type=%s is not supported for live mode", verify_type)
+            return self._blocked(
+                tool_name="custom_poc",
+                output_dir=output_dir,
+                reason="not_supported",
+                execution_mode=execution_mode,
+                job_id=job_id,
+            )
+
+        request_url = str(
+            verification_context.get("request_url")
+            or verification_context.get("endpoint")
+            or target
+        ).strip()
+        sensitive_markers = [
+            str(marker).strip().lower()
+            for marker in verification_context.get("sensitive_markers", ["email", "salary"])
+            if str(marker).strip()
+        ]
+        headers = {
+            "User-Agent": "Pentra-Custom-POC/phase4",
+            "Accept": "application/json",
+            "X-Pentra-Verification": "idor_read",
+        }
+
+        try:
+            response = await asyncio.to_thread(
+                self._fetch_http_response,
+                request_url,
+                headers,
+            )
+        except (HTTPError, URLError) as exc:
+            logger.warning("custom_poc verification failed for %s: %s", request_url, exc)
+            payload: list[dict[str, object]] = []
+        else:
+            status_code = int(response["status_code"])
+            body = str(response["body"])
+            matched_markers = [marker for marker in sensitive_markers if marker in body.lower()]
+            payload = []
+            if status_code == 200 and matched_markers:
+                payload.append(
+                    {
+                        "target": request_url,
+                        "access_level": "unauthorized_object_read",
+                        "title": "Verified IDOR data access",
+                        "severity": "high",
+                        "confidence": 96,
+                        "description": (
+                            "Safe verification confirmed unauthorized object access returned "
+                            f"sensitive fields: {', '.join(matched_markers)}."
+                        ),
+                        "request": f"GET {request_url}",
+                        "response": f"HTTP/1.1 {status_code}\n\n{body[:4000]}",
+                        "exploit_result": (
+                            "Unauthorized object read verified with sensitive field exposure: "
+                            + ", ".join(matched_markers)
+                        ),
+                        "surface": "api" if "/api/" in request_url else "web",
+                        "route_group": verification_context.get("route_group"),
+                        "vulnerability_type": "idor",
+                        "exploitability": "high",
+                        "exploitability_score": 92,
+                    }
+                )
+
+        output_path = Path(output_dir) / "poc_result.json"
+        output_path.write_text(json.dumps(payload, indent=2))
+
+        return ContainerResult(
+            exit_code=0,
+            stdout=json.dumps({"tool": "custom_poc", "job_id": str(job_id), "status": "verified"}),
+            stderr="",
+            output_dir=output_dir,
+            timed_out=False,
+            execution_mode=execution_mode,
+            execution_provenance="live",
+        )
+
+    async def _run_web_interact(
+        self,
+        *,
+        target: str,
+        output_dir: str,
+        job_id: uuid.UUID,
+        scan_config: dict[str, object],
+        execution_mode: str,
+    ) -> ContainerResult:
+        payload = await self._web_runner.run_discovery(
+            base_url=_base_url_from_target(target),
+            scan_config=scan_config,
+        )
+
+        output_path = Path(output_dir) / "web_interactions.json"
+        output_path.write_text(json.dumps(payload, indent=2))
+
+        return ContainerResult(
+            exit_code=0,
+            stdout=json.dumps({"tool": "web_interact", "job_id": str(job_id), "status": "completed"}),
+            stderr="",
+            output_dir=output_dir,
+            timed_out=False,
+            execution_mode=execution_mode,
+            execution_provenance="live",
+        )
+
+    async def _run_workflow_mutation_probe(
+        self,
+        *,
+        target: str,
+        output_dir: str,
+        job_id: uuid.UUID,
+        scan_config: dict[str, object],
+        execution_mode: str,
+    ) -> ContainerResult:
+        payload = await self._web_runner.run_workflow_mutation(
+            base_url=_base_url_from_target(target),
+            scan_config=scan_config,
+            target=target,
+        )
+
+        output_path = Path(output_dir) / "poc_result.json"
+        output_path.write_text(json.dumps(payload, indent=2))
+
+        return ContainerResult(
+            exit_code=0,
+            stdout=json.dumps({"tool": "custom_poc", "job_id": str(job_id), "status": "workflow_mutation"}),
+            stderr="",
+            output_dir=output_dir,
+            timed_out=False,
+            execution_mode=execution_mode,
+            execution_provenance="live",
+        )
+
+    def _fetch_http_response(self, request_url: str, headers: dict[str, str]) -> dict[str, object]:
+        request = Request(request_url, headers=headers, method="GET")
+        with urlopen(request, timeout=10) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            return {
+                "status_code": response.getcode(),
+                "body": body,
+                "content_type": response.headers.get("Content-Type", ""),
+            }
+
+    def _resolve_network_mode(
+        self,
+        *,
+        worker_family: str,
+        target: str,
+        live_execution: bool,
+    ) -> str:
+        if worker_family in _FAMILY_NETWORK:
+            return _FAMILY_NETWORK[worker_family]
+
+        if live_execution and _is_local_host(_host_from_target(target)):
+            return "host"
+
+        return NETWORK_MODE_DEFAULT
+
+    def _write_container_logs(self, *, output_dir: str, stdout: str, stderr: str) -> None:
+        output_path = Path(output_dir)
+        if stdout.strip():
+            (output_path / "_stdout.log").write_text(stdout[-50_000:])
+        if stderr.strip():
+            (output_path / "_stderr.log").write_text(stderr[-20_000:])
 
     async def _simulate(
         self,
@@ -249,6 +715,8 @@ class ContainerRunner:
         output_dir: str,
         timeout: int,
         job_id: uuid.UUID,
+        execution_mode: str,
+        reason: str | None,
     ) -> ContainerResult:
         """Simulation mode when Docker is not available.
 
@@ -279,6 +747,43 @@ class ContainerRunner:
             stderr="",
             output_dir=output_dir,
             timed_out=False,
+            execution_mode=execution_mode,
+            execution_provenance="simulated",
+            execution_reason=reason or "demo_simulated_mode",
+        )
+
+    def _blocked(
+        self,
+        *,
+        tool_name: str,
+        output_dir: str,
+        reason: str,
+        execution_mode: str,
+        job_id: uuid.UUID,
+    ) -> ContainerResult:
+        logger.warning(
+            "Execution blocked for %s (job=%s mode=%s reason=%s)",
+            tool_name,
+            job_id,
+            execution_mode,
+            reason,
+        )
+        return ContainerResult(
+            exit_code=0,
+            stdout=json.dumps(
+                {
+                    "tool": tool_name,
+                    "job_id": str(job_id),
+                    "status": "blocked",
+                    "reason": reason,
+                }
+            ),
+            stderr="",
+            output_dir=output_dir,
+            timed_out=False,
+            execution_mode=execution_mode,
+            execution_provenance="blocked",
+            execution_reason=reason,
         )
 
     def _write_simulated_output(
@@ -316,6 +821,7 @@ class ContainerRunner:
             json_payload = [
                 {"host": host, "source": "amass"},
                 {"host": f"staging.{host}", "source": "amass"},
+                {"host": f"graphql.{host}", "source": "amass"},
             ]
             filename = "amass.json"
         elif tool_name == "nmap_discovery":
@@ -327,13 +833,138 @@ class ContainerRunner:
         elif tool_name == "nmap_svc":
             raw_payload = _simulation_nmap_xml(
                 host=host,
-                services=[(80, "http", "nginx 1.24"), (443, "https", "nginx 1.24")],
+                services=[(80, "http", "nginx 1.24"), (443, "https", "nginx 1.24"), (8443, "https", "envoy")],
             )
             filename = "nmap_svc.xml"
+        elif tool_name == "httpx_probe":
+            json_payload = [
+                {
+                    "url": f"{base_url}",
+                    "status_code": 200,
+                    "content_length": 18422,
+                    "title": "Pentra Demo Portal",
+                    "webserver": "nginx",
+                    "tech": ["Next.js", "Node.js"],
+                },
+                {
+                    "url": f"{base_url}/graphql",
+                    "status_code": 200,
+                    "content_length": 612,
+                    "title": "GraphQL API",
+                    "webserver": "nginx",
+                    "tech": ["GraphQL", "Apollo Server"],
+                },
+                {
+                    "url": f"{base_url}/openapi.json",
+                    "status_code": 200,
+                    "content_length": 2401,
+                    "title": "OpenAPI Specification",
+                    "webserver": "nginx",
+                    "tech": ["OpenAPI", "Swagger UI"],
+                },
+            ]
+            filename = "httpx.json"
+        elif tool_name == "web_interact":
+            json_payload = {
+                "pages": [
+                    {
+                        "url": f"{base_url}/login",
+                        "title": "Pentra Login",
+                        "status_code": 200,
+                        "session_label": "unauthenticated",
+                        "auth_state": "none",
+                    },
+                    {
+                        "url": f"{base_url}/portal/dashboard",
+                        "title": "Customer Dashboard",
+                        "status_code": 200,
+                        "session_label": "john",
+                        "auth_state": "authenticated",
+                    },
+                    {
+                        "url": f"{base_url}/portal/checkout/cart",
+                        "title": "Checkout Cart",
+                        "status_code": 200,
+                        "session_label": "john",
+                        "auth_state": "authenticated",
+                    },
+                ],
+                "forms": [
+                    {
+                        "page_url": f"{base_url}/login",
+                        "action_url": f"{base_url}/login",
+                        "method": "POST",
+                        "field_names": ["username", "password", "csrf_token"],
+                        "hidden_field_names": ["csrf_token"],
+                        "has_csrf": True,
+                        "safe_replay": True,
+                        "session_label": "unauthenticated",
+                    },
+                    {
+                        "page_url": f"{base_url}/portal/checkout/cart",
+                        "action_url": f"{base_url}/portal/checkout/confirm",
+                        "method": "POST",
+                        "field_names": ["item_id", "quantity", "csrf_token", "pentra_safe_replay"],
+                        "hidden_field_names": ["csrf_token", "pentra_safe_replay"],
+                        "has_csrf": True,
+                        "safe_replay": True,
+                        "session_label": "john",
+                    },
+                ],
+                "sessions": [
+                    {
+                        "session_label": "unauthenticated",
+                        "auth_state": "none",
+                        "cookie_names": [],
+                        "csrf_tokens": [],
+                    },
+                    {
+                        "session_label": "john",
+                        "auth_state": "authenticated",
+                        "cookie_names": ["pentra_session", "csrf_token"],
+                        "csrf_tokens": ["demo-csrf"],
+                    },
+                ],
+                "workflows": [
+                    {
+                        "source_url": f"{base_url}/login",
+                        "target_url": f"{base_url}/portal/dashboard",
+                        "action": "login",
+                        "requires_auth": False,
+                        "session_label": "john",
+                    },
+                    {
+                        "source_url": f"{base_url}/portal/dashboard",
+                        "target_url": f"{base_url}/portal/checkout/cart",
+                        "action": "navigate",
+                        "requires_auth": True,
+                        "session_label": "john",
+                    },
+                    {
+                        "source_url": f"{base_url}/portal/checkout/cart",
+                        "target_url": f"{base_url}/portal/checkout/confirm",
+                        "action": "submit",
+                        "requires_auth": True,
+                        "session_label": "john",
+                    },
+                ],
+                "replays": [
+                    {
+                        "request": f"POST {base_url}/login",
+                        "target_url": f"{base_url}/login",
+                        "session_label": "john",
+                        "status_code": 200,
+                        "response_preview": "<html><body>Dashboard</body></html>",
+                    }
+                ],
+            }
+            filename = "web_interactions.json"
         elif tool_name == "ffuf":
             json_payload = [
                 {"url": f"{base_url}/api/v1/auth/login", "status_code": 200, "length": 512, "words": 44},
                 {"url": f"{base_url}/api/v1/users/2", "status_code": 200, "length": 338, "words": 28},
+                {"url": f"{base_url}/graphql", "status_code": 200, "length": 612, "words": 31},
+                {"url": f"{base_url}/openapi.json", "status_code": 200, "length": 2401, "words": 214},
                 {"url": f"{base_url}/internal/debug", "status_code": 500, "length": 824, "words": 61},
             ]
             filename = "ffuf.json"
@@ -378,6 +1009,22 @@ class ContainerRunner:
                     },
                     "reference": [f"{base_url}/api/v1/users/2"],
                 },
+                {
+                    "template-id": "pentra/openapi-exposure",
+                    "matched-at": f"{base_url}/openapi.json",
+                    "request": _simulation_http_request(f"{base_url}/openapi.json"),
+                    "response": _simulation_http_response(
+                        200,
+                        '{"openapi":"3.0.3","info":{"title":"Pentra Demo API"}}',
+                    ),
+                    "info": {
+                        "name": "Exposed OpenAPI Schema",
+                        "severity": "medium",
+                        "description": "Unauthenticated OpenAPI documentation reveals internal API routes.",
+                        "remediation": "Require authentication for sensitive API docs or strip internal paths.",
+                    },
+                    "reference": [f"{base_url}/openapi.json"],
+                },
             ]
             filename = "nuclei.json"
         elif tool_name == "zap":
@@ -399,6 +1046,23 @@ class ContainerRunner:
                     ),
                     "payload": "ysoserial CommonsCollections5",
                     "solution": "Disable native deserialization for untrusted user input.",
+                },
+                {
+                    "title": "GraphQL Introspection Enabled",
+                    "severity": "medium",
+                    "url": f"{base_url}/graphql",
+                    "description": "The production GraphQL endpoint returns the full schema to unauthenticated users.",
+                    "request": _simulation_http_request(
+                        f"{base_url}/graphql",
+                        method="POST",
+                        body='{"query":"{ __schema { types { name } } }"}',
+                    ),
+                    "response": _simulation_http_response(
+                        200,
+                        '{"data":{"__schema":{"types":[{"name":"Query"},{"name":"User"}]}}}',
+                    ),
+                    "payload": "__schema introspection query",
+                    "solution": "Disable GraphQL introspection or gate it behind trusted operator access.",
                 }
             ]
             filename = "zap.json"
@@ -461,6 +1125,22 @@ class ContainerRunner:
                     "references": [f"{base_url}/api/v1/auth/login"],
                 },
                 {
+                    "title": "Broken Access Control - IDOR",
+                    "severity": "high",
+                    "confidence": 93,
+                    "target": host,
+                    "endpoint": f"{base_url}/api/v1/users/2",
+                    "description": "Object IDs can be enumerated across tenants without authorization checks.",
+                    "remediation": "Enforce object-level authorization checks on every user-scoped API request.",
+                    "request": _simulation_http_request(f"{base_url}/api/v1/users/2"),
+                    "response": _simulation_http_response(
+                        200,
+                        '{"id":2,"email":"john.doe@example.com","salary":85000}',
+                    ),
+                    "cvss_score": 8.2,
+                    "references": [f"{base_url}/api/v1/users/2"],
+                },
+                {
                     "title": "Unsafe Java Deserialization",
                     "severity": "critical",
                     "confidence": 94,
@@ -485,11 +1165,14 @@ class ContainerRunner:
             filename = "findings_scored.json"
         elif tool_name == "report_gen":
             json_payload = {
-                "executive_summary": f"Autonomous assessment of {host} identified verified critical exposure paths.",
+                "executive_summary": (
+                    f"Autonomous External Web + API assessment of {host} identified "
+                    "repeatable exploit-backed exposure paths across authentication and API surfaces."
+                ),
                 "top_findings": [
                     "SQL Injection in Login Endpoint",
+                    "Broken Access Control - IDOR",
                     "Unsafe Java Deserialization",
-                    "Verified shell access",
                 ],
                 "generated_from": "simulation",
                 "job_id": str(job_id),
@@ -571,6 +1254,7 @@ def _simulation_http_request(url: str, *, method: str = "GET", body: str | None 
         f"{method} {path} HTTP/1.1",
         f"Host: {host}",
         "User-Agent: Pentra/phase2-sim",
+        "X-Pentra-Profile: external_web_api_v1",
         "Accept: application/json",
     ]
     if body is not None:
@@ -600,3 +1284,188 @@ def _simulation_http_response(
             body,
         ]
     )
+
+
+def _host_from_target(target: str) -> str:
+    raw = str(target or "").strip()
+    if not raw:
+        return ""
+    parsed = urlparse(raw if "://" in raw else f"https://{raw}")
+    return parsed.hostname or raw.split("/", 1)[0]
+
+
+def _base_url_from_target(target: str) -> str:
+    raw = str(target or "").strip()
+    if not raw:
+        return ""
+    parsed = urlparse(raw if "://" in raw else f"https://{raw}")
+    scheme = parsed.scheme or "https"
+    netloc = parsed.netloc or parsed.path.split("/", 1)[0]
+    return f"{scheme}://{netloc}".rstrip("/")
+
+
+def _normalize_execution_mode(value: str) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"simulate", "simulation", "demo", _MODE_DEMO_SIMULATED}:
+        return _MODE_DEMO_SIMULATED
+    if normalized in {"docker", "controlled_live_scoped", "live_scoped", _MODE_CONTROLLED_LIVE_SCOPED}:
+        return _MODE_CONTROLLED_LIVE_SCOPED
+    if normalized in {"hybrid", "controlled_live", "live_local", _MODE_CONTROLLED_LIVE_LOCAL}:
+        return _MODE_CONTROLLED_LIVE_LOCAL
+    return _MODE_CONTROLLED_LIVE_LOCAL
+
+
+def _is_local_host(host: str) -> bool:
+    normalized = host.strip().lower()
+    if not normalized:
+        return False
+    if normalized in {"localhost", "0.0.0.0"}:
+        return True
+    try:
+        ip = ipaddress.ip_address(normalized)
+        return ip.is_loopback or ip.is_private
+    except ValueError:
+        return normalized.endswith(".localhost")
+
+
+def _host_in_scope(*, host: str, scan_config: dict[str, object]) -> bool:
+    normalized = host.strip().lower()
+    scope = scan_config.get("scope", {})
+    if not isinstance(scope, dict):
+        return True
+
+    allowed_hosts = {
+        str(value).strip().lower()
+        for value in scope.get("allowed_hosts", [])
+        if str(value).strip()
+    }
+    allowed_domains = {
+        str(value).strip().lower()
+        for value in scope.get("allowed_domains", [])
+        if str(value).strip()
+    }
+    include_subdomains = bool(scope.get("include_subdomains", True))
+
+    if not allowed_hosts and not allowed_domains:
+        return True
+
+    if normalized in allowed_hosts or normalized in allowed_domains:
+        return True
+
+    if include_subdomains:
+        for domain in allowed_hosts | allowed_domains:
+            if domain and normalized.endswith(f".{domain}"):
+                return True
+
+    return False
+
+
+def _join_url(base_url: str, path: str) -> str:
+    cleaned = path.strip()
+    if not cleaned:
+        return base_url
+    if cleaned.startswith("http://") or cleaned.startswith("https://"):
+        return cleaned.rstrip("/")
+    if cleaned == "/":
+        return base_url
+    return f"{base_url.rstrip('/')}/{cleaned.lstrip('/')}"
+
+
+def _normalize_wordlist_entry(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned or cleaned == "/":
+        return ""
+    return cleaned.lstrip("/")
+
+
+def _build_phase3_nuclei_templates() -> dict[str, str]:
+    return {
+        "openapi-exposure.yaml": textwrap.dedent(
+            """\
+            id: pentra-openapi-exposure
+            info:
+              name: Exposed OpenAPI Schema
+              author: pentra
+              severity: medium
+              tags: exposure,swagger,api
+            http:
+              - method: GET
+                path:
+                  - "{{BaseURL}}/openapi.json"
+                matchers:
+                  - type: word
+                    part: body
+                    words:
+                      - "\"openapi\""
+                      - "\"Pentra Demo API\""
+                    condition: and
+            """
+        ),
+        "graphql-introspection.yaml": textwrap.dedent(
+            """\
+            id: pentra-graphql-introspection
+            info:
+              name: GraphQL Introspection Enabled
+              author: pentra
+              severity: medium
+              tags: graphql,api
+            http:
+              - method: POST
+                path:
+                  - "{{BaseURL}}/graphql"
+                headers:
+                  Content-Type: application/json
+                body: '{"query":"{ __schema { types { name } } }"}'
+                matchers:
+                  - type: word
+                    part: body
+                    words:
+                      - "__schema"
+                      - "Query"
+                    condition: and
+            """
+        ),
+        "idor-users.yaml": textwrap.dedent(
+            """\
+            id: pentra-idor-users
+            info:
+              name: Broken Access Control - IDOR
+              author: pentra
+              severity: high
+              tags: idor,api
+            http:
+              - method: GET
+                path:
+                  - "{{BaseURL}}/api/v1/users/2"
+                matchers:
+                  - type: word
+                    part: body
+                    words:
+                      - "\"salary\""
+                      - "\"email\""
+                    condition: and
+            """
+        ),
+        "sqli-login.yaml": textwrap.dedent(
+            """\
+            id: pentra-sqli-login
+            info:
+              name: SQL Injection in Login Endpoint
+              author: pentra
+              severity: critical
+              tags: sqli,api,auth-bypass
+            http:
+              - method: POST
+                path:
+                  - "{{BaseURL}}/api/v1/auth/login"
+                headers:
+                  Content-Type: application/x-www-form-urlencoded
+                body: "username=admin'%20OR%20'1'='1&password=test"
+                matchers:
+                  - type: word
+                    part: body
+                    words:
+                      - "\"token\""
+            """
+        ),
+    }

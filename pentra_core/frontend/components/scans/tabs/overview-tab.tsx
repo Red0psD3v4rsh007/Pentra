@@ -9,6 +9,8 @@ import {
   formatPriority,
   formatRelativeTime,
   formatScanType,
+  formatExecutionProvenance,
+  formatExecutionReason,
   getExpectedPhases,
   type ApiFinding,
   type ApiScanJob,
@@ -47,7 +49,7 @@ function phaseState(phase: number, jobs: ApiScanJob[]) {
     return "pending"
   }
 
-  if (phaseJobs.every((job) => job.status === "completed" || job.status === "skipped")) {
+  if (phaseJobs.every((job) => job.status === "completed" || job.status === "skipped" || job.status === "blocked")) {
     return "completed"
   }
 
@@ -190,18 +192,35 @@ export function OverviewTab({ scan, asset, jobs, findings }: OverviewTabProps) {
                       <td className="px-4 py-3 font-medium text-foreground">{job.tool}</td>
                       <td className="px-4 py-3 text-muted-foreground">{formatPhase(job.phase)}</td>
                       <td className="px-4 py-3">
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-1 text-xs font-medium capitalize",
-                            job.status === "completed" && "bg-low/10 text-low",
-                            job.status === "failed" && "bg-critical/10 text-critical",
-                            job.status === "running" && "bg-primary/10 text-primary",
-                            ["pending", "queued", "scheduled", "assigned"].includes(job.status) &&
-                              "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          {job.status}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-1 text-xs font-medium capitalize",
+                              job.status === "completed" && "bg-low/10 text-low",
+                              job.status === "failed" && "bg-critical/10 text-critical",
+                              job.status === "running" && "bg-primary/10 text-primary",
+                              job.status === "blocked" && "bg-amber-100 text-amber-800",
+                              ["pending", "queued", "scheduled", "assigned"].includes(job.status) &&
+                                "bg-muted text-muted-foreground"
+                            )}
+                          >
+                            {job.status}
+                          </span>
+                          {job.execution_provenance ? (
+                            <span
+                              title={formatExecutionReason(job.execution_reason)}
+                              className={cn(
+                                "rounded-full px-2 py-1 text-[11px] font-medium",
+                                job.execution_provenance === "live" && "bg-low/10 text-low",
+                                job.execution_provenance === "simulated" && "bg-amber-100 text-amber-800",
+                                job.execution_provenance === "blocked" && "bg-critical/10 text-critical",
+                                job.execution_provenance === "inferred" && "bg-primary/10 text-primary"
+                              )}
+                            >
+                              {formatExecutionProvenance(job.execution_provenance)}
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {formatRelativeTime(job.completed_at ?? job.started_at ?? job.created_at)}

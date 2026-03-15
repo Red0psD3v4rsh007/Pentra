@@ -1,0 +1,16 @@
+name: web_interact
+worker_family: web
+image: pentra/web-interact:latest
+command:
+  - python
+  - -m
+  - web_interact
+  - --target
+  - "{target}"
+  - --config
+  - "{config_file}"
+  - --output
+  - "{output_dir}/web_interactions.json"
+output_parser: json
+artifact_type: endpoints
+default_timeout: 600

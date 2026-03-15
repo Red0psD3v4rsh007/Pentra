@@ -62,6 +62,7 @@ class JobDispatcher:
 
         for node in nodes:
             job_id = uuid.uuid4()
+            job_config = _merge_configs(config or {}, node.config or {})
 
             # 1 — Create ScanJob (include all NOT NULL columns)
             await self._session.execute(text("""
@@ -102,7 +103,7 @@ class JobDispatcher:
                 "tool": node.tool,
                 "worker_family": node.worker_family,
                 "target": target,
-                "config": json.dumps(config or {}),
+                "config": json.dumps(job_config),
                 "input_refs": json.dumps(node.input_refs),
                 "dispatched_at": now,
             }
@@ -128,3 +129,13 @@ class JobDispatcher:
         """), {"id": str(phase_id)})
         row = result.mappings().first()
         return int(row["phase_number"]) if row else 0
+
+
+def _merge_configs(base: dict, override: dict) -> dict:
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_configs(merged[key], value)
+        else:
+            merged[key] = value
+    return merged

@@ -133,15 +133,63 @@ def test_service_chaining_lateral():
 
     g = AttackGraph(scan_id="s", tenant_id="t")
     g.add_node(AttackNode(id="s1", node_type="service", label="http:80",
-                          artifact_ref="r1", properties={"artifact_id": "a1"}))
+                          artifact_ref="r1", properties={"artifact_id": "a1", "host": "example.com"}))
     g.add_node(AttackNode(id="s2", node_type="service", label="mysql:3306",
-                          artifact_ref="r2", properties={"artifact_id": "a2"}))
+                          artifact_ref="r2", properties={"artifact_id": "a2", "host": "example.com"}))
 
     correlator = GraphCorrelator()
     new_edges = correlator.correlate(g)
 
     chain = [e for e in new_edges if e.properties.get("correlation_rule") == "service_chaining"]
     assert len(chain) >= 1
+
+
+def test_asset_lateral_requires_network_context():
+    from app.engine.attack_graph_builder import AttackGraph, AttackNode
+    from app.engine.graph_correlator import GraphCorrelator
+
+    g = AttackGraph(scan_id="s", tenant_id="t")
+    g.add_node(AttackNode(id="a1", node_type="asset", label="example.com", artifact_ref="r1"))
+    g.add_node(AttackNode(id="a2", node_type="asset", label="api.example.com", artifact_ref="r2"))
+
+    correlator = GraphCorrelator()
+    new_edges = correlator.correlate(g)
+
+    lateral = [e for e in new_edges if e.properties.get("correlation_rule") == "asset_lateral"]
+    assert lateral == []
+
+
+def test_privilege_chain_only_escalates_forward():
+    from app.engine.attack_graph_builder import AttackGraph, AttackNode
+    from app.engine.graph_correlator import GraphCorrelator
+
+    g = AttackGraph(scan_id="s", tenant_id="t")
+    g.add_node(
+        AttackNode(
+            id="p1",
+            node_type="privilege",
+            label="database access",
+            artifact_ref="r1",
+            properties={"artifact_type": "database_access", "target": "example.com"},
+        )
+    )
+    g.add_node(
+        AttackNode(
+            id="p2",
+            node_type="privilege",
+            label="shell access",
+            artifact_ref="r2",
+            properties={"artifact_type": "shell_access", "target": "example.com"},
+        )
+    )
+
+    correlator = GraphCorrelator()
+    new_edges = correlator.correlate(g)
+
+    forward = [e for e in new_edges if e.source == "p1" and e.target == "p2"]
+    backward = [e for e in new_edges if e.source == "p2" and e.target == "p1"]
+    assert len(forward) >= 1
+    assert backward == []
 
 
 # ═══════════════════════════════════════════════════════════════════

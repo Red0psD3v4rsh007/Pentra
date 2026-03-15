@@ -8,12 +8,13 @@ from __future__ import annotations
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pentra_common.schemas import PaginatedResponse, ProjectCreate, ProjectResponse, ProjectUpdate
 
-from app.deps import CurrentUser, get_current_user, get_db_session
+from app.deps import CurrentUser, get_current_user, get_db_session, require_roles
+from app.observability.audit import log_audit_event
 from app.services import project_service
 
 logger = logging.getLogger(__name__)
@@ -28,8 +29,9 @@ router = APIRouter(tags=["projects"])
     summary="Create a project",
 )
 async def create_project(
+    request: Request,
     body: ProjectCreate,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_roles("owner", "admin", "member")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ProjectResponse:
     """Create a new project under the authenticated user's tenant."""
@@ -40,6 +42,15 @@ async def create_project(
         slug=body.slug,
         description=body.description,
         session=session,
+    )
+    log_audit_event(
+        request=request,
+        user=user,
+        action="project.create",
+        outcome="success",
+        resource_type="project",
+        resource_id=str(project.id),
+        details={"slug": project.slug},
     )
     return ProjectResponse.model_validate(project)
 
@@ -57,7 +68,10 @@ async def list_projects(
 ) -> PaginatedResponse[ProjectResponse]:
     """List projects for the authenticated tenant (paginated)."""
     items, total = await project_service.list_projects(
-        session=session, page=page, page_size=page_size
+        tenant_id=user.tenant_id,
+        session=session,
+        page=page,
+        page_size=page_size,
     )
     return PaginatedResponse(
         items=[ProjectResponse.model_validate(p) for p in items],
@@ -79,7 +93,9 @@ async def get_project(
 ) -> ProjectResponse:
     """Get a single project by ID."""
     project = await project_service.get_project(
-        project_id=project_id, session=session
+        project_id=project_id,
+        tenant_id=user.tenant_id,
+        session=session,
     )
     if project is None:
         raise HTTPException(
@@ -94,23 +110,42 @@ async def get_project(
     summary="Update a project",
 )
 async def update_project(
+    request: Request,
     project_id: uuid.UUID,
     body: ProjectUpdate,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_roles("owner", "admin", "member")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ProjectResponse:
     """Update mutable fields of a project."""
     try:
         project = await project_service.update_project(
             project_id=project_id,
+            tenant_id=user.tenant_id,
             name=body.name,
             description=body.description,
             session=session,
         )
     except ValueError as exc:
+        log_audit_event(
+            request=request,
+            user=user,
+            action="project.update",
+            outcome="denied",
+            resource_type="project",
+            resource_id=str(project_id),
+            details={"reason": str(exc)},
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
         )
+    log_audit_event(
+        request=request,
+        user=user,
+        action="project.update",
+        outcome="success",
+        resource_type="project",
+        resource_id=str(project.id),
+    )
     return ProjectResponse.model_validate(project)
 
 
@@ -120,16 +155,36 @@ async def update_project(
     summary="Delete a project",
 )
 async def delete_project(
+    request: Request,
     project_id: uuid.UUID,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_roles("owner", "admin")),
     session: AsyncSession = Depends(get_db_session),
 ) -> None:
     """Soft-delete a project (sets ``is_active = False``)."""
     try:
         await project_service.delete_project(
-            project_id=project_id, session=session
+            project_id=project_id,
+            tenant_id=user.tenant_id,
+            session=session,
         )
     except ValueError as exc:
+        log_audit_event(
+            request=request,
+            user=user,
+            action="project.delete",
+            outcome="denied",
+            resource_type="project",
+            resource_id=str(project_id),
+            details={"reason": str(exc)},
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
         )
+    log_audit_event(
+        request=request,
+        user=user,
+        action="project.delete",
+        outcome="success",
+        resource_type="project",
+        resource_id=str(project_id),
+    )

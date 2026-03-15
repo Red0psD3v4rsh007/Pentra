@@ -39,6 +39,15 @@ class FindingResponse(BaseModel):
     evidence: dict | None = None
     remediation: str | None = None
     tool_source: str
+    vulnerability_type: str | None = None
+    exploitability: str | None = None
+    surface: str | None = None
+    execution_mode: str | None = None
+    execution_provenance: str | None = None
+    execution_reason: str | None = None
+    verification_state: str | None = None
+    verification_confidence: int | None = Field(default=None, ge=0, le=100)
+    verified_at: datetime | None = None
     is_false_positive: bool
     fp_probability: int | None = Field(default=None, ge=0, le=100)
     created_at: datetime

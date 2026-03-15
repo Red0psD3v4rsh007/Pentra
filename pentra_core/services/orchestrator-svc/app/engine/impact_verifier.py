@@ -25,6 +25,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pentra_common.storage.retention import apply_artifact_retention_metadata
+
 logger = logging.getLogger(__name__)
 
 
@@ -96,14 +98,17 @@ class ImpactVerifier:
             return 0
 
         # Build the impact artifact
-        impact_artifact = {
-            "impact_type": verified_impact["impact_type"],
-            "confidence": verified_impact["confidence"],
-            "tool": tool,
-            "evidence_summary": verified_impact["evidence"],
-            "verified_at": datetime.now(timezone.utc).isoformat(),
-            "source_ref": output_ref,
-        }
+        impact_artifact = apply_artifact_retention_metadata(
+            {
+                "impact_type": verified_impact["impact_type"],
+                "confidence": verified_impact["confidence"],
+                "tool": tool,
+                "evidence_summary": verified_impact["evidence"],
+                "verified_at": datetime.now(timezone.utc).isoformat(),
+                "source_ref": output_ref,
+            },
+            policy="verified_impact",
+        )
 
         # Store as scan_artifact
         artifact_id = uuid.uuid4()

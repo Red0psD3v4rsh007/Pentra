@@ -25,6 +25,8 @@ from datetime import datetime, timezone
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pentra_common.storage.retention import apply_artifact_retention_metadata
+
 logger = logging.getLogger(__name__)
 
 # ── Valid node state transitions ─────────────────────────────────────
@@ -349,6 +351,7 @@ class StateManager:
         """
         aid = uuid.uuid4()
         import json
+        metadata_payload = apply_artifact_retention_metadata(metadata)
 
         await self._session.execute(text("""
             INSERT INTO scan_artifacts (id, scan_id, node_id, tenant_id,
@@ -360,7 +363,7 @@ class StateManager:
             "id": str(aid), "sid": str(scan_id), "nid": str(node_id),
             "tid": str(tenant_id), "type": artifact_type,
             "ref": storage_ref, "content_type": content_type, "size": size_bytes,
-            "checksum": checksum, "metadata": json.dumps(metadata or {}),
+            "checksum": checksum, "metadata": json.dumps(metadata_payload),
         })
         await self._session.flush()
         logger.info("Artifact stored: %s type=%s ref=%s", aid, artifact_type, storage_ref)

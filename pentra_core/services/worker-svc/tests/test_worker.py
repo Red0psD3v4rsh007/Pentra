@@ -27,10 +27,10 @@ if _svc_root not in sys.path:
 
 
 def test_registry_loads_all_tools():
-    """All 12 YAML tool specs must be loaded."""
+    """All YAML tool specs must be loaded."""
     from app.tools.tool_registry import get_all_tools
     tools = get_all_tools()
-    assert len(tools) >= 12, f"Expected >= 12 tools, got {len(tools)}"
+    assert len(tools) >= 13, f"Expected >= 13 tools, got {len(tools)}"
 
 
 def test_registry_has_expected_tools():
@@ -39,7 +39,7 @@ def test_registry_has_expected_tools():
 
     expected = [
         "scope_check", "subfinder", "amass", "nmap_discovery",
-        "nmap_svc", "ffuf", "nuclei", "zap", "sqlmap",
+        "httpx_probe", "web_interact", "nmap_svc", "ffuf", "nuclei", "zap", "sqlmap",
         "metasploit", "ai_triage", "report_gen",
     ]
     for name in expected:
@@ -90,6 +90,25 @@ def test_registry_command_rendering():
     assert "/work/out" in cmd[4]    # -o {output_dir}/subdomains.json
 
 
+def test_registry_command_rendering_with_profile_context():
+    """Profile context placeholders should render into tool commands."""
+    from app.tools.tool_registry import get_tool, render_command
+
+    tool = get_tool("httpx_probe")
+    assert tool is not None
+    cmd = render_command(
+        tool,
+        target="https://example.com",
+        output_dir="/work/out",
+        context={
+            "http_rate_limit": 77,
+            "httpx_targets_file": "/work/input/httpx_targets.txt",
+        },
+    )
+    assert "/work/input/httpx_targets.txt" in cmd
+    assert "77" in cmd
+
+
 # ═══════════════════════════════════════════════════════════════════
 # 2. Container Runner — simulation mode
 # ═══════════════════════════════════════════════════════════════════
@@ -110,6 +129,60 @@ def test_container_runner_exists():
     from app.engine.container_runner import ContainerRunner
     runner = ContainerRunner()
     assert runner is not None
+
+
+def test_container_runner_local_only_policy_blocks_remote_live_targets():
+    from app.engine.container_runner import ContainerRunner
+
+    runner = ContainerRunner()
+    assert runner._target_allowed_for_live(
+        target="http://127.0.0.1:8088",
+        scan_config={"execution": {"target_policy": "local_only"}},
+    ) is True
+    assert runner._target_allowed_for_live(
+        target="https://example.com",
+        scan_config={"execution": {"target_policy": "local_only"}},
+    ) is False
+
+
+def test_container_runner_prepares_phase3_runtime_inputs():
+    from app.engine.container_runner import ContainerRunner
+
+    runner = ContainerRunner()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_dir = Path(tmpdir)
+        config = {
+            "selected_checks": {
+                "http_probe_paths": ["/", "/graphql"],
+                "content_paths": ["graphql", "openapi.json", "api/v1/auth/login"],
+            }
+        }
+
+        runner._prepare_runtime_inputs(
+            tool_name="httpx_probe",
+            target="http://127.0.0.1:8088",
+            input_dir=input_dir,
+            scan_config=config,
+        )
+        runner._prepare_runtime_inputs(
+            tool_name="ffuf",
+            target="http://127.0.0.1:8088",
+            input_dir=input_dir,
+            scan_config=config,
+        )
+        runner._prepare_runtime_inputs(
+            tool_name="nuclei",
+            target="http://127.0.0.1:8088",
+            input_dir=input_dir,
+            scan_config=config,
+        )
+
+        assert (input_dir / "httpx_targets.txt").exists()
+        assert "http://127.0.0.1:8088/graphql" in (input_dir / "httpx_targets.txt").read_text()
+        assert (input_dir / "ffuf_wordlist.txt").exists()
+        assert "api/v1/auth/login" in (input_dir / "ffuf_wordlist.txt").read_text()
+        assert (input_dir / "nuclei_targets.txt").read_text().strip() == "http://127.0.0.1:8088"
+        assert (input_dir / "nuclei-templates" / "sqli-login.yaml").exists()
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -218,6 +291,102 @@ def test_normalize_raw_output():
         assert "content" in artifact["items"][0]
 
 
+def test_normalize_sqlmap_live_output_extracts_clean_endpoint_and_evidence():
+    """sqlmap raw output should normalize into a clean finding, not a raw csv-ish target."""
+    from app.engine.artifact_handler import normalize_output
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        log_dir = Path(tmpdir) / "127.0.0.1"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        (log_dir / "target.txt").write_text(
+            "http://127.0.0.1:8088/api/v1/auth/login?username=admin&password=admin123 (GET)"
+        )
+        (log_dir / "log").write_text(
+            "\n".join(
+                [
+                    "sqlmap identified the following injection point(s) with a total of 49 HTTP(s) requests:",
+                    "---",
+                    "Parameter: username (GET)",
+                    "    Type: boolean-based blind",
+                    "    Title: AND boolean-based blind - WHERE or HAVING clause",
+                    "    Payload: username=admin' AND 7485=7485-- guCW&password=admin123",
+                    "",
+                    "    Type: time-based blind",
+                    "    Title: SQLite > 2.0 AND time-based blind (heavy query)",
+                    "    Payload: username=admin' AND 3679=LIKE(CHAR(65,66,67))-- dwmi&password=admin123",
+                    "",
+                    "    Type: UNION query",
+                    "    Title: Generic UNION query (NULL) - 2 columns",
+                    "    Payload: username=-3854' UNION ALL SELECT 1,NULL-- LeMH&password=admin123",
+                    "---",
+                    "back-end DBMS: SQLite",
+                ]
+            )
+        )
+
+        artifact = normalize_output(
+            output_dir=str(log_dir.parent),
+            output_parser="raw",
+            tool_name="sqlmap",
+            artifact_type="vulnerabilities",
+            scan_id="s",
+            node_id="n",
+            tenant_id="t",
+            exit_code=0,
+        )
+
+        assert artifact["item_count"] == 1
+        item = artifact["items"][0]
+        assert item["endpoint"] == "http://127.0.0.1:8088/api/v1/auth/login"
+        assert item["route_group"] == "/api/v1/auth/login"
+        assert item["request"] == (
+            "GET http://127.0.0.1:8088/api/v1/auth/login?username=admin&password=admin123"
+        )
+        assert item["payload"].startswith("username=admin'")
+        assert "SQLite" in item["description"]
+        evidence_types = {entry["evidence_type"] for entry in artifact["evidence"]}
+        assert {"request", "payload", "exploit_result"} <= evidence_types
+
+
+def test_normalize_sqlmap_verify_output_marks_finding_verified():
+    from app.engine.artifact_handler import normalize_output
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        log_dir = Path(tmpdir) / "127.0.0.1"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        (log_dir / "target.txt").write_text(
+            "http://127.0.0.1:8088/api/v1/auth/login?username=admin&password=admin123 (GET)"
+        )
+        (log_dir / "log").write_text(
+            "\n".join(
+                [
+                    "sqlmap identified the following injection point(s):",
+                    "Parameter: username (GET)",
+                    "    Type: boolean-based blind",
+                    "    Payload: username=admin' AND 1=1-- test&password=admin123",
+                    "back-end DBMS: SQLite",
+                ]
+            )
+        )
+
+        artifact = normalize_output(
+            output_dir=str(log_dir.parent),
+            output_parser="raw",
+            tool_name="sqlmap_verify",
+            artifact_type="database_access",
+            scan_id="s",
+            node_id="n",
+            tenant_id="t",
+            exit_code=0,
+        )
+
+        assert artifact["artifact_type"] == "database_access"
+        assert artifact["findings"][0]["source_type"] == "exploit_verify"
+        classification = artifact["findings"][0]["evidence"]["classification"]
+        assert classification["verification_state"] == "verified"
+        assert classification["verified"] is True
+
+
 def test_store_artifact():
     """store_artifact must write JSON and return a storage_ref path."""
     from app.engine.artifact_handler import store_artifact
@@ -282,6 +451,257 @@ def test_unified_artifact_schema():
         assert "exit_code" in artifact["metadata"]
         assert "duration_ms" in artifact["metadata"]
         assert "raw_size_bytes" in artifact["metadata"]
+
+
+def test_normalize_httpx_output_enriches_endpoint_metadata():
+    from app.engine.artifact_handler import normalize_output
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "httpx.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "url": "https://example.com/graphql",
+                        "status_code": 200,
+                        "content_length": 612,
+                        "title": "GraphQL API",
+                        "webserver": "nginx",
+                        "tech": ["GraphQL", "Apollo Server"],
+                    }
+                ]
+            )
+        )
+
+        artifact = normalize_output(
+            output_dir=tmpdir,
+            output_parser="json",
+            tool_name="httpx_probe",
+            artifact_type="endpoints",
+            scan_id="scan-1",
+            node_id="node-1",
+            tenant_id="tenant-1",
+            exit_code=0,
+            scan_config={
+                "scope": {
+                    "allowed_hosts": ["example.com"],
+                    "include_subdomains": True,
+                    "max_endpoints": 10,
+                }
+            },
+        )
+
+        assert artifact["item_count"] == 1
+        assert artifact["items"][0]["surface"] == "api"
+        assert artifact["items"][0]["primary_technology"] == "GraphQL"
+        assert artifact["summary"]["technology_counts"]["GraphQL"] >= 1
+
+
+def test_normalize_web_interact_output_tracks_stateful_context_and_workflow_edges():
+    from app.engine.artifact_handler import normalize_output
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "web_interactions.json").write_text(
+            json.dumps(
+                {
+                    "pages": [
+                        {
+                            "url": "http://127.0.0.1:8088/login",
+                            "title": "Pentra Login",
+                            "status_code": 200,
+                            "session_label": "unauthenticated",
+                            "auth_state": "none",
+                        },
+                        {
+                            "url": "http://127.0.0.1:8088/portal/dashboard",
+                            "title": "Customer Dashboard",
+                            "status_code": 200,
+                            "session_label": "john",
+                            "auth_state": "authenticated",
+                            "requires_auth": True,
+                            "source_url": "http://127.0.0.1:8088/login",
+                        },
+                    ],
+                    "forms": [
+                        {
+                            "page_url": "http://127.0.0.1:8088/login",
+                            "action_url": "http://127.0.0.1:8088/login",
+                            "method": "POST",
+                            "field_names": ["username", "password", "csrf_token"],
+                            "hidden_field_names": ["csrf_token", "pentra_safe_replay"],
+                            "has_csrf": True,
+                            "safe_replay": True,
+                            "session_label": "unauthenticated",
+                        }
+                    ],
+                    "sessions": [
+                        {
+                            "session_label": "john",
+                            "auth_state": "authenticated",
+                            "cookie_names": ["pentra_session"],
+                            "csrf_tokens": ["demo-csrf"],
+                        }
+                    ],
+                    "workflows": [
+                        {
+                            "source_url": "http://127.0.0.1:8088/login",
+                            "target_url": "http://127.0.0.1:8088/portal/dashboard",
+                            "action": "login",
+                            "session_label": "john",
+                        }
+                    ],
+                    "replays": [
+                        {
+                            "request": "POST http://127.0.0.1:8088/login",
+                            "target_url": "http://127.0.0.1:8088/login",
+                            "session_label": "john",
+                            "status_code": 200,
+                        }
+                    ],
+                },
+                indent=2,
+            )
+        )
+
+        artifact = normalize_output(
+            output_dir=tmpdir,
+            output_parser="json",
+            tool_name="web_interact",
+            artifact_type="endpoints",
+            scan_id="scan-1",
+            node_id="node-1",
+            tenant_id="tenant-1",
+            exit_code=0,
+            scan_config={
+                "scope": {
+                    "allowed_hosts": ["127.0.0.1"],
+                    "max_endpoints": 20,
+                }
+            },
+        )
+
+        assert artifact["item_count"] >= 2
+        assert artifact["summary"]["stateful_context"]["session_count"] == 1
+        assert artifact["summary"]["stateful_context"]["form_count"] == 1
+        assert artifact["summary"]["stateful_context"]["workflow_count"] == 1
+        assert artifact["summary"]["stateful_context"]["replay_count"] == 1
+        assert any(edge["edge_type"] == "login" for edge in artifact["relationships"])
+        login_endpoint = next(item for item in artifact["items"] if item["url"].endswith("/login"))
+        assert login_endpoint["has_csrf"] is True
+        assert login_endpoint["interaction_kind"] == "form"
+
+
+def test_normalize_custom_poc_preserves_explicit_stateful_vulnerability_type():
+    from app.engine.artifact_handler import normalize_output
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "custom_poc.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "title": "Authorization bypass confirmed via stateful replay",
+                        "severity": "high",
+                        "confidence": 80,
+                        "target": "http://127.0.0.1:8088/portal/admin/users/2",
+                        "endpoint": "http://127.0.0.1:8088/portal/admin/users/2",
+                        "description": "Cross-session replay reached another user's record.",
+                        "tool_source": "custom_poc",
+                        "vulnerability_type": "auth_bypass",
+                        "request": "GET /portal/admin/users/2",
+                        "response": "HTTP/1.1 200 OK",
+                        "payload": "cross_session",
+                        "exploit_result": "unauthenticated_access_succeeded",
+                        "surface": "web",
+                        "route_group": "/portal/admin/users/{id}",
+                        "exploitability": "high",
+                    }
+                ],
+                indent=2,
+            )
+        )
+
+        artifact = normalize_output(
+            output_dir=tmpdir,
+            output_parser="json",
+            tool_name="custom_poc",
+            artifact_type="vulnerabilities",
+            scan_id="scan-1",
+            node_id="node-1",
+            tenant_id="tenant-1",
+            exit_code=0,
+            scan_config={
+                "scope": {
+                    "allowed_hosts": ["127.0.0.1"],
+                    "max_endpoints": 20,
+                }
+            },
+        )
+
+        assert artifact["findings"][0]["vulnerability_type"] == "auth_bypass"
+
+
+def test_parse_json_supports_pretty_printed_objects():
+    from app.engine.artifact_handler import _parse_json
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "object.json").write_text(
+            json.dumps({"pages": [{"url": "http://127.0.0.1:8088"}]}, indent=2)
+        )
+
+        items = _parse_json(Path(tmpdir))
+
+        assert items == [{"pages": [{"url": "http://127.0.0.1:8088"}]}]
+
+
+def test_normalize_vulnerabilities_applies_scope_limits_and_dedupes():
+    from app.engine.artifact_handler import normalize_output
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "nuclei.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "template-id": "pentra/sql-injection",
+                        "matched-at": "https://example.com/api/v1/auth/login",
+                        "info": {"name": "SQL Injection in Login Endpoint", "severity": "critical"},
+                        "payload": "admin' OR '1'='1",
+                    },
+                    {
+                        "template-id": "pentra/sql-injection-duplicate",
+                        "matched-at": "https://example.com/api/v1/auth/login",
+                        "info": {"name": "SQL Injection confirmed via sqlmap", "severity": "critical"},
+                        "payload": "admin' OR '1'='1",
+                    },
+                    {
+                        "template-id": "pentra/out-of-scope",
+                        "matched-at": "https://evil.com/api/v1/auth/login",
+                        "info": {"name": "Exposed OpenAPI Schema", "severity": "medium"},
+                    },
+                ]
+            )
+        )
+
+        artifact = normalize_output(
+            output_dir=tmpdir,
+            output_parser="json",
+            tool_name="nuclei",
+            artifact_type="vulnerabilities",
+            scan_id="scan-1",
+            node_id="node-1",
+            tenant_id="tenant-1",
+            exit_code=0,
+            scan_config={
+                "scope": {
+                    "allowed_hosts": ["example.com"],
+                    "include_subdomains": True,
+                    "max_endpoints": 10,
+                }
+            },
+        )
+
+        assert artifact["item_count"] == 1
+        assert len(artifact["findings"]) == 1
+        assert artifact["findings"][0]["exploitability"] == "high"
+        assert artifact["metadata"]["guardrail_stats"]["filtered_out_of_scope"] == 1
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -355,6 +775,20 @@ def test_worker_service_uses_all_components():
     assert "render_command" in source
     assert "normalize_output" in source
     assert "store_artifact" in source
+
+
+def test_worker_service_derives_per_tool_targets():
+    from app.services.worker_service import _command_target_for_tool
+
+    config = {
+        "targeting": {
+            "host": "example.com",
+            "base_url": "https://example.com",
+        }
+    }
+
+    assert _command_target_for_tool(tool_name="subfinder", target="https://example.com", config=config) == "example.com"
+    assert _command_target_for_tool(tool_name="nuclei", target="https://example.com", config=config) == "https://example.com"
 
 
 # ═══════════════════════════════════════════════════════════════════

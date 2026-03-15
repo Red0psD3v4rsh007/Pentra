@@ -5,6 +5,8 @@ command:
   - zap-baseline.py
   - -t
   - "{target}"
+  - -m
+  - "{zap_minutes}"
   - -J
   - "{output_dir}/zap.json"
 output_parser: json

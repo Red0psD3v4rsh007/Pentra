@@ -28,6 +28,7 @@ from pentra_common.events.stream_publisher import StreamPublisher
 from pentra_common.observability.logging import setup_logging
 
 from app.middleware.cors import configure_cors
+from app.middleware.request_context import RequestContextMiddleware
 from app.middleware.auth import AuthMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
 
@@ -93,10 +94,13 @@ def create_app() -> FastAPI:
     # 1. CORS — outermost, handles preflight
     configure_cors(app)
 
-    # 2. Auth — extracts JWT, populates request.state.user
+    # 2. Request context — request id + lightweight tracing
+    app.add_middleware(RequestContextMiddleware)
+
+    # 3. Auth — extracts JWT, populates request.state.user
     app.add_middleware(AuthMiddleware)
 
-    # 3. Rate limit — per-tenant, uses request.state.user.tenant_id
+    # 4. Rate limit — per-tenant, uses request.state.user.tenant_id
     app.add_middleware(RateLimitMiddleware)
 
     # ── Exception handlers ───────────────────────────────────────
@@ -131,6 +135,7 @@ async def _validation_error_handler(
         content={
             "detail": "Validation error",
             "errors": exc.errors(),
+            "request_id": getattr(request.state, "request_id", None),
         },
     )
 
@@ -141,7 +146,10 @@ async def _generic_error_handler(request: Request, exc: Exception) -> JSONRespon
     detail = str(exc) if settings.debug else "Internal server error"
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": detail},
+        content={
+            "detail": detail,
+            "request_id": getattr(request.state, "request_id", None),
+        },
     )
 
 

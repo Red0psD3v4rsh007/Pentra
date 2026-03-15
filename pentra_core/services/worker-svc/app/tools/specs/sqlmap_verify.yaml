@@ -1,17 +1,23 @@
 name: sqlmap_verify
 worker_family: exploit
-image: pentra/sqlmap:latest
+image: parrotsec/sqlmap:latest
 command:
-  - sqlmap
   - -u
-  - "{target}"
+  - "{sqlmap_target_url}"
   - --batch
+  - --flush-session
+  - --threads
+  - "1"
   - --level
   - "1"
   - --risk
   - "1"
+  - --technique
+  - "BU"
+  - --ignore-code
+  - "401"
   - --output-dir
   - "{output_dir}"
 output_parser: raw
 artifact_type: database_access
-default_timeout: 1200
+default_timeout: 900

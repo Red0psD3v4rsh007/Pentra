@@ -31,6 +31,7 @@ TENANT_ID  = "22222222-2222-2222-2222-222222222222"
 USER_ID    = "11111111-1111-1111-1111-111111111111"
 PROJECT_ID = "33333333-3333-3333-3333-333333333333"
 ASSET_ID   = "44444444-4444-4444-4444-444444444444"
+DEMO_ASSET_ID = "55555555-5555-5555-5555-555555555555"
 
 
 async def seed() -> None:
@@ -139,9 +140,32 @@ async def seed() -> None:
         else:
             print(f"· Asset exists: {ASSET_ID}")
 
+        # ── Local Phase 3 demo asset ───────────────────────────
+        exists = await session.execute(
+            text("SELECT 1 FROM assets WHERE id = :id"),
+            {"id": DEMO_ASSET_ID},
+        )
+        if not exists.scalar():
+            await session.execute(text("""
+                INSERT INTO assets (
+                    id, tenant_id, project_id, created_by,
+                    name, asset_type, target, is_verified
+                ) VALUES (
+                    :id, :tid, :pid, :uid,
+                    'Phase 3 Demo API', 'api', 'http://127.0.0.1:8088', true
+                )
+            """), {
+                "id": DEMO_ASSET_ID, "tid": TENANT_ID,
+                "pid": PROJECT_ID, "uid": USER_ID,
+            })
+            print(f"✓ Local demo asset created: {DEMO_ASSET_ID}")
+        else:
+            print(f"· Local demo asset exists: {DEMO_ASSET_ID}")
+
         await session.commit()
-        print("\n✅ Seed data ready. Dev asset ID for scan creation:")
+        print("\n✅ Seed data ready. Dev asset IDs for scan creation:")
         print(f"   asset_id = {ASSET_ID}")
+        print(f"   phase3_demo_asset_id = {DEMO_ASSET_ID}")
 
 
 async def main():

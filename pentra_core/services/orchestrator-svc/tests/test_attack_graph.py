@@ -203,6 +203,22 @@ def test_item_label_fallback():
     assert label == "vuln[3]"
 
 
+def test_report_artifacts_are_ignored_in_graph():
+    from app.engine.attack_graph_builder import AttackGraphBuilder
+
+    builder = AttackGraphBuilder.__new__(AttackGraphBuilder)
+    artifact = {
+        "id": str(uuid.uuid4()),
+        "artifact_type": "report",
+        "storage_ref": "ref",
+        "metadata": {"items": [{"title": "final report"}]},
+        "node_id": None,
+    }
+
+    nodes = builder._artifact_to_nodes(artifact)
+    assert nodes == []
+
+
 # ═══════════════════════════════════════════════════════════════════
 # 6. Graph builder — edge inference
 # ═══════════════════════════════════════════════════════════════════
@@ -230,6 +246,37 @@ def test_infer_edges_basic():
     assert ("a1", "s1", "discovery") in edge_pairs
     # vulnerability → privilege
     assert ("v1", "p1", "exploit") in edge_pairs
+
+
+def test_privilege_edges_only_flow_to_higher_access():
+    from app.engine.attack_graph_builder import AttackGraphBuilder, AttackGraph, AttackNode
+
+    builder = AttackGraphBuilder.__new__(AttackGraphBuilder)
+    g = AttackGraph(scan_id="s", tenant_id="t")
+    g.add_node(
+        AttackNode(
+            id="low",
+            node_type="privilege",
+            label="database access",
+            artifact_ref="ref",
+            properties={"artifact_type": "database_access", "target": "example.com"},
+        )
+    )
+    g.add_node(
+        AttackNode(
+            id="high",
+            node_type="privilege",
+            label="shell access",
+            artifact_ref="ref",
+            properties={"artifact_type": "shell_access", "target": "example.com"},
+        )
+    )
+
+    builder._infer_edges(g)
+    edge_pairs = {(e.source, e.target, e.edge_type) for e in g.edges}
+
+    assert ("low", "high", "privilege_escalation") in edge_pairs
+    assert ("high", "low", "privilege_escalation") not in edge_pairs
 
 
 # ═══════════════════════════════════════════════════════════════════

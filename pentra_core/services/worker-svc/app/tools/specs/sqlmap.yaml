@@ -1,11 +1,19 @@
 name: sqlmap
 worker_family: vuln
-image: pentra/sqlmap:latest
+image: parrotsec/sqlmap:latest
 command:
-  - sqlmap
   - -u
-  - "{target}"
+  - "{sqlmap_target_url}"
   - --batch
+  - --flush-session
+  - --threads
+  - "{sqlmap_threads}"
+  - --risk
+  - "2"
+  - --level
+  - "3"
+  - --ignore-code
+  - "401"
   - --output-dir
   - "{output_dir}"
 output_parser: raw

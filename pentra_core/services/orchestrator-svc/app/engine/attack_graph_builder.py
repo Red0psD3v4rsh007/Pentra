@@ -13,8 +13,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pentra_common.storage.artifacts import read_json_artifact, write_json_artifact
+from pentra_common.storage.retention import apply_artifact_retention_metadata
 
 logger = logging.getLogger(__name__)
+
+_IGNORED_ARTIFACT_TYPES = {"report"}
 
 
 @dataclass
@@ -102,21 +105,30 @@ _ENTRYPOINTS = {
         node_type="entrypoint",
         label="External Attacker",
         artifact_ref="",
-        properties={"description": "Unauthenticated external adversary"},
+        properties={
+            "description": "Unauthenticated external adversary",
+            "entity_key": "entrypoint:external_attacker",
+        },
     ),
     "internet_exposed_service": AttackNode(
         id="entrypoint:internet_exposed",
         node_type="entrypoint",
         label="Internet-Exposed Service",
         artifact_ref="",
-        properties={"description": "Publicly accessible network service"},
+        properties={
+            "description": "Publicly accessible network service",
+            "entity_key": "entrypoint:internet_exposed",
+        },
     ),
     "unauthenticated_access": AttackNode(
         id="entrypoint:unauthenticated",
         node_type="entrypoint",
         label="Unauthenticated Access",
         artifact_ref="",
-        properties={"description": "Access without credentials"},
+        properties={
+            "description": "Access without credentials",
+            "entity_key": "entrypoint:unauthenticated",
+        },
     ),
 }
 
@@ -239,13 +251,16 @@ class AttackGraphBuilder:
                 "size": size_bytes,
                 "checksum": checksum,
                 "meta": json.dumps(
-                    {
-                        "node_count": len(graph.nodes),
-                        "edge_count": len(graph.edges),
-                        "built_at": graph.built_at,
-                        "path_summary": graph.path_summary,
-                        "scoring_summary": graph.scoring_summary,
-                    }
+                    apply_artifact_retention_metadata(
+                        {
+                            "node_count": len(graph.nodes),
+                            "edge_count": len(graph.edges),
+                            "built_at": graph.built_at,
+                            "path_summary": graph.path_summary,
+                            "scoring_summary": graph.scoring_summary,
+                        },
+                        policy="graph",
+                    )
                 ),
             },
         )
@@ -302,6 +317,8 @@ class AttackGraphBuilder:
         """Convert an artifact into one or more graph nodes."""
         payload = payload or self._load_artifact_payload(artifact)
         artifact_type = str(artifact.get("artifact_type", "unknown"))
+        if artifact_type in _IGNORED_ARTIFACT_TYPES:
+            return []
         node_type = _ARTIFACT_NODE_TYPE.get(artifact_type, "asset")
         storage_ref = str(artifact.get("storage_ref", ""))
         artifact_id = str(artifact.get("id", ""))
@@ -519,6 +536,69 @@ class AttackGraphBuilder:
             return not source_target or source_target in target_target
 
         if source.node_type == "privilege" and target.node_type == "privilege":
-            return source.id != target.id
+            if source.id == target.id:
+                return False
+            if not self._same_target_context(source, target):
+                return False
+            return self._privilege_rank(source) < self._privilege_rank(target)
 
         return True
+
+    def _same_target_context(self, source: AttackNode, target: AttackNode) -> bool:
+        source_target = self._node_target_context(source)
+        target_target = self._node_target_context(target)
+
+        if source_target and target_target:
+            return (
+                source_target == target_target
+                or source_target in target_target
+                or target_target in source_target
+            )
+
+        source_key = str(source.properties.get("entity_key") or "")
+        target_key = str(target.properties.get("entity_key") or "")
+        if source_key and target_key:
+            return source_key == target_key
+
+        return False
+
+    def _node_target_context(self, node: AttackNode) -> str:
+        return str(
+            node.properties.get("target")
+            or node.properties.get("host")
+            or node.properties.get("endpoint")
+            or node.properties.get("url")
+            or ""
+        ).lower()
+
+    def _privilege_rank(self, node: AttackNode) -> int:
+        artifact_type = str(node.properties.get("artifact_type") or "").lower()
+        access_text = " ".join(
+            str(value).lower()
+            for value in (
+                node.properties.get("access_level"),
+                node.properties.get("target"),
+                node.label,
+                artifact_type,
+            )
+            if value
+        )
+
+        rank = {
+            "access_levels": 1,
+            "database_access": 2,
+            "shell_access": 3,
+            "verified_impact": 4,
+            "privilege_escalation": 5,
+        }.get(artifact_type, 0)
+
+        if any(token in access_text for token in ("read", "viewer", "user", "basic")):
+            rank = max(rank, 1)
+        if any(token in access_text for token in ("db", "database", "dba")):
+            rank = max(rank, 2)
+        if any(token in access_text for token in ("shell", "command", "exec")):
+            rank = max(rank, 3)
+        if any(token in access_text for token in ("admin", "root", "system", "superuser")):
+            rank = max(rank, 4)
+
+        return rank

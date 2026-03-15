@@ -1,7 +1,7 @@
 "use client"
 
 import type { ElementType, KeyboardEvent } from "react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
@@ -11,12 +11,14 @@ import {
   Check,
   ChevronLeft,
   Globe,
+  Plus,
   Radar,
   Search,
   Shield,
   Sparkles,
 } from "lucide-react"
 
+import { AssetIntakeForm } from "@/components/assets/asset-intake-form"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -27,7 +29,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
-import { useCreateScan, useScanCatalog } from "@/hooks/use-scans"
+import { useAssetCatalog, useCreateScan } from "@/hooks/use-scans"
 import {
   formatAssetType,
   formatPriority,
@@ -55,12 +57,24 @@ const profileIcons: Record<ScanType, ElementType> = {
 
 export default function NewScanPage() {
   const router = useRouter()
-  const { assets, isLoading, error, refresh } = useScanCatalog()
+  const { assets, projects, isLoading, error, refresh } = useAssetCatalog()
   const { createScan, isSubmitting, error: submitError } = useCreateScan()
   const [currentStep, setCurrentStep] = useState<Step>(1)
   const [assetQuery, setAssetQuery] = useState("")
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
   const [selectedProfile, setSelectedProfile] = useState<ScanType | null>("recon")
+  const [showCreateAsset, setShowCreateAsset] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    const assetIdFromQuery = new URLSearchParams(window.location.search).get("assetId")
+    if (assetIdFromQuery) {
+      setSelectedAssetId(assetIdFromQuery)
+    }
+  }, [])
 
   const query = assetQuery.trim().toLowerCase()
   const filteredAssets = !query
@@ -230,8 +244,49 @@ export default function NewScanPage() {
                   <div>
                     <h2 className="text-xl font-semibold text-foreground">Choose an asset</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Pick one of the seeded project assets to launch a real scan against.
+                      Pick an existing target or create a new project-backed asset inline.
                     </p>
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-card p-5">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="max-w-2xl">
+                        <p className="text-sm font-semibold text-foreground">
+                          Need a new target?
+                        </p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Create a project and asset here, then continue the real scan flow
+                          without leaving this page.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateAsset((current) => !current)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-elevated"
+                      >
+                        <Plus className="h-4 w-4" />
+                        {showCreateAsset ? "Hide intake" : "Create asset target"}
+                      </button>
+                    </div>
+
+                    {showCreateAsset ? (
+                      <div className="mt-5">
+                        <AssetIntakeForm
+                          projects={projects}
+                          submitLabel="Create asset and continue"
+                          title="Create asset and keep scanning"
+                          description="This creates a real project/asset through the API, then selects it here so you can immediately launch a scan."
+                          onCancel={() => setShowCreateAsset(false)}
+                          onCreated={({ asset }) => {
+                            refresh()
+                            setSelectedAssetId(asset.id)
+                            setAssetQuery("")
+                            setShowCreateAsset(false)
+                          }}
+                        />
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="relative">
@@ -259,10 +314,13 @@ export default function NewScanPage() {
                         <EmptyMedia variant="icon">
                           <Globe className="h-6 w-6" />
                         </EmptyMedia>
-                        <EmptyTitle>No assets match this search</EmptyTitle>
+                        <EmptyTitle>
+                          {assets.length === 0 ? "No assets available yet" : "No assets match this search"}
+                        </EmptyTitle>
                         <EmptyDescription>
-                          Clear the search query or re-run the Phase 0 seed flow to restore the
-                          development asset.
+                          {assets.length === 0
+                            ? "Create your first real asset above, then Pentra can launch a scan against it."
+                            : "Clear the search query or create a new asset target above."}
                         </EmptyDescription>
                       </EmptyHeader>
                     </Empty>

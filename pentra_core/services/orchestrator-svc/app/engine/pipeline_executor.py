@@ -18,6 +18,7 @@ import uuid
 from typing import Any
 
 import redis.asyncio as aioredis
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine.dependency_resolver import DependencyResolver, ReadyNode
@@ -99,6 +100,9 @@ class PipelineExecutor:
                 "items": (output_summary or {}).get("preview_items", []),
                 "findings": (output_summary or {}).get("preview_findings", []),
                 "duration_ms": int((output_summary or {}).get("duration_ms", 0) or 0),
+                "execution_mode": (output_summary or {}).get("execution_mode"),
+                "execution_provenance": (output_summary or {}).get("execution_provenance"),
+                "execution_reason": (output_summary or {}).get("execution_reason"),
             },
         )
 
@@ -116,12 +120,14 @@ class PipelineExecutor:
         # 4 — Dispatch all ready nodes
         dispatched = []
         if all_ready:
+            scan_config = await self._load_scan_config(scan_id)
             dispatched = await self._dispatcher.dispatch_nodes(
                 all_ready,
                 scan_id=scan_id,
                 tenant_id=tenant_id,
                 target=target,
                 priority=priority,
+                config=scan_config,
             )
 
         # 5 — Update scan progress
@@ -179,12 +185,14 @@ class PipelineExecutor:
         # 4 — Dispatch ready nodes
         dispatched = []
         if all_ready:
+            scan_config = await self._load_scan_config(scan_id)
             dispatched = await self._dispatcher.dispatch_nodes(
                 all_ready,
                 scan_id=scan_id,
                 tenant_id=tenant_id,
                 target=target,
                 priority=priority,
+                config=scan_config,
             )
 
         # 5 — Update scan progress
@@ -229,12 +237,14 @@ class PipelineExecutor:
         # Dispatch
         dispatched = []
         if all_ready:
+            scan_config = await self._load_scan_config(scan_id)
             dispatched = await self._dispatcher.dispatch_nodes(
                 all_ready,
                 scan_id=scan_id,
                 tenant_id=tenant_id,
                 target=target,
                 priority=priority,
+                config=scan_config,
             )
 
         logger.info(
@@ -243,3 +253,11 @@ class PipelineExecutor:
         )
 
         return {"dispatched_count": len(dispatched)}
+
+    async def _load_scan_config(self, scan_id: uuid.UUID) -> dict[str, Any]:
+        result = await self._session.execute(
+            text("SELECT config FROM scans WHERE id = :id"),
+            {"id": str(scan_id)},
+        )
+        value = result.scalar_one_or_none()
+        return value if isinstance(value, dict) else {}

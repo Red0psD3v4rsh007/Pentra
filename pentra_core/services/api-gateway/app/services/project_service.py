@@ -13,6 +13,7 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.asset import Asset
 from app.models.project import Project
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,37 @@ def _slugify(name: str) -> str:
     slug = name.lower().strip()
     slug = re.sub(r"[^a-z0-9]+", "-", slug)
     return slug.strip("-") or "project"
+
+
+def _attach_asset_counts(
+    projects: list[Project],
+    counts: dict[uuid.UUID, int],
+) -> list[Project]:
+    for project in projects:
+        setattr(project, "asset_count", int(counts.get(project.id, 0)))
+    return projects
+
+
+async def _load_asset_counts(
+    *,
+    tenant_id: uuid.UUID,
+    project_ids: list[uuid.UUID],
+    session: AsyncSession,
+) -> dict[uuid.UUID, int]:
+    if not project_ids:
+        return {}
+
+    stmt = (
+        select(Asset.project_id, func.count())
+        .where(
+            Asset.tenant_id == tenant_id,
+            Asset.is_active == True,  # noqa: E712
+            Asset.project_id.in_(project_ids),
+        )
+        .group_by(Asset.project_id)
+    )
+    rows = (await session.execute(stmt)).all()
+    return {project_id: int(count) for project_id, count in rows}
 
 
 async def create_project(
@@ -49,6 +81,7 @@ async def create_project(
 
 async def list_projects(
     *,
+    tenant_id: uuid.UUID,
     session: AsyncSession,
     page: int = 1,
     page_size: int = 20,
@@ -57,41 +90,66 @@ async def list_projects(
 
     Returns ``(items, total_count)``.
     """
-    count_stmt = select(func.count()).select_from(Project).where(Project.is_active == True)  # noqa: E712
+    count_stmt = select(func.count()).select_from(Project).where(  # noqa: E712
+        Project.tenant_id == tenant_id,
+        Project.is_active == True,
+    )
     total = (await session.execute(count_stmt)).scalar_one()
 
     offset = (page - 1) * page_size
     stmt = (
         select(Project)
-        .where(Project.is_active == True)  # noqa: E712
+        .where(Project.tenant_id == tenant_id, Project.is_active == True)  # noqa: E712
         .order_by(Project.created_at.desc())
         .offset(offset)
         .limit(page_size)
     )
     result = await session.execute(stmt)
-    return list(result.scalars().all()), total
+    projects = list(result.scalars().all())
+    counts = await _load_asset_counts(
+        tenant_id=tenant_id,
+        project_ids=[project.id for project in projects],
+        session=session,
+    )
+    return _attach_asset_counts(projects, counts), total
 
 
 async def get_project(
-    *, project_id: uuid.UUID, session: AsyncSession
+    *, project_id: uuid.UUID, tenant_id: uuid.UUID, session: AsyncSession
 ) -> Project | None:
     """Fetch a single project by ID (RLS enforces tenant scope)."""
     stmt = select(Project).where(
-        Project.id == project_id, Project.is_active == True  # noqa: E712
+        Project.id == project_id,
+        Project.tenant_id == tenant_id,
+        Project.is_active == True,  # noqa: E712
     )
     result = await session.execute(stmt)
-    return result.scalar_one_or_none()
+    project = result.scalar_one_or_none()
+    if project is None:
+        return None
+
+    counts = await _load_asset_counts(
+        tenant_id=tenant_id,
+        project_ids=[project.id],
+        session=session,
+    )
+    return _attach_asset_counts([project], counts)[0]
 
 
 async def update_project(
     *,
     project_id: uuid.UUID,
+    tenant_id: uuid.UUID,
     name: str | None,
     description: str | None,
     session: AsyncSession,
 ) -> Project:
     """Update mutable project fields."""
-    project = await get_project(project_id=project_id, session=session)
+    project = await get_project(
+        project_id=project_id,
+        tenant_id=tenant_id,
+        session=session,
+    )
     if project is None:
         raise ValueError("Project not found")
 
@@ -105,10 +163,14 @@ async def update_project(
 
 
 async def delete_project(
-    *, project_id: uuid.UUID, session: AsyncSession
+    *, project_id: uuid.UUID, tenant_id: uuid.UUID, session: AsyncSession
 ) -> None:
     """Soft-delete a project by setting ``is_active = False``."""
-    project = await get_project(project_id=project_id, session=session)
+    project = await get_project(
+        project_id=project_id,
+        tenant_id=tenant_id,
+        session=session,
+    )
     if project is None:
         raise ValueError("Project not found")
 

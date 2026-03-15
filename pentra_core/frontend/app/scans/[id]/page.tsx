@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useParams, useSearchParams } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import { AlertCircle, RefreshCw } from "lucide-react"
 
@@ -52,11 +52,19 @@ export default function ScanDetailPage() {
     timeline,
     evidence,
     report,
+    aiReasoning,
+    advisoryMode,
     isLoading,
     isRefreshing,
+    isRefreshingAiReasoning,
+    isLaunchingRetest,
     error,
     refresh,
+    selectAdvisoryMode,
+    refreshAiReasoning,
+    launchRetest,
   } = useScan(scanId)
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState<TabType>(tabFromQuery(searchParams.get("tab")))
 
   useEffect(() => {
@@ -142,15 +150,41 @@ export default function ScanDetailPage() {
           />
         )
       case "Findings":
-        return <FindingsTab findings={findings} />
+        return <FindingsTab findings={findings} advisory={aiReasoning} />
       case "Attack Graph":
-        return <AttackGraphTab graph={attackGraph} />
+        return (
+          <AttackGraphTab
+            graph={attackGraph}
+            advisory={aiReasoning}
+            advisoryMode={advisoryMode}
+            onChangeAdvisoryMode={selectAdvisoryMode}
+            onRegenerateAdvisory={refreshAiReasoning}
+            isRegeneratingAdvisory={isRefreshingAiReasoning}
+          />
+        )
       case "Evidence":
         return <EvidenceTab evidence={evidence} />
       case "Timeline":
         return <TimelineTab events={timeline} />
       case "Report":
-        return <ReportTab report={report} />
+        return (
+          <ReportTab
+            scanId={currentScan.id}
+            report={report}
+            advisory={aiReasoning}
+            advisoryMode={advisoryMode}
+            onChangeAdvisoryMode={selectAdvisoryMode}
+            onRegenerateAdvisory={refreshAiReasoning}
+            isRegeneratingAdvisory={isRefreshingAiReasoning}
+            isLaunchingRetest={isLaunchingRetest}
+            onLaunchRetest={async () => {
+              try {
+                const nextScan = await launchRetest()
+                router.push(`/scans/${nextScan.id}`)
+              } catch {}
+            }}
+          />
+        )
       default:
         return null
     }

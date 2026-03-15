@@ -105,6 +105,32 @@ from sqlalchemy.types import Numeric
 from pentra_common.db.base import Base, TenantMixin
 
 
+def _normalize_vulnerability_type(
+    value: str | None,
+    *,
+    title: str = "",
+    description: str = "",
+) -> str | None:
+    raw = str(value or "").strip().lower()
+    text = " ".join(part for part in (raw, title, description) if part).lower()
+    aliases = (
+        ("auth_bypass", ("auth_bypass", "authorization bypass", "auth bypass", "cross_session")),
+        (
+            "workflow_bypass",
+            ("workflow_bypass", "workflow bypass", "step_bypass", "skip_step", "swap_order", "repeat_step"),
+        ),
+        ("idor", ("idor", "insecure direct object reference", "object level authorization")),
+        ("privilege_escalation", ("privilege_escalation", "privilege escalation")),
+        ("sql_injection", ("sql_injection", "sql injection", "sqli")),
+    )
+    for normalized, patterns in aliases:
+        if raw == normalized:
+            return normalized
+        if any(pattern in text for pattern in patterns):
+            return normalized
+    return raw or None
+
+
 class Finding(Base, TenantMixin):
     """Vulnerability finding produced by scanners, exploit verification, or AI analysis."""
 
@@ -202,3 +228,135 @@ class Finding(Base, TenantMixin):
         "Scan",
         back_populates="findings",
     )
+
+    @property
+    def exploitability(self) -> str | None:
+        evidence = self.evidence or {}
+        if not isinstance(evidence, dict):
+            return None
+        classification = evidence.get("classification") or {}
+        if not isinstance(classification, dict):
+            return None
+        value = classification.get("exploitability")
+        return str(value) if value else None
+
+    @property
+    def surface(self) -> str | None:
+        evidence = self.evidence or {}
+        if not isinstance(evidence, dict):
+            return None
+        classification = evidence.get("classification") or {}
+        if not isinstance(classification, dict):
+            return None
+        value = classification.get("surface")
+        return str(value) if value else None
+
+    @property
+    def execution_mode(self) -> str | None:
+        evidence = self.evidence or {}
+        if not isinstance(evidence, dict):
+            return None
+        classification = evidence.get("classification") or {}
+        if isinstance(classification, dict):
+            value = classification.get("execution_mode")
+            if value:
+                return str(value)
+        metadata = evidence.get("metadata") or {}
+        if isinstance(metadata, dict):
+            value = metadata.get("execution_mode")
+            if value:
+                return str(value)
+        return None
+
+    @property
+    def execution_provenance(self) -> str | None:
+        evidence = self.evidence or {}
+        if not isinstance(evidence, dict):
+            return "inferred" if str(self.source_type) == "ai_analysis" else None
+        classification = evidence.get("classification") or {}
+        if isinstance(classification, dict):
+            value = classification.get("execution_provenance")
+            if value:
+                return str(value)
+        metadata = evidence.get("metadata") or {}
+        if isinstance(metadata, dict):
+            value = metadata.get("execution_provenance")
+            if value:
+                return str(value)
+        return "inferred" if str(self.source_type) == "ai_analysis" else None
+
+    @property
+    def execution_reason(self) -> str | None:
+        evidence = self.evidence or {}
+        if not isinstance(evidence, dict):
+            return None
+        classification = evidence.get("classification") or {}
+        if isinstance(classification, dict):
+            value = classification.get("execution_reason")
+            if value:
+                return str(value)
+        metadata = evidence.get("metadata") or {}
+        if isinstance(metadata, dict):
+            value = metadata.get("execution_reason")
+            if value:
+                return str(value)
+        return None
+
+    @property
+    def verification_state(self) -> str | None:
+        evidence = self.evidence or {}
+        if not isinstance(evidence, dict):
+            return None
+        classification = evidence.get("classification") or {}
+        if not isinstance(classification, dict):
+            return None
+        value = classification.get("verification_state")
+        return str(value) if value else None
+
+    @property
+    def verification_confidence(self) -> int | None:
+        evidence = self.evidence or {}
+        if not isinstance(evidence, dict):
+            return None
+        classification = evidence.get("classification") or {}
+        if not isinstance(classification, dict):
+            return None
+        value = classification.get("verification_confidence")
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @property
+    def verified_at(self) -> datetime | None:
+        evidence = self.evidence or {}
+        if not isinstance(evidence, dict):
+            return None
+        metadata = evidence.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            return None
+        value = metadata.get("verified_at")
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            return datetime.fromisoformat(str(value))
+        except ValueError:
+            return None
+
+    @property
+    def vulnerability_type(self) -> str | None:
+        evidence = self.evidence or {}
+        if not isinstance(evidence, dict):
+            return None
+        classification = evidence.get("classification") or {}
+        if not isinstance(classification, dict):
+            classification = {}
+        return _normalize_vulnerability_type(
+            classification.get("vulnerability_type"),
+            title=self.title,
+            description=self.description or "",
+        )

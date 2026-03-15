@@ -83,12 +83,16 @@ export interface ApiScanJob {
     | "completed"
     | "failed"
     | "skipped"
+    | "blocked"
   priority: string
   worker_id: string | null
   started_at: string | null
   completed_at: string | null
   error_message: string | null
   retry_count: number
+  execution_mode: string | null
+  execution_provenance: "live" | "simulated" | "blocked" | "inferred" | null
+  execution_reason: string | null
   created_at: string
 }
 
@@ -106,6 +110,15 @@ export interface ApiFinding {
   evidence: Record<string, unknown> | null
   remediation: string | null
   tool_source: string
+  vulnerability_type: string | null
+  exploitability: string | null
+  surface: string | null
+  execution_mode: string | null
+  execution_provenance: "live" | "simulated" | "blocked" | "inferred" | null
+  execution_reason: string | null
+  verification_state: "detected" | "suspected" | "verified" | null
+  verification_confidence: number | null
+  verified_at: string | null
   is_false_positive: boolean
   fp_probability: number | null
   created_at: string
@@ -126,6 +139,9 @@ export interface ApiArtifactSummary {
   evidence_count: number
   severity_counts: Record<string, number>
   summary: Record<string, unknown>
+  execution_mode: string | null
+  execution_provenance: "live" | "simulated" | "blocked" | "inferred" | null
+  execution_reason: string | null
   created_at: string
 }
 
@@ -186,24 +202,173 @@ export interface ApiEvidenceReference {
 }
 
 export interface ApiScanReport {
+  asset: {
+    id: string
+    name: string
+    target: string
+    asset_type: string
+    project_id?: string
+    project_name?: string | null
+    description?: string | null
+  }
   scan_id: string
   report_id: string
   generated_at: string
   executive_summary: string
   severity_counts: Record<string, number>
+  verification_counts: Record<string, number>
+  execution_summary: Record<string, number>
   vulnerability_count: number
   evidence_count: number
-  narrative: Record<string, unknown> | null
-  compliance: Record<string, unknown>[]
+  narrative: {
+    title: string
+    summary: string
+    impact: string
+    steps: Array<{
+      step: number
+      action: string
+      description: string
+      target: string
+      risk: string
+      artifact_ref?: string | null
+    }>
+    recommendations: string[]
+    targets_reached: string[]
+  } | null
+  compliance: Array<{
+    vulnerability_type: string
+    owasp: string[]
+    cwe: string[]
+  }>
+  finding_groups: Array<{
+    group_id: string
+    title: string
+    surface: string
+    target: string
+    route_group: string | null
+    severity_counts: Record<string, number>
+    verification_counts: Record<string, number>
+    findings: Array<{
+      id: string
+      title: string
+      severity: string
+      confidence: number
+      vulnerability_type: string | null
+      target: string
+      route_group: string | null
+      verification_state: string | null
+      verification_confidence: number | null
+      exploitability: string | null
+      surface: string | null
+      cvss_score: number | null
+      description: string | null
+      remediation: string | null
+      tool_source: string
+      created_at: string
+    }>
+  }>
+  remediation_plan: Array<{
+    plan_id: string
+    title: string
+    priority: "immediate" | "high" | "medium" | "low"
+    owner_hint: string
+    rationale: string
+    actions: string[]
+    related_finding_ids: string[]
+    related_vulnerability_types: string[]
+    related_targets: string[]
+  }>
+  comparison: {
+    current_scan_id: string
+    baseline_scan_id: string | null
+    generated_at: string
+    baseline_generated_at: string | null
+    summary: string
+    counts: Record<string, number>
+    severity_delta: Record<string, number>
+    verification_delta: Record<string, number>
+    new_findings: Array<Record<string, unknown>>
+    resolved_findings: Array<Record<string, unknown>>
+    escalated_findings: Array<Record<string, unknown>>
+  } | null
+  retest: {
+    eligible: boolean
+    recommended_scan_type: string
+    recommended_priority: string
+    baseline_scan_id: string
+    compare_against_scan_id: string | null
+    launch_endpoint: string
+  } | null
+  export_formats: Array<"markdown" | "json" | "csv">
   top_findings: Array<{
     id: string
     title: string
     severity: string
+    vulnerability_type?: string | null
+    verification_state: string | null
+    verification_confidence: number | null
     cvss_score: number | null
     description: string | null
     remediation: string | null
   }>
   markdown: string
+}
+
+export type ReportExportFormat = "markdown" | "json" | "csv"
+
+export interface ApiAiAdvisoryNextStep {
+  title: string
+  rationale: string
+  confidence: number
+}
+
+export interface ApiAiAttackGraphSummary {
+  summary: string
+  risk_overview: string
+  next_steps: ApiAiAdvisoryNextStep[]
+  confidence: number
+}
+
+export interface ApiAiFindingExplanation {
+  finding_id: string | null
+  title: string
+  why_it_matters: string
+  business_impact: string
+  exploitability_assessment: string
+  triage_priority: "immediate" | "high" | "medium" | "low"
+  next_steps: string[]
+  confidence: number
+}
+
+export interface ApiAiReportAdvisory {
+  draft_summary: string
+  prioritization_notes: string
+  remediation_focus: string[]
+  confidence: number
+}
+
+export interface ApiAiReasoningAudit {
+  artifact_id: string | null
+  storage_ref: string | null
+  context_hash: string
+  prompt_version: string
+  prompt_artifact_type: string
+}
+
+export type AiAdvisoryMode = "advisory_only" | "deep_advisory"
+
+export interface ApiScanAiReasoning {
+  scan_id: string
+  generated_at: string
+  provider: string
+  model: string
+  advisory_mode: AiAdvisoryMode
+  status: "generated" | "fallback" | "disabled"
+  fallback_reason: string | null
+  attack_graph: ApiAiAttackGraphSummary
+  report: ApiAiReportAdvisory
+  findings: ApiAiFindingExplanation[]
+  audit: ApiAiReasoningAudit
 }
 
 export interface SeverityCounts {
@@ -251,14 +416,37 @@ export interface ScanDetail {
   timeline: ApiTimelineEvent[]
   evidence: ApiEvidenceReference[]
   report: ApiScanReport | null
+  aiReasoning: ApiScanAiReasoning | null
   isTerminal: boolean
 }
+
+export const DEFAULT_AI_ADVISORY_MODE: AiAdvisoryMode = "advisory_only"
 
 export interface CreateScanInput {
   assetId: string
   scanType: ScanType
   priority?: ScanPriority
   config?: Record<string, unknown>
+}
+
+export interface CreateProjectInput {
+  name: string
+  slug?: string
+  description?: string
+}
+
+export interface CreateAssetInput {
+  projectId: string
+  name: string
+  assetType: ApiAsset["asset_type"]
+  target: string
+  description?: string
+  tags?: Record<string, string>
+}
+
+export interface CreateRetestInput {
+  priority?: ScanPriority
+  configOverrides?: Record<string, unknown>
 }
 
 export interface ScanStatusMeta {
@@ -621,6 +809,38 @@ export function formatRelativeTime(timestamp?: string | null): string {
   return `${deltaDays}d ago`
 }
 
+export function formatExecutionProvenance(
+  provenance?: "live" | "simulated" | "blocked" | "inferred" | null
+): string {
+  switch (provenance) {
+    case "live":
+      return "Live"
+    case "simulated":
+      return "Simulated"
+    case "blocked":
+      return "Blocked"
+    case "inferred":
+      return "Inferred"
+    default:
+      return "Unknown"
+  }
+}
+
+export function formatExecutionReason(reason?: string | null): string {
+  switch (reason) {
+    case "not_supported":
+      return "Not supported in this live mode"
+    case "target_policy_blocked":
+      return "Blocked by target policy"
+    case "demo_simulated_mode":
+      return "Explicit demo simulation mode"
+    case "container_execution_error":
+      return "Container execution error"
+    default:
+      return reason ?? "No additional detail"
+  }
+}
+
 export function aggregateSeverityCounts(findings: ApiFinding[]): SeverityCounts {
   const counts: SeverityCounts = {
     critical: 0,
@@ -756,6 +976,7 @@ export async function listScans(options?: {
   page?: number
   pageSize?: number
   status?: string
+  assetId?: string
 }): Promise<PaginatedResponse<Scan>> {
   const params = new URLSearchParams()
   params.set("page", String(options?.page ?? 1))
@@ -763,6 +984,9 @@ export async function listScans(options?: {
 
   if (options?.status) {
     params.set("status", options.status)
+  }
+  if (options?.assetId) {
+    params.set("asset_id", options.assetId)
   }
 
   const response = await apiFetch<PaginatedResponse<ApiScan>>(
@@ -795,6 +1019,44 @@ export async function listProjectAssets(
 
   response.items.forEach((asset) => setAssetCache(asset))
   return response.items
+}
+
+export async function getProject(projectId: string): Promise<ApiProject> {
+  return fetchProject(projectId)
+}
+
+export async function getAsset(assetId: string): Promise<ApiAsset> {
+  return fetchAsset(assetId)
+}
+
+export async function createProject(input: CreateProjectInput): Promise<ApiProject> {
+  const project = await apiFetch<ApiProject>("/api/v1/projects", {
+    method: "POST",
+    body: JSON.stringify({
+      name: input.name,
+      slug: input.slug,
+      description: input.description,
+    }),
+  })
+
+  setProjectCache(project)
+  return project
+}
+
+export async function createAsset(input: CreateAssetInput): Promise<ApiAsset> {
+  const asset = await apiFetch<ApiAsset>(`/api/v1/projects/${input.projectId}/assets`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: input.name,
+      asset_type: input.assetType,
+      target: input.target,
+      description: input.description,
+      tags: input.tags ?? {},
+    }),
+  })
+
+  setAssetCache(asset)
+  return asset
 }
 
 export async function listAvailableAssets(): Promise<ScanAsset[]> {
@@ -833,9 +1095,79 @@ export async function createScan(input: CreateScanInput): Promise<Scan> {
   return toScanSummary(created, asset)
 }
 
-export async function getScanDetail(scanId: string): Promise<ScanDetail> {
-  const [scan, jobs, findingsResponse, artifacts, attackGraph, timeline, evidence, report] = await Promise.all([
-    apiFetch<ApiScan>(`/api/v1/scans/${scanId}`),
+export async function createRetestScan(
+  scanId: string,
+  input?: CreateRetestInput
+): Promise<Scan> {
+  const created = await apiFetch<ApiScan>(`/api/v1/scans/${scanId}/retest`, {
+    method: "POST",
+    body: JSON.stringify({
+      priority: input?.priority,
+      config_overrides: input?.configOverrides ?? {},
+    }),
+  })
+
+  const asset = await fetchAsset(created.asset_id).catch(() => undefined)
+  return toScanSummary(created, asset)
+}
+
+export async function downloadScanReportExport(
+  scanId: string,
+  format: ReportExportFormat
+): Promise<void> {
+  const headers = buildHeaders()
+  const response = await fetch(
+    `${getApiBaseUrl()}/api/v1/scans/${scanId}/report/export?format=${format}`,
+    {
+      headers,
+      cache: "no-store",
+    }
+  )
+
+  if (!response.ok) {
+    const detail = await response.text()
+    throw new Error(detail || `Failed to export report (${response.status})`)
+  }
+
+  const blob = await response.blob()
+  const url = window.URL.createObjectURL(blob)
+  const anchor = document.createElement("a")
+  const disposition = response.headers.get("Content-Disposition") ?? ""
+  const match = disposition.match(/filename=\"([^\"]+)\"/)
+  anchor.href = url
+  anchor.download = match?.[1] ?? `pentra-report-${scanId}.${format === "markdown" ? "md" : format}`
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+export async function getScanAiReasoning(
+  scanId: string,
+  options?: { refresh?: boolean; advisoryMode?: AiAdvisoryMode }
+): Promise<ApiScanAiReasoning | null> {
+  const params = new URLSearchParams()
+  if (options?.refresh) {
+    params.set("refresh", "true")
+  }
+  if (options?.advisoryMode) {
+    params.set("mode", options.advisoryMode)
+  }
+
+  const suffix = params.size > 0 ? `?${params.toString()}` : ""
+  return apiFetchOptional<ApiScanAiReasoning | null>(
+    `/api/v1/scans/${scanId}/ai-reasoning${suffix}`,
+    null
+  )
+}
+
+export async function getScanDetail(
+  scanId: string,
+  options?: { advisoryMode?: AiAdvisoryMode }
+): Promise<ScanDetail> {
+  const scan = await apiFetch<ApiScan>(`/api/v1/scans/${scanId}`)
+
+  const [jobs, findingsResponse, artifacts, attackGraph, timeline, evidence, report] = await Promise.all([
     apiFetch<ApiScanJob[]>(`/api/v1/scans/${scanId}/jobs`),
     apiFetch<PaginatedResponse<ApiFinding>>(
       `/api/v1/scans/${scanId}/findings?page=1&page_size=100`
@@ -846,6 +1178,10 @@ export async function getScanDetail(scanId: string): Promise<ScanDetail> {
     apiFetch<ApiEvidenceReference[]>(`/api/v1/scans/${scanId}/evidence`),
     apiFetchOptional<ApiScanReport | null>(`/api/v1/scans/${scanId}/report`, null),
   ])
+
+  const aiReasoning = isTerminalScanStatus(scan.status)
+    ? await getScanAiReasoning(scanId, { advisoryMode: options?.advisoryMode })
+    : null
 
   const asset = await fetchAsset(scan.asset_id).catch(() => undefined)
   const project =
@@ -869,6 +1205,7 @@ export async function getScanDetail(scanId: string): Promise<ScanDetail> {
     timeline,
     evidence,
     report,
+    aiReasoning,
     isTerminal: isTerminalScanStatus(scan.status),
   }
 }

@@ -1,0 +1,23 @@
+name: httpx_probe
+worker_family: web
+image: projectdiscovery/httpx:latest
+command:
+  - -l
+  - "{httpx_targets_file}"
+  - -json
+  - -silent
+  - -tech-detect
+  - -follow-host-redirects
+  - -status-code
+  - -content-length
+  - -title
+  - -web-server
+  - -timeout
+  - "5"
+  - -rl
+  - "{http_rate_limit}"
+  - -o
+  - "{output_dir}/httpx.json"
+output_parser: json
+artifact_type: endpoints
+default_timeout: 600

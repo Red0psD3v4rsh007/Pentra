@@ -7,6 +7,7 @@ Run:
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 import uuid
@@ -226,6 +227,7 @@ def test_chain_to_dict():
     d = chain.to_dict()
 
     assert d["scan_id"] == "test-scan"
+    assert d["signature"]
     assert d["step_count"] == len(chain.steps)
     assert all("action" in s for s in d["steps"])
 
@@ -252,6 +254,49 @@ def test_chain_safety_config():
 
     for step in chain.steps:
         assert step.config.get("no_persist") is True
+
+
+def test_chain_signature_exists_checks_existing_dynamic_nodes():
+    from app.engine.strategy_engine import StrategyEngine
+    from app.engine.exploit_chain_generator import ExploitChainGenerator
+
+    class _FakeResult:
+        def __init__(self, value):
+            self._value = value
+
+        def scalar(self):
+            return self._value
+
+    class _FakeSession:
+        def __init__(self):
+            self.seen_signatures: set[str] = set()
+
+        async def execute(self, statement, params=None):
+            params = params or {}
+            if "chain_signature" not in str(statement):
+                raise AssertionError(f"Unexpected query: {statement}")
+            return _FakeResult(params["signature"] in self.seen_signatures)
+
+    g = _make_test_graph()
+    scored = _make_scored_paths(g)
+    engine = StrategyEngine(g)
+    strategy = engine.select_strategy(scored)
+
+    gen = ExploitChainGenerator.__new__(ExploitChainGenerator)
+    gen._graph = g
+    gen._session = _FakeSession()
+
+    chain = gen.generate_chain(strategy)
+
+    assert asyncio.run(
+        gen._chain_signature_exists(dag_id=uuid.uuid4(), signature=chain.signature)
+    ) is False
+
+    gen._session.seen_signatures.add(chain.signature)
+
+    assert asyncio.run(
+        gen._chain_signature_exists(dag_id=uuid.uuid4(), signature=chain.signature)
+    ) is True
 
 
 # ═══════════════════════════════════════════════════════════════════

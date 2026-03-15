@@ -361,6 +361,196 @@ def test_artifact_bus_returns_exploration_count():
     assert "exploration_nodes_created" in source
 
 
+def test_exploration_engine_includes_workflow_mutation_stage():
+    import inspect
+    from app.engine.exploration_engine import ExplorationEngine
+
+    source = inspect.getsource(ExplorationEngine.explore)
+    assert "InteractionMapper" in source
+    assert "WorkflowMutator" in source
+    assert "workflow_hypotheses" in source
+
+
+def test_stateful_profile_filter_keeps_only_bounded_workflow_mutations():
+    from app.engine.exploration_engine import _filter_exploration_hypotheses
+    from app.engine.hypothesis_generator import Hypothesis
+
+    hypotheses = [
+        Hypothesis(
+            hypothesis_id="recon:dns",
+            hypothesis_type="recon_subdomain_analysis",
+            target_node_id="a1",
+            target_label="api.target.local",
+            description="dns brute-force",
+            tool="dns_bruteforce",
+            worker_family="recon",
+            config={"no_persist": True},
+        ),
+        Hypothesis(
+            hypothesis_id="generic:web_fingerprint",
+            hypothesis_type="recon_web_service_fingerprint",
+            target_node_id="s1",
+            target_label="https://target.local",
+            description="generic custom poc",
+            tool="custom_poc",
+            worker_family="web",
+            config={"no_persist": True},
+        ),
+        Hypothesis(
+            hypothesis_id="wf:payment:skip",
+            hypothesis_type="workflow_skip_step",
+            target_node_id="e1",
+            target_label="Skip payment flow",
+            description="Skip payment flow",
+            tool="custom_poc",
+            worker_family="exploit",
+            config={
+                "workflow_mutation": "skip_step",
+                "workflow_type": "payment",
+                "target_url": "http://127.0.0.1:8088/portal/checkout/confirm",
+                "no_persist": True,
+            },
+        ),
+        Hypothesis(
+            hypothesis_id="wf:auth:cross",
+            hypothesis_type="workflow_cross_session",
+            target_node_id="e2",
+            target_label="Cross auth flow",
+            description="Cross auth flow",
+            tool="custom_poc",
+            worker_family="exploit",
+            config={
+                "workflow_mutation": "cross_session",
+                "workflow_type": "auth",
+                "target_url": "http://127.0.0.1:8088/login",
+                "no_persist": True,
+            },
+        ),
+    ]
+
+    filtered = _filter_exploration_hypotheses(
+        hypotheses,
+        scan_config={
+            "profile_id": "external_web_api_v1",
+            "stateful_testing": {"enabled": True, "max_replays": 4},
+        },
+    )
+
+    assert len(filtered) == 2
+    assert all(h.tool == "custom_poc" for h in filtered)
+    assert all(h.config.get("workflow_mutation") for h in filtered)
+
+
+def test_stateful_profile_filter_prioritizes_diverse_workflows_and_caps_replays():
+    from app.engine.exploration_engine import _select_stateful_workflow_hypotheses
+    from app.engine.hypothesis_generator import Hypothesis
+
+    hypotheses = [
+        Hypothesis(
+            hypothesis_id="wf:payment:skip",
+            hypothesis_type="workflow_skip_step",
+            target_node_id="p1",
+            target_label="payment skip",
+            description="payment skip",
+            tool="custom_poc",
+            worker_family="exploit",
+            config={
+                "workflow_mutation": "skip_step",
+                "workflow_type": "payment",
+                "target_url": "http://127.0.0.1:8088/portal/checkout/confirm",
+            },
+        ),
+        Hypothesis(
+            hypothesis_id="wf:payment:swap",
+            hypothesis_type="workflow_swap_order",
+            target_node_id="p2",
+            target_label="payment swap",
+            description="payment swap",
+            tool="custom_poc",
+            worker_family="exploit",
+            config={
+                "workflow_mutation": "swap_order",
+                "workflow_type": "payment",
+                "target_url": "http://127.0.0.1:8088/portal/orders/review",
+            },
+        ),
+        Hypothesis(
+            hypothesis_id="wf:admin:cross",
+            hypothesis_type="workflow_cross_session",
+            target_node_id="a1",
+            target_label="admin cross",
+            description="admin cross",
+            tool="custom_poc",
+            worker_family="exploit",
+            config={
+                "workflow_mutation": "cross_session",
+                "workflow_type": "admin",
+                "target_url": "http://127.0.0.1:8088/portal/admin",
+            },
+        ),
+        Hypothesis(
+            hypothesis_id="wf:user:modify",
+            hypothesis_type="workflow_modify_id",
+            target_node_id="u1",
+            target_label="user modify",
+            description="user modify",
+            tool="custom_poc",
+            worker_family="exploit",
+            config={
+                "workflow_mutation": "modify_id",
+                "workflow_type": "user_mgmt",
+                "target_url": "http://127.0.0.1:8088/portal/account",
+            },
+        ),
+        Hypothesis(
+            hypothesis_id="wf:auth:repeat",
+            hypothesis_type="workflow_repeat_step",
+            target_node_id="l1",
+            target_label="auth repeat",
+            description="auth repeat",
+            tool="custom_poc",
+            worker_family="exploit",
+            config={
+                "workflow_mutation": "repeat_step",
+                "workflow_type": "auth",
+                "target_url": "http://127.0.0.1:8088/login",
+            },
+        ),
+    ]
+
+    selected = _select_stateful_workflow_hypotheses(hypotheses, max_hypotheses=3)
+
+    assert len(selected) == 3
+    assert selected[0].config["workflow_type"] == "payment"
+    assert {item.config["workflow_type"] for item in selected} == {"payment", "admin", "user_mgmt"}
+
+
+def test_exploration_engine_reuses_memory_per_scan():
+    from app.engine.exploration_engine import ExplorationEngine
+
+    graph = _make_graph()
+    engine_a = ExplorationEngine(session=None, graph=graph)
+    engine_b = ExplorationEngine(session=None, graph=graph)
+
+    memory_a = engine_a._shared_memory("scan-1")
+    memory_b = engine_b._shared_memory("scan-1")
+    memory_c = engine_b._shared_memory("scan-2")
+
+    memory_a.record(
+        hypothesis_type="workflow_skip_step",
+        target_node_id="e1",
+        tool="custom_poc",
+    )
+
+    assert memory_a is memory_b
+    assert memory_a is not memory_c
+    assert memory_b.has_explored(
+        hypothesis_type="workflow_skip_step",
+        target_node_id="e1",
+        tool="custom_poc",
+    )
+
+
 def test_orchestrator_resolves_exploration_nodes():
     import inspect
     from app.services.orchestrator_service import OrchestratorService

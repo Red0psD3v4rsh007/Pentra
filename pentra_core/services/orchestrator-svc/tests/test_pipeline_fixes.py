@@ -114,6 +114,32 @@ def test_vuln_template():
     assert len(tools) >= 7
 
 
+def test_external_web_api_full_profile_toolchain():
+    """Profile-specific full scans should include HTTP probing and web/API checks."""
+    from pentra_common.profiles import prepare_scan_config
+    from app.engine.dag_builder import _select_tools
+
+    config = prepare_scan_config(
+        scan_type="full",
+        asset_type="web_app",
+        asset_target="http://127.0.0.1:8088",
+        config={"profile_id": "external_web_api_v1"},
+    )
+    tools = _select_tools(
+        "full",
+        "web_app",
+        config,
+    )
+    tool_names = [tool.name for tool in tools]
+
+    assert "httpx_probe" in tool_names
+    assert "ffuf" in tool_names
+    assert "nuclei" in tool_names
+    assert "zap" in tool_names
+    assert tool_names.index("httpx_probe") < tool_names.index("nuclei")
+    assert "metasploit" not in tool_names
+
+
 def test_unknown_scan_type():
     """Unknown scan type should NOT be in templates."""
     from app.engine.dag_builder import _PHASES, _TOOLS
@@ -189,6 +215,35 @@ def test_job_dispatcher_sql_has_required_columns():
     # This column does NOT exist on scan_nodes — must not be referenced
     # We had a bug where started_at was used in UPDATE scan_nodes
     assert "started_at" not in source, "scan_nodes has no started_at column"
+
+
+def test_pipeline_executor_forwards_scan_config_to_dispatcher():
+    """The dispatcher should receive scan config for profile-aware workers."""
+    import inspect
+    from app.engine.pipeline_executor import PipelineExecutor
+
+    source = inspect.getsource(PipelineExecutor)
+    assert "_load_scan_config" in source
+    assert "config=scan_config" in source
+
+
+def test_job_dispatcher_merges_scan_and_node_config():
+    from app.engine.job_dispatcher import _merge_configs
+
+    merged = _merge_configs(
+        {
+            "execution": {"target_policy": "local_only"},
+            "rate_limits": {"sqlmap_threads": 1},
+        },
+        {
+            "verification_context": {"request_url": "http://127.0.0.1:8088/api/v1/auth/login"},
+            "execution": {"allowed_live_tools": ["sqlmap_verify"]},
+        },
+    )
+
+    assert merged["execution"]["target_policy"] == "local_only"
+    assert merged["execution"]["allowed_live_tools"] == ["sqlmap_verify"]
+    assert merged["verification_context"]["request_url"].endswith("/api/v1/auth/login")
 
 
 def test_dag_builder_node_config_includes_toolspec():
