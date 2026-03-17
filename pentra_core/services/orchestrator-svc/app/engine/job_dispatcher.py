@@ -10,6 +10,8 @@ Routes jobs to the correct worker-family stream:
 
 from __future__ import annotations
 
+__classification__ = "runtime_hot_path"
+
 import json
 import logging
 import uuid

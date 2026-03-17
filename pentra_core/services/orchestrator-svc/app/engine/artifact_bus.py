@@ -16,6 +16,8 @@ via ImpactVerifier, then signals the pipeline executor to re-resolve.
 
 from __future__ import annotations
 
+__classification__ = "runtime_hot_path"
+
 import json
 import logging
 import os

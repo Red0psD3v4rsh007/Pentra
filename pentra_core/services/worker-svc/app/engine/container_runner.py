@@ -57,13 +57,16 @@ MAX_LIVE_TIMEOUT = int(os.getenv("WORKER_LIVE_MAX_TIMEOUT_SECONDS", "900"))
 _FAMILY_NETWORK: dict[str, str] = {
     "exploit": "none",
 }
-_DEFAULT_HTTP_PROBE_PATHS = ["/", "/graphql", "/openapi.json"]
+_DEFAULT_HTTP_PROBE_PATHS = ["/", "/login", "/graphql", "/openapi.json", "/swagger.json"]
 _DEFAULT_CONTENT_PATHS = [
+    "login",
+    "api",
     "graphql",
     "openapi.json",
-    "api/v1/auth/login",
-    "api/v1/users/2",
-    "internal/debug",
+    "swagger.json",
+    "swagger",
+    "admin",
+    ".well-known/security.txt",
 ]
 _MODE_DEMO_SIMULATED = "demo_simulated"
 _MODE_CONTROLLED_LIVE_LOCAL = "controlled_live_local"
@@ -415,8 +418,9 @@ class ContainerRunner:
         *,
         target: str,
         scan_config: dict[str, object],
-        mode: str,
+        mode: str | None = None,
     ) -> bool:
+        mode = _normalize_execution_mode(mode or self._execution_mode(scan_config))
         execution = scan_config.get("execution", {})
         if mode == _MODE_CONTROLLED_LIVE_LOCAL:
             policy = "local_only"
@@ -473,7 +477,12 @@ class ContainerRunner:
             templates_dir.mkdir(parents=True, exist_ok=True)
             (input_dir / "nuclei_targets.txt").write_text(f"{base_url}\n")
 
-            for filename, content in _build_phase3_nuclei_templates().items():
+            templates = (
+                _build_local_validation_nuclei_templates()
+                if _is_local_host(_host_from_target(target))
+                else _build_scoped_nuclei_templates()
+            )
+            for filename, content in templates.items():
                 (templates_dir / filename).write_text(content)
 
     async def _run_scope_check(
@@ -1178,6 +1187,120 @@ class ContainerRunner:
                 "job_id": str(job_id),
             }
             filename = "report.json"
+        elif tool_name == "nikto":
+            json_payload = [
+                {
+                    "title": "Server Header Disclosure",
+                    "severity": "info",
+                    "url": f"{base_url}/",
+                    "description": "Web server reveals version information in HTTP headers.",
+                    "finding": f"Server: nginx/1.24.0 at {host}",
+                },
+                {
+                    "title": "Missing X-Content-Type-Options Header",
+                    "severity": "low",
+                    "url": f"{base_url}/",
+                    "description": "The X-Content-Type-Options header is not set, allowing MIME-type sniffing.",
+                    "finding": "Header not present: X-Content-Type-Options",
+                },
+                {
+                    "title": "Directory Listing Enabled",
+                    "severity": "medium",
+                    "url": f"{base_url}/static/",
+                    "description": "Directory indexing is enabled on the /static/ path, exposing file listings.",
+                    "finding": f"GET {base_url}/static/ returned index listing",
+                },
+                {
+                    "title": "Backup File Detected",
+                    "severity": "high",
+                    "url": f"{base_url}/db_backup.sql.bak",
+                    "description": "A database backup file is publicly accessible.",
+                    "finding": f"GET {base_url}/db_backup.sql.bak returned 200 (14302 bytes)",
+                },
+            ]
+            filename = "nikto.json"
+        elif tool_name == "cors_check":
+            json_payload = [
+                {
+                    "title": "CORS Misconfiguration — Wildcard Origin Reflected",
+                    "severity": "high",
+                    "url": f"{base_url}/api/v1/users",
+                    "description": (
+                        "The server reflects the Origin header in Access-Control-Allow-Origin "
+                        "without validation, allowing any domain to read authenticated responses."
+                    ),
+                    "matched_header": "Access-Control-Allow-Origin: https://evil.pentra.test",
+                    "credentials_allowed": True,
+                },
+                {
+                    "title": "CORS — Credentials Allowed with Reflected Origin",
+                    "severity": "high",
+                    "url": f"{base_url}/graphql",
+                    "description": (
+                        "Access-Control-Allow-Credentials is true while reflecting arbitrary origins."
+                    ),
+                    "matched_header": "Access-Control-Allow-Credentials: true",
+                    "credentials_allowed": True,
+                },
+            ]
+            filename = "cors_check.json"
+        elif tool_name == "header_audit":
+            json_payload = [
+                {
+                    "title": "Missing Content-Security-Policy Header",
+                    "severity": "medium",
+                    "url": f"{base_url}/",
+                    "description": "No CSP header is set, increasing XSS exploit surface.",
+                    "missing_header": "Content-Security-Policy",
+                },
+                {
+                    "title": "Missing Strict-Transport-Security Header",
+                    "severity": "medium",
+                    "url": f"{base_url}/",
+                    "description": "HSTS is not enforced, exposing users to protocol downgrade attacks.",
+                    "missing_header": "Strict-Transport-Security",
+                },
+                {
+                    "title": "X-Frame-Options Not Set",
+                    "severity": "low",
+                    "url": f"{base_url}/",
+                    "description": "Missing X-Frame-Options allows clickjacking on authenticated pages.",
+                    "missing_header": "X-Frame-Options",
+                },
+                {
+                    "title": "Referrer-Policy Not Set",
+                    "severity": "low",
+                    "url": f"{base_url}/",
+                    "description": "No Referrer-Policy header, default browser behavior may leak URLs.",
+                    "missing_header": "Referrer-Policy",
+                },
+            ]
+            filename = "header_audit.json"
+        elif tool_name == "tech_detect":
+            json_payload = [
+                {
+                    "url": f"{base_url}",
+                    "technologies": ["Next.js", "React", "Node.js", "nginx"],
+                    "web_server": "nginx/1.24.0",
+                    "status_code": 200,
+                    "title": "Pentra Demo Portal",
+                },
+                {
+                    "url": f"{base_url}/graphql",
+                    "technologies": ["GraphQL", "Apollo Server", "Node.js"],
+                    "web_server": "nginx/1.24.0",
+                    "status_code": 200,
+                    "title": "GraphQL API",
+                },
+                {
+                    "url": f"{base_url}/api/v1",
+                    "technologies": ["FastAPI", "Python", "Uvicorn"],
+                    "web_server": "uvicorn",
+                    "status_code": 200,
+                    "title": "Pentra API v1",
+                },
+            ]
+            filename = "tech_detect.json"
         else:
             json_payload = {
                 "tool": tool_name,
@@ -1378,7 +1501,7 @@ def _normalize_wordlist_entry(value: str) -> str:
     return cleaned.lstrip("/")
 
 
-def _build_phase3_nuclei_templates() -> dict[str, str]:
+def _build_scoped_nuclei_templates() -> dict[str, str]:
     return {
         "openapi-exposure.yaml": textwrap.dedent(
             """\
@@ -1397,7 +1520,6 @@ def _build_phase3_nuclei_templates() -> dict[str, str]:
                     part: body
                     words:
                       - "\"openapi\""
-                      - "\"Pentra Demo API\""
                     condition: and
             """
         ),
@@ -1425,6 +1547,38 @@ def _build_phase3_nuclei_templates() -> dict[str, str]:
                     condition: and
             """
         ),
+        "swagger-ui.yaml": textwrap.dedent(
+            """\
+            id: pentra-swagger-ui
+            info:
+              name: Swagger UI Exposed
+              author: pentra
+              severity: low
+              tags: exposure,swagger,api
+            http:
+              - method: GET
+                path:
+                  - "{{BaseURL}}/swagger/index.html"
+                  - "{{BaseURL}}/swagger-ui/index.html"
+                matchers-condition: or
+                matchers:
+                  - type: word
+                    part: body
+                    words:
+                      - "Swagger UI"
+                  - type: word
+                    part: body
+                    words:
+                      - "swagger-ui"
+            """
+        ),
+    }
+
+
+def _build_local_validation_nuclei_templates() -> dict[str, str]:
+    templates = _build_scoped_nuclei_templates()
+    templates.update(
+        {
         "idor-users.yaml": textwrap.dedent(
             """\
             id: pentra-idor-users
@@ -1446,26 +1600,28 @@ def _build_phase3_nuclei_templates() -> dict[str, str]:
                     condition: and
             """
         ),
-        "sqli-login.yaml": textwrap.dedent(
-            """\
-            id: pentra-sqli-login
-            info:
-              name: SQL Injection in Login Endpoint
-              author: pentra
-              severity: critical
-              tags: sqli,api,auth-bypass
-            http:
-              - method: POST
-                path:
-                  - "{{BaseURL}}/api/v1/auth/login"
-                headers:
-                  Content-Type: application/x-www-form-urlencoded
-                body: "username=admin'%20OR%20'1'='1&password=test"
-                matchers:
-                  - type: word
-                    part: body
-                    words:
-                      - "\"token\""
-            """
-        ),
-    }
+            "sqli-login.yaml": textwrap.dedent(
+                """\
+                id: pentra-sqli-login
+                info:
+                  name: SQL Injection in Login Endpoint
+                  author: pentra
+                  severity: critical
+                  tags: sqli,api,auth-bypass
+                http:
+                  - method: POST
+                    path:
+                      - "{{BaseURL}}/api/v1/auth/login"
+                    headers:
+                      Content-Type: application/x-www-form-urlencoded
+                    body: "username=admin'%20OR%20'1'='1&password=test"
+                    matchers:
+                      - type: word
+                        part: body
+                        words:
+                          - "\"token\""
+                """
+            ),
+        }
+    )
+    return templates

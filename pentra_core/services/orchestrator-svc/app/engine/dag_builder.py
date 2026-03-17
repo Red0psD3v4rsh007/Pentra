@@ -14,6 +14,8 @@ Each tool node specifies:
 
 from __future__ import annotations
 
+__classification__ = "runtime_hot_path"
+
 import json
 import logging
 import uuid
@@ -123,6 +125,9 @@ def _build_vuln_tools() -> list[ToolSpec]:
         ToolSpec("ffuf", "web", phase=2, timeout_seconds=900, max_retries=2,
                  depends_on=("subfinder",), data_keys=("subdomains",),
                  output_artifact_type="endpoints"),
+        ToolSpec("tech_detect", "recon", phase=2, timeout_seconds=300, max_retries=1,
+                 depends_on=("nmap_discovery",), data_keys=("hosts",),
+                 output_artifact_type="technologies"),
     ]
     vuln = [
         ToolSpec("nuclei", "vuln", phase=3, timeout_seconds=1800, max_retries=1,
@@ -132,6 +137,9 @@ def _build_vuln_tools() -> list[ToolSpec]:
                  depends_on=("ffuf",), data_keys=("endpoints",),
                  output_artifact_type="vulnerabilities"),
         ToolSpec("sqlmap", "vuln", phase=3, timeout_seconds=1800, max_retries=1,
+                 depends_on=("ffuf",), data_keys=("endpoints",),
+                 output_artifact_type="vulnerabilities"),
+        ToolSpec("nikto", "web", phase=3, timeout_seconds=600, max_retries=1,
                  depends_on=("ffuf",), data_keys=("endpoints",),
                  output_artifact_type="vulnerabilities"),
     ]
@@ -167,17 +175,8 @@ def _build_external_web_api_recon_tools() -> list[ToolSpec]:
     return [
         ToolSpec("scope_check", "recon", phase=0, timeout_seconds=30, max_retries=0,
                  output_artifact_type="scope"),
-        ToolSpec("subfinder", "recon", phase=1, timeout_seconds=600, max_retries=1,
-                 depends_on=("scope_check",), data_keys=("scope",),
-                 output_artifact_type="subdomains"),
-        ToolSpec("amass", "recon", phase=1, timeout_seconds=900, max_retries=1,
-                 depends_on=("scope_check",), data_keys=("scope",),
-                 output_artifact_type="subdomains"),
-        ToolSpec("nmap_discovery", "network", phase=1, timeout_seconds=600, max_retries=1,
-                 depends_on=("scope_check",), data_keys=("scope",),
-                 output_artifact_type="hosts"),
         ToolSpec("httpx_probe", "web", phase=1, timeout_seconds=600, max_retries=1,
-                 depends_on=("subfinder", "amass"), data_keys=("subdomains", "subdomains"),
+                 depends_on=("scope_check",), data_keys=("scope",),
                  output_artifact_type="endpoints"),
     ]
 
@@ -186,26 +185,32 @@ def _build_external_web_api_vuln_tools() -> list[ToolSpec]:
     """Full pre-exploit profile for external web apps and APIs."""
     recon = _build_external_web_api_recon_tools()
     enum = [
-        ToolSpec("nmap_svc", "network", phase=2, timeout_seconds=900, max_retries=1,
-                 depends_on=("nmap_discovery",), data_keys=("hosts",),
-                 output_artifact_type="services"),
         ToolSpec("web_interact", "web", phase=2, timeout_seconds=900, max_retries=1,
                  depends_on=("httpx_probe",), data_keys=("endpoints",),
                  output_artifact_type="endpoints"),
         ToolSpec("ffuf", "web", phase=2, timeout_seconds=900, max_retries=1,
                  depends_on=("httpx_probe",), data_keys=("endpoints",),
                  output_artifact_type="endpoints"),
+        ToolSpec("tech_detect", "recon", phase=2, timeout_seconds=300, max_retries=1,
+                 depends_on=("httpx_probe",), data_keys=("endpoints",),
+                 output_artifact_type="technologies"),
+        ToolSpec("cors_check", "web", phase=2, timeout_seconds=300, max_retries=1,
+                 depends_on=("httpx_probe",), data_keys=("endpoints",),
+                 output_artifact_type="vulnerabilities"),
+        ToolSpec("header_audit", "web", phase=2, timeout_seconds=300, max_retries=1,
+                 depends_on=("httpx_probe",), data_keys=("endpoints",),
+                 output_artifact_type="vulnerabilities"),
     ]
     vuln = [
         ToolSpec("nuclei", "vuln", phase=3, timeout_seconds=1800, max_retries=1,
-                 depends_on=("httpx_probe", "ffuf", "nmap_svc"),
-                 data_keys=("endpoints", "endpoints", "services"),
-                 output_artifact_type="vulnerabilities"),
-        ToolSpec("zap", "web", phase=3, timeout_seconds=1200, max_retries=1,
-                 depends_on=("httpx_probe",), data_keys=("endpoints",),
+                 depends_on=("httpx_probe", "ffuf"),
+                 data_keys=("endpoints", "endpoints"),
                  output_artifact_type="vulnerabilities"),
         ToolSpec("sqlmap", "vuln", phase=3, timeout_seconds=1200, max_retries=0,
                  depends_on=("ffuf",), data_keys=("endpoints",),
+                 output_artifact_type="vulnerabilities"),
+        ToolSpec("nikto", "web", phase=3, timeout_seconds=600, max_retries=1,
+                 depends_on=("httpx_probe",), data_keys=("endpoints",),
                  output_artifact_type="vulnerabilities"),
     ]
     return recon + enum + vuln

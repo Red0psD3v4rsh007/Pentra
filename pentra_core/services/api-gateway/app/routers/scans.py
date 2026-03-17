@@ -96,6 +96,24 @@ async def create_scan(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         )
+    except (ConnectionError, RuntimeError, OSError) as exc:
+        log_audit_event(
+            request=request,
+            user=user,
+            action="scan.create",
+            outcome="error",
+            resource_type="scan",
+            details={
+                "asset_id": str(body.asset_id),
+                "scan_type": body.scan_type.value,
+                "reason": str(exc),
+            },
+        )
+        logger.error("Infrastructure error during scan creation: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Backend service unavailable — check that Redis and the orchestrator are running",
+        )
     log_audit_event(
         request=request,
         user=user,

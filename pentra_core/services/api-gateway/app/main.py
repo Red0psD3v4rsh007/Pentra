@@ -110,7 +110,16 @@ def create_app() -> FastAPI:
     app.add_exception_handler(Exception, _generic_error_handler)
 
     # ── Routers (Phase 3B) ───────────────────────────────────────
-    from app.routers import health, auth, tenants, projects, assets, scans
+    from app.routers import (
+        health,
+        auth,
+        tenants,
+        projects,
+        assets,
+        scans,
+        intelligence,
+        scan_profiles,
+    )
 
     app.include_router(health.router)
     app.include_router(auth.router, prefix="/auth")
@@ -118,6 +127,8 @@ def create_app() -> FastAPI:
     app.include_router(projects.router, prefix=f"{settings.api_v1_prefix}/projects")
     app.include_router(assets.router, prefix=settings.api_v1_prefix)
     app.include_router(scans.router, prefix=f"{settings.api_v1_prefix}/scans")
+    app.include_router(scan_profiles.router, prefix=f"{settings.api_v1_prefix}/scan-profiles")
+    app.include_router(intelligence.router, prefix=f"{settings.api_v1_prefix}/intelligence")
 
     return app
 

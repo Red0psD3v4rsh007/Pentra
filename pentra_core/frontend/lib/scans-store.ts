@@ -371,12 +371,148 @@ export interface ApiScanAiReasoning {
   audit: ApiAiReasoningAudit
 }
 
+export interface ApiIntelligenceOverview {
+  total_scans: number
+  completed_scans: number
+  active_scans: number
+  assets_with_history: number
+  verified_findings: number
+  recurring_patterns: number
+  technology_clusters: number
+  route_groups: number
+}
+
+export interface ApiIntelligencePatternMatch {
+  key: string
+  title: string
+  vulnerability_type: string | null
+  route_group: string | null
+  tool_sources: string[]
+  scan_count: number
+  finding_count: number
+  highest_severity: "critical" | "high" | "medium" | "low" | "info"
+  severity_counts: Record<string, number>
+  verification_counts: Record<string, number>
+  last_seen: string | null
+}
+
+export interface ApiIntelligenceTechnologyCluster {
+  technology: string
+  asset_count: number
+  scan_count: number
+  endpoint_count: number
+  finding_count: number
+  severity_counts: Record<string, number>
+  related_assets: string[]
+  related_targets: string[]
+}
+
+export interface ApiIntelligenceRouteGroup {
+  route_group: string
+  asset_targets: string[]
+  scan_count: number
+  finding_count: number
+  highest_severity: "critical" | "high" | "medium" | "low" | "info"
+  severity_counts: Record<string, number>
+  verification_counts: Record<string, number>
+  vulnerability_types: string[]
+}
+
+export interface ApiIntelligenceSurfaceExpansion {
+  scan_id: string
+  asset_id: string
+  asset_name: string
+  target: string
+  generated_at: string | null
+  discovered_targets: number
+  discovered_forms: number
+  technologies: string[]
+  artifact_types: string[]
+}
+
+export interface ApiIntelligenceExploitTrend {
+  scan_id: string
+  asset_name: string
+  generated_at: string | null
+  verified: number
+  suspected: number
+  detected: number
+}
+
+export interface ApiIntelligenceRetestDelta {
+  scan_id: string
+  baseline_scan_id: string | null
+  asset_name: string
+  target: string
+  generated_at: string | null
+  summary: string
+  counts: Record<string, number>
+}
+
+export interface ApiIntelligenceAdvisorySummary {
+  scan_id: string
+  asset_name: string
+  generated_at: string | null
+  advisory_mode: AiAdvisoryMode | null
+  provider: string | null
+  model: string | null
+  draft_summary: string
+  prioritization_notes: string | null
+  remediation_focus: string[]
+}
+
+export interface ApiIntelligenceSummary {
+  generated_at: string
+  definition: string
+  overview: ApiIntelligenceOverview
+  pattern_matches: ApiIntelligencePatternMatch[]
+  technology_clusters: ApiIntelligenceTechnologyCluster[]
+  route_groups: ApiIntelligenceRouteGroup[]
+  surface_expansions: ApiIntelligenceSurfaceExpansion[]
+  exploit_trends: ApiIntelligenceExploitTrend[]
+  retest_deltas: ApiIntelligenceRetestDelta[]
+  advisory_summaries: ApiIntelligenceAdvisorySummary[]
+}
+
 export interface SeverityCounts {
   critical: number
   high: number
   medium: number
   low: number
   info: number
+}
+
+export interface VerificationCounts {
+  verified: number
+  suspected: number
+  detected: number
+}
+
+export interface ExecutionSummary {
+  live: number
+  simulated: number
+  blocked: number
+  inferred: number
+}
+
+export interface ApiScanProfileContract {
+  scan_type: ScanType
+  profile_id: string
+  name: string
+  description: string
+  duration: string
+  priority: ScanPriority
+  execution_mode: string
+  target_policy: string
+  scope_summary: string
+  scheduled_tools: string[]
+  live_tools: string[]
+  conditional_live_tools: string[]
+  derived_tools: string[]
+  unsupported_tools: string[]
+  guardrails: string[]
+  honesty_notes: string[]
+  sellable: boolean
 }
 
 export interface Scan {
@@ -399,6 +535,7 @@ export interface Scan {
   assetName: string
   errorMessage: string | null
   resultSummary: Record<string, unknown> | null
+  executionContract: ApiScanProfileContract | null
   findings: Omit<SeverityCounts, "info">
 }
 
@@ -619,6 +756,10 @@ function setProjectCache(project: ApiProject | undefined): void {
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean)))
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string")
 }
 
 export function formatScanType(scanType: ScanType): string {
@@ -867,6 +1008,23 @@ function normalizeSeverityCounts(input?: Partial<SeverityCounts>): SeverityCount
   }
 }
 
+function normalizeVerificationCounts(input?: Partial<VerificationCounts>): VerificationCounts {
+  return {
+    verified: input?.verified ?? 0,
+    suspected: input?.suspected ?? 0,
+    detected: input?.detected ?? 0,
+  }
+}
+
+function normalizeExecutionSummary(input?: Partial<ExecutionSummary>): ExecutionSummary {
+  return {
+    live: input?.live ?? 0,
+    simulated: input?.simulated ?? 0,
+    blocked: input?.blocked ?? 0,
+    inferred: input?.inferred ?? 0,
+  }
+}
+
 function extractSeverityCounts(
   summary: Record<string, unknown> | null | undefined
 ): SeverityCounts {
@@ -897,11 +1055,105 @@ function extractSeverityCounts(
   return normalizeSeverityCounts()
 }
 
+export function extractVerificationCounts(
+  summary: Record<string, unknown> | null | undefined
+): VerificationCounts {
+  if (!summary) {
+    return normalizeVerificationCounts()
+  }
+
+  const candidate = summary["verification_counts"]
+  if (typeof candidate === "object" && candidate !== null) {
+    const values = candidate as Partial<Record<keyof VerificationCounts, unknown>>
+    return normalizeVerificationCounts({
+      verified: Number(values.verified ?? 0),
+      suspected: Number(values.suspected ?? 0),
+      detected: Number(values.detected ?? 0),
+    })
+  }
+
+  return normalizeVerificationCounts()
+}
+
+export function extractExecutionSummary(
+  summary: Record<string, unknown> | null | undefined
+): ExecutionSummary {
+  if (!summary) {
+    return normalizeExecutionSummary()
+  }
+
+  const candidate = summary["execution_summary"]
+  if (typeof candidate === "object" && candidate !== null) {
+    const values = candidate as Partial<Record<keyof ExecutionSummary, unknown>>
+    return normalizeExecutionSummary({
+      live: Number(values.live ?? 0),
+      simulated: Number(values.simulated ?? 0),
+      blocked: Number(values.blocked ?? 0),
+      inferred: Number(values.inferred ?? 0),
+    })
+  }
+
+  return normalizeExecutionSummary()
+}
+
 function buildScanName(scan: ApiScan, asset?: ApiAsset): string {
   if (asset?.name) {
     return `${formatScanType(scan.scan_type)} · ${asset.name}`
   }
   return `${formatScanType(scan.scan_type)} · Asset ${scan.asset_id.slice(0, 8)}`
+}
+
+function extractExecutionContract(
+  config: Record<string, unknown> | null | undefined
+): ApiScanProfileContract | null {
+  if (!config) {
+    return null
+  }
+
+  const candidate = config["execution_contract"]
+  if (typeof candidate !== "object" || candidate === null) {
+    return null
+  }
+
+  const payload = candidate as Record<string, unknown>
+  const scanType = payload["scan_type"]
+  const priority = payload["priority"]
+  if (
+    (scanType !== "recon" &&
+      scanType !== "vuln" &&
+      scanType !== "full" &&
+      scanType !== "exploit_verify") ||
+    (priority !== "critical" &&
+      priority !== "high" &&
+      priority !== "normal" &&
+      priority !== "low")
+  ) {
+    return null
+  }
+
+  return {
+    scan_type: scanType,
+    profile_id: String(payload["profile_id"] ?? ""),
+    name: String(payload["name"] ?? ""),
+    description: String(payload["description"] ?? ""),
+    duration: String(payload["duration"] ?? ""),
+    priority,
+    execution_mode: String(payload["execution_mode"] ?? ""),
+    target_policy: String(payload["target_policy"] ?? ""),
+    scope_summary: String(payload["scope_summary"] ?? ""),
+    scheduled_tools: isStringArray(payload["scheduled_tools"]) ? payload["scheduled_tools"] : [],
+    live_tools: isStringArray(payload["live_tools"]) ? payload["live_tools"] : [],
+    conditional_live_tools: isStringArray(payload["conditional_live_tools"])
+      ? payload["conditional_live_tools"]
+      : [],
+    derived_tools: isStringArray(payload["derived_tools"]) ? payload["derived_tools"] : [],
+    unsupported_tools: isStringArray(payload["unsupported_tools"])
+      ? payload["unsupported_tools"]
+      : [],
+    guardrails: isStringArray(payload["guardrails"]) ? payload["guardrails"] : [],
+    honesty_notes: isStringArray(payload["honesty_notes"]) ? payload["honesty_notes"] : [],
+    sellable: Boolean(payload["sellable"]),
+  }
 }
 
 export function toScanSummary(
@@ -934,6 +1186,7 @@ export function toScanSummary(
     assetName: asset?.name ?? "Unknown Asset",
     errorMessage: scan.error_message,
     resultSummary: scan.result_summary,
+    executionContract: extractExecutionContract(scan.config),
     findings: {
       critical: findings.critical,
       high: findings.high,
@@ -1093,6 +1346,36 @@ export async function createScan(input: CreateScanInput): Promise<Scan> {
 
   const asset = await fetchAsset(created.asset_id).catch(() => undefined)
   return toScanSummary(created, asset)
+}
+
+export async function listScanProfiles(params: {
+  assetType: ApiAsset["asset_type"]
+  target: string
+}): Promise<ApiScanProfileContract[]> {
+  const query = new URLSearchParams({
+    asset_type: params.assetType,
+    target: params.target,
+  })
+  return apiFetch<ApiScanProfileContract[]>(`/api/v1/scan-profiles?${query.toString()}`)
+}
+
+export async function listScanFindings(
+  scanId: string,
+  pageSize: number = 100
+): Promise<ApiFinding[]> {
+  const response = await apiFetch<PaginatedResponse<ApiFinding>>(
+    `/api/v1/scans/${scanId}/findings?page=1&page_size=${pageSize}`
+  )
+
+  return response.items
+}
+
+export async function getScanAttackGraph(scanId: string): Promise<ApiAttackGraph | null> {
+  return apiFetchOptional<ApiAttackGraph | null>(`/api/v1/scans/${scanId}/attack-graph`, null)
+}
+
+export async function getIntelligenceSummary(scanLimit: number = 100): Promise<ApiIntelligenceSummary> {
+  return apiFetch<ApiIntelligenceSummary>(`/api/v1/intelligence/summary?scan_limit=${scanLimit}`)
 }
 
 export async function createRetestScan(

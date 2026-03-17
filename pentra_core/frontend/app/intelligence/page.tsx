@@ -1,142 +1,70 @@
 "use client"
 
+import Link from "next/link"
+import { useEffect, useState } from "react"
+import {
+  Brain,
+  CheckCircle2,
+  GitBranch,
+  Layers,
+  Radar,
+  RefreshCw,
+  Route,
+  ShieldCheck,
+} from "lucide-react"
+
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { TopBar } from "@/components/dashboard/top-bar"
-import { 
-  Brain,
-  Zap,
-  TrendingUp,
-  Shield,
-  Server,
-  Database,
-  Globe,
-  Cloud,
-  Lock,
-  Layers,
-  GitBranch,
-  Activity
-} from "lucide-react"
+import { Spinner } from "@/components/ui/spinner"
+import { getIntelligenceSummary, type ApiIntelligenceSummary } from "@/lib/scans-store"
 import { cn } from "@/lib/utils"
 
-// Mock data for learned patterns
-const LEARNED_PATTERNS = [
-  {
-    id: "LP-001",
-    name: "Common WAF Bypass Profile",
-    description: "Optimized payload encoding for Cloudflare and AWS WAF",
-    usageCount: 847,
-    confidence: 94.2,
-    category: "Evasion",
-  },
-  {
-    id: "LP-002",
-    name: "Authentication Flow Weakness",
-    description: "Session fixation patterns in OAuth implementations",
-    usageCount: 623,
-    confidence: 89.7,
-    category: "Auth",
-  },
-  {
-    id: "LP-003",
-    name: "API Rate Limit Evasion",
-    description: "Header manipulation techniques for bypassing rate limits",
-    usageCount: 512,
-    confidence: 87.3,
-    category: "Evasion",
-  },
-  {
-    id: "LP-004",
-    name: "SQL Injection Fingerprinting",
-    description: "Database type detection via error-based injection",
-    usageCount: 456,
-    confidence: 92.1,
-    category: "Injection",
-  },
-  {
-    id: "LP-005",
-    name: "JWT Algorithm Confusion",
-    description: "Algorithm switching attacks on JWT implementations",
-    usageCount: 389,
-    confidence: 85.6,
-    category: "Auth",
-  },
-  {
-    id: "LP-006",
-    name: "CORS Misconfiguration",
-    description: "Origin reflection and null origin bypass patterns",
-    usageCount: 298,
-    confidence: 91.4,
-    category: "Config",
-  },
-]
-
-// Mock data for technology clusters
-const TECH_CLUSTERS = [
-  {
-    id: "TC-001",
-    name: "Frontend Monolith",
-    technologies: ["React", "Next.js", "Tailwind", "TypeScript"],
-    hostCount: 12,
-    riskLevel: "medium",
-    icon: Globe,
-  },
-  {
-    id: "TC-002",
-    name: "Data Lake Infrastructure",
-    technologies: ["PostgreSQL", "Redis", "Elasticsearch", "Kafka"],
-    hostCount: 8,
-    riskLevel: "high",
-    icon: Database,
-  },
-  {
-    id: "TC-003",
-    name: "Authentication Layer",
-    technologies: ["Keycloak", "OAuth2", "LDAP", "SAML"],
-    hostCount: 4,
-    riskLevel: "critical",
-    icon: Lock,
-  },
-  {
-    id: "TC-004",
-    name: "Cloud Infrastructure",
-    technologies: ["AWS", "Terraform", "Docker", "Kubernetes"],
-    hostCount: 15,
-    riskLevel: "medium",
-    icon: Cloud,
-  },
-  {
-    id: "TC-005",
-    name: "API Gateway Layer",
-    technologies: ["Kong", "Nginx", "Express", "GraphQL"],
-    hostCount: 6,
-    riskLevel: "high",
-    icon: Layers,
-  },
-  {
-    id: "TC-006",
-    name: "CI/CD Pipeline",
-    technologies: ["GitHub Actions", "Jenkins", "ArgoCD"],
-    hostCount: 3,
-    riskLevel: "low",
-    icon: GitBranch,
-  },
-]
-
-const categoryColors: Record<string, string> = {
-  Evasion: "bg-primary/10 text-primary",
-  Auth: "bg-high/10 text-high",
-  Injection: "bg-critical/10 text-critical",
-  Config: "bg-medium/10 text-medium",
+const severityClass = {
+  critical: "bg-critical/10 text-critical",
+  high: "bg-high/10 text-high",
+  medium: "bg-medium/10 text-medium",
+  low: "bg-low/10 text-low",
+  info: "bg-elevated text-muted-foreground",
 }
 
-const riskColors: Record<string, { bg: string; text: string; dot: string }> = {
-  critical: { bg: "bg-critical/10", text: "text-critical", dot: "bg-critical" },
-  high: { bg: "bg-high/10", text: "text-high", dot: "bg-high" },
-  medium: { bg: "bg-medium/10", text: "text-medium", dot: "bg-medium" },
-  low: { bg: "bg-low/10", text: "text-low", dot: "bg-low" },
+function formatDate(value: string | null) {
+  if (!value) return "N/A"
+  return new Date(value).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }
 
 export default function IntelligencePage() {
+  const [summary, setSummary] = useState<ApiIntelligenceSummary | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function load(refresh: boolean) {
+    setError(null)
+    if (refresh) {
+      setIsRefreshing(true)
+    } else {
+      setIsLoading(true)
+    }
+    try {
+      const payload = await getIntelligenceSummary(100)
+      setSummary(payload)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load intelligence summary.")
+    } finally {
+      setIsLoading(false)
+      setIsRefreshing(false)
+    }
+  }
+
+  useEffect(() => {
+    void load(false)
+  }, [])
+
   return (
     <div className="min-h-screen bg-background">
       <DashboardSidebar />
@@ -145,161 +73,405 @@ export default function IntelligencePage() {
         <TopBar title="Intelligence" />
 
         <main className="p-6">
-          {/* Header */}
-          <div className="mb-6">
-            <h1 className="text-2xl font-semibold text-foreground">AI Intelligence</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Machine learning insights and attack pattern analysis
-            </p>
+          <div className="mb-6 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-semibold text-foreground">Cross-Scan Intelligence</h1>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                {summary?.definition ??
+                  "Loading the persisted cross-scan intelligence definition..."}
+              </p>
+            </div>
+            <button
+              onClick={() => void load(true)}
+              disabled={isLoading || isRefreshing}
+              className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+              Refresh
+            </button>
           </div>
 
-          {/* Stats Row */}
-          <div className="mb-6 grid grid-cols-4 gap-4">
-            {[
-              { icon: Brain, label: "Patterns Learned", value: "2,847", color: "text-primary" },
-              { icon: Zap, label: "Active Optimizations", value: "156", color: "text-high" },
-              { icon: TrendingUp, label: "Success Rate", value: "94.2%", color: "text-low" },
-              { icon: Shield, label: "Bypasses Found", value: "423", color: "text-medium" },
-            ].map((stat) => (
-              <div key={stat.label} className="rounded-lg border border-border bg-card p-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-elevated">
-                    <stat.icon className={cn("h-5 w-5", stat.color)} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                      {stat.label}
-                    </p>
-                    <p className={cn("text-xl font-semibold", stat.color)}>{stat.value}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Two Column Layout */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {/* Learned Patterns Card */}
-            <div className="rounded-lg border border-border bg-card">
-              <div className="flex items-center justify-between border-b border-border px-5 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                    <Brain className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-semibold text-foreground">Learned Patterns</h2>
-                    <p className="text-xs text-muted-foreground">AI-optimized attack vectors</p>
-                  </div>
-                </div>
-                <span className="rounded-full bg-elevated px-3 py-1 text-xs font-medium text-muted-foreground">
-                  {LEARNED_PATTERNS.length} patterns
-                </span>
-              </div>
-              
-              <div className="divide-y divide-border">
-                {LEARNED_PATTERNS.map((pattern) => (
-                  <div
-                    key={pattern.id}
-                    className="group flex items-center justify-between px-5 py-4 transition-colors hover:bg-elevated/50"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-foreground group-hover:text-primary transition-colors">
-                          {pattern.name}
-                        </span>
-                        <span className={cn(
-                          "rounded-md px-2 py-0.5 text-xs font-medium",
-                          categoryColors[pattern.category]
-                        )}>
-                          {pattern.category}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground truncate">
-                        {pattern.description}
-                      </p>
-                    </div>
-                    <div className="ml-4 flex items-center gap-6 shrink-0">
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Usage</p>
-                        <p className="font-mono text-sm font-medium text-foreground">
-                          {pattern.usageCount.toLocaleString()}
+          {isLoading ? (
+            <div className="flex min-h-[40vh] items-center justify-center gap-3 rounded-lg border border-border bg-card">
+              <Spinner className="h-5 w-5" />
+              <span className="text-sm text-muted-foreground">
+                Loading intelligence from persisted scans, findings, artifacts, retests, and advisory history...
+              </span>
+            </div>
+          ) : error ? (
+            <div className="rounded-lg border border-critical/20 bg-critical/5 p-4 text-sm text-critical">
+              {error}
+            </div>
+          ) : summary ? (
+            <>
+              <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {[
+                  {
+                    icon: Brain,
+                    label: "Recurring Patterns",
+                    value: summary.overview.recurring_patterns,
+                    detail: `${summary.overview.verified_findings} verified findings`,
+                  },
+                  {
+                    icon: Layers,
+                    label: "Technology Clusters",
+                    value: summary.overview.technology_clusters,
+                    detail: `${summary.overview.assets_with_history} assets with history`,
+                  },
+                  {
+                    icon: Route,
+                    label: "Route Groups",
+                    value: summary.overview.route_groups,
+                    detail: `${summary.overview.completed_scans} completed scans`,
+                  },
+                  {
+                    icon: Radar,
+                    label: "Active Scans",
+                    value: summary.overview.active_scans,
+                    detail: `${summary.overview.total_scans} total scans`,
+                  },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-lg border border-border bg-card p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {item.label}
                         </p>
+                        <p className="mt-2 text-3xl font-semibold text-foreground">{item.value}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Confidence</p>
-                        <p className="font-mono text-sm font-semibold text-primary">
-                          {pattern.confidence}%
-                        </p>
+                      <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10">
+                        <item.icon className="h-5 w-5 text-primary" />
                       </div>
                     </div>
+                    <p className="mt-3 text-xs text-muted-foreground">{item.detail}</p>
                   </div>
                 ))}
-              </div>
-            </div>
+              </section>
 
-            {/* Technology Clusters Card */}
-            <div className="rounded-lg border border-border bg-card">
-              <div className="flex items-center justify-between border-b border-border px-5 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-high/10">
-                    <Activity className="h-5 w-5 text-high" />
+              <section className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <div className="rounded-lg border border-border bg-card p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-foreground">Pattern Matches</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Recurring findings clustered by vulnerability type and route group.
+                      </p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {summary.pattern_matches.length} groups
+                    </span>
                   </div>
-                  <div>
-                    <h2 className="text-base font-semibold text-foreground">Technology Clusters</h2>
-                    <p className="text-xs text-muted-foreground">Inferred infrastructure groups</p>
-                  </div>
-                </div>
-                <span className="rounded-full bg-elevated px-3 py-1 text-xs font-medium text-muted-foreground">
-                  {TECH_CLUSTERS.length} clusters
-                </span>
-              </div>
-              
-              <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
-                {TECH_CLUSTERS.map((cluster) => {
-                  const risk = riskColors[cluster.riskLevel]
-                  return (
-                    <div
-                      key={cluster.id}
-                      className="group rounded-lg border border-border p-4 transition-all hover:border-muted-foreground hover:bg-elevated/30"
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-elevated">
-                            <cluster.icon className="h-4 w-4 text-muted-foreground" />
+
+                  <div className="mt-5 space-y-3">
+                    {summary.pattern_matches.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No recurring patterns yet.</p>
+                    ) : (
+                      summary.pattern_matches.map((pattern) => (
+                        <div key={pattern.key} className="rounded-lg border border-border bg-background p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-foreground">{pattern.title}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {pattern.scan_count} scans · {pattern.finding_count} findings · last seen {formatDate(pattern.last_seen)}
+                              </p>
+                            </div>
+                            <span className={cn("rounded-md px-2 py-1 text-xs font-medium", severityClass[pattern.highest_severity])}>
+                              {pattern.highest_severity}
+                            </span>
                           </div>
-                          <div>
-                            <h3 className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
-                              {cluster.name}
-                            </h3>
-                            <p className="text-xs text-muted-foreground">
-                              {cluster.hostCount} hosts
-                            </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {pattern.tool_sources.map((tool) => (
+                              <span
+                                key={`${pattern.key}:${tool}`}
+                                className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground"
+                              >
+                                {tool}
+                              </span>
+                            ))}
                           </div>
                         </div>
-                        <span className={cn(
-                          "flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium",
-                          risk.bg, risk.text
-                        )}>
-                          <span className={cn("h-1.5 w-1.5 rounded-full", risk.dot)} />
-                          {cluster.riskLevel}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {cluster.technologies.map((tech) => (
-                          <span
-                            key={tech}
-                            className="rounded-md border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground"
-                          >
-                            {tech}
-                          </span>
-                        ))}
-                      </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-card p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-foreground">Route Group Pressure</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Routes where findings repeatedly cluster across scan history.
+                      </p>
                     </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
+                    <span className="text-xs text-muted-foreground">
+                      {summary.route_groups.length} routes
+                    </span>
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    {summary.route_groups.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No route-group intelligence yet.</p>
+                    ) : (
+                      summary.route_groups.map((group) => (
+                        <div key={group.route_group} className="rounded-lg border border-border bg-background p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate font-mono text-sm text-foreground">{group.route_group}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {group.scan_count} scans · {group.finding_count} findings · {group.verification_counts.verified} verified
+                              </p>
+                            </div>
+                            <span className={cn("rounded-md px-2 py-1 text-xs font-medium", severityClass[group.highest_severity])}>
+                              {group.highest_severity}
+                            </span>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {group.vulnerability_types.slice(0, 4).map((item) => (
+                              <span
+                                key={`${group.route_group}:${item}`}
+                                className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground"
+                              >
+                                {item}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              <section className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <div className="rounded-lg border border-border bg-card p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-foreground">Technology Clusters</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Technologies inferred from persisted artifact summaries and finding classification.
+                      </p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {summary.technology_clusters.length} clusters
+                    </span>
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    {summary.technology_clusters.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No technology clusters yet.</p>
+                    ) : (
+                      summary.technology_clusters.map((cluster) => (
+                        <div key={cluster.technology} className="rounded-lg border border-border bg-background p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-foreground">{cluster.technology}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {cluster.asset_count} assets · {cluster.scan_count} scans · {cluster.endpoint_count} related endpoints
+                              </p>
+                            </div>
+                            <span className="rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                              {cluster.finding_count} findings
+                            </span>
+                          </div>
+                          <p className="mt-3 text-xs text-muted-foreground">
+                            {cluster.related_assets.slice(0, 3).join(", ") || "No related assets"}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-card p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-foreground">Surface Expansion</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Discovery and stateful interaction expansion captured from artifact summaries.
+                      </p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {summary.surface_expansions.length} snapshots
+                    </span>
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    {summary.surface_expansions.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No surface-expansion summaries yet.</p>
+                    ) : (
+                      summary.surface_expansions.map((item) => (
+                        <div key={item.scan_id} className="rounded-lg border border-border bg-background p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-foreground">{item.asset_name}</p>
+                              <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{item.target}</p>
+                            </div>
+                            <Link
+                              href={`/scans/${item.scan_id}`}
+                              className="text-xs font-medium text-primary transition-colors hover:text-primary/80"
+                            >
+                              Open scan
+                            </Link>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            <span>{item.discovered_targets} discovered targets</span>
+                            <span>{item.discovered_forms} forms</span>
+                            <span>{item.technologies.length} technologies</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              <section className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <div className="rounded-lg border border-border bg-card p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-foreground">Verified Exploit Trends</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Verification-state movement across completed scans.
+                      </p>
+                    </div>
+                    <ShieldCheck className="h-4 w-4 text-low" />
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    {summary.exploit_trends.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No completed exploit-trend history yet.</p>
+                    ) : (
+                      summary.exploit_trends.map((trend) => (
+                        <div key={trend.scan_id} className="rounded-lg border border-border bg-background p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-foreground">{trend.asset_name}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">{formatDate(trend.generated_at)}</p>
+                            </div>
+                            <Link
+                              href={`/scans/${trend.scan_id}?tab=report`}
+                              className="text-xs font-medium text-primary transition-colors hover:text-primary/80"
+                            >
+                              Open report
+                            </Link>
+                          </div>
+                          <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Verified</p>
+                              <p className="font-semibold text-low">{trend.verified}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Suspected</p>
+                              <p className="font-semibold text-high">{trend.suspected}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Detected</p>
+                              <p className="font-semibold text-foreground">{trend.detected}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-card p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-foreground">Retest Deltas</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Historical comparison summaries for scans launched as retests.
+                      </p>
+                    </div>
+                    <GitBranch className="h-4 w-4 text-primary" />
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    {summary.retest_deltas.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No retest deltas yet.</p>
+                    ) : (
+                      summary.retest_deltas.map((delta) => (
+                        <div key={delta.scan_id} className="rounded-lg border border-border bg-background p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-foreground">{delta.asset_name}</p>
+                              <p className="mt-1 font-mono text-xs text-muted-foreground">{delta.target}</p>
+                            </div>
+                            <Link
+                              href={`/scans/${delta.scan_id}?tab=report`}
+                              className="text-xs font-medium text-primary transition-colors hover:text-primary/80"
+                            >
+                              Open retest
+                            </Link>
+                          </div>
+                          <p className="mt-3 text-sm text-muted-foreground">{delta.summary}</p>
+                          <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            <span>new {delta.counts.new ?? 0}</span>
+                            <span>resolved {delta.counts.resolved ?? 0}</span>
+                            <span>persistent {delta.counts.persistent ?? 0}</span>
+                            <span>escalated {delta.counts.escalated ?? 0}</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              <section className="mt-6 rounded-lg border border-border bg-card p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-base font-semibold text-foreground">Advisory History</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      AI report-drafting summaries taken from persisted advisory artifacts.
+                    </p>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {summary.advisory_summaries.length} advisories
+                  </span>
+                </div>
+
+                <div className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-2">
+                  {summary.advisory_summaries.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No advisory artifacts yet.</p>
+                  ) : (
+                    summary.advisory_summaries.map((item) => (
+                      <div key={`${item.scan_id}:${item.generated_at}`} className="rounded-lg border border-border bg-background p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-foreground">{item.asset_name}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {item.provider ?? "unknown provider"} · {item.model ?? "unknown model"} · {item.advisory_mode ?? "advisory_only"}
+                            </p>
+                          </div>
+                          <Link
+                            href={`/scans/${item.scan_id}?tab=report`}
+                            className="text-xs font-medium text-primary transition-colors hover:text-primary/80"
+                          >
+                            Open scan
+                          </Link>
+                        </div>
+                        <p className="mt-3 text-sm text-muted-foreground">{item.draft_summary}</p>
+                        {item.prioritization_notes ? (
+                          <p className="mt-3 text-xs text-muted-foreground">{item.prioritization_notes}</p>
+                        ) : null}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {item.remediation_focus.slice(0, 3).map((focus) => (
+                            <span
+                              key={`${item.scan_id}:${focus}`}
+                              className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground"
+                            >
+                              {focus}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+            </>
+          ) : null}
         </main>
       </div>
     </div>

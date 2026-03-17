@@ -6,6 +6,8 @@ patterns used by the PatternMatcher and PatternExecutor.
 
 from __future__ import annotations
 
+__classification__ = "runtime_optional"
+
 import logging
 import os
 from dataclasses import dataclass, field

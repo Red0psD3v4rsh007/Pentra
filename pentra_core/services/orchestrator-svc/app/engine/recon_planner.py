@@ -12,6 +12,8 @@ Flow:
 
 from __future__ import annotations
 
+__classification__ = "runtime_optional"
+
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path

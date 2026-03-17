@@ -13,6 +13,8 @@ This replaces inline orchestration logic with a clean, composable coordinator.
 
 from __future__ import annotations
 
+__classification__ = "runtime_hot_path"
+
 import logging
 import uuid
 from typing import Any

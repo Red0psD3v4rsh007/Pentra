@@ -16,6 +16,8 @@ Also evaluates phase completion using ``min_success_ratio``.
 
 from __future__ import annotations
 
+__classification__ = "runtime_hot_path"
+
 import logging
 import uuid
 from dataclasses import dataclass

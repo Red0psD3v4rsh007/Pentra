@@ -16,6 +16,8 @@ Stores verified impact as scan_artifact with artifact_type = 'verified_impact'.
 
 from __future__ import annotations
 
+__classification__ = "runtime_optional"
+
 import json
 import logging
 import uuid
@@ -49,6 +51,29 @@ _IMPACT_INDICATORS: dict[str, list[str]] = {
         "internal", "ssrf", "chain", "pivot",
     ],
 }
+
+# Evidence strength thresholds — higher = stronger proof
+_EVIDENCE_STRENGTH: dict[str, tuple[int, str]] = {
+    # (min_indicator_matches, label)
+    "definitive": (7, "definitive"),   # Shell access confirmed, data dumped
+    "strong":     (4, "strong"),       # Data returned, error-based extraction
+    "indicative":  (2, "indicative"),   # Error messages suggest injection
+    "weak":       (1, "weak"),         # Blind condition or timing-based
+}
+
+
+def _classify_evidence_strength(indicator_count: int, impact_type: str) -> str:
+    """Classify evidence strength based on indicator matches and impact type."""
+    # shell_access and database_access with many indicators are definitive
+    if impact_type in {"shell_access", "database_access"} and indicator_count >= 5:
+        return "definitive"
+    if indicator_count >= 7:
+        return "definitive"
+    if indicator_count >= 4:
+        return "strong"
+    if indicator_count >= 2:
+        return "indicative"
+    return "weak"
 
 
 class ImpactVerifier:
@@ -97,7 +122,12 @@ class ImpactVerifier:
             logger.info("No verified impact from %s output", tool)
             return 0
 
-        # Build the impact artifact
+        evidence_strength = _classify_evidence_strength(
+            verified_impact["indicator_matches"],
+            verified_impact["impact_type"],
+        )
+
+        # Build the impact artifact with rich verification metadata
         impact_artifact = apply_artifact_retention_metadata(
             {
                 "impact_type": verified_impact["impact_type"],
@@ -106,6 +136,12 @@ class ImpactVerifier:
                 "evidence_summary": verified_impact["evidence"],
                 "verified_at": datetime.now(timezone.utc).isoformat(),
                 "source_ref": output_ref,
+                # Reset 8: richer verification metadata
+                "verification_verdict": "verified" if evidence_strength in {"definitive", "strong"} else "suspected",
+                "verification_confidence": verified_impact["confidence"],
+                "verification_evidence": verified_impact["evidence"][:3],
+                "evidence_strength": evidence_strength,
+                "indicator_matches": verified_impact["indicator_matches"],
             },
             policy="verified_impact",
         )
@@ -133,9 +169,10 @@ class ImpactVerifier:
         await self._session.flush()
 
         logger.info(
-            "Verified impact: type=%s confidence=%d%% tool=%s artifact=%s",
+            "Verified impact: type=%s confidence=%d%% strength=%s tool=%s artifact=%s",
             verified_impact["impact_type"],
             verified_impact["confidence"],
+            evidence_strength,
             tool,
             artifact_id,
         )

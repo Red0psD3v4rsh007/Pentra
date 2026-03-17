@@ -6,6 +6,8 @@ for dynamic vulnerability testing via the exploration pipeline.
 
 from __future__ import annotations
 
+__classification__ = "runtime_optional"
+
 import logging
 from typing import Any
 

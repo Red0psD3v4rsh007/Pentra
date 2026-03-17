@@ -14,6 +14,8 @@ Scores are normalized to 0.0–10.0 scale.
 
 from __future__ import annotations
 
+__classification__ = "runtime_optional"
+
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -213,6 +215,7 @@ class PathScorer:
         if not scored_paths:
             return {
                 "total_paths": 0,
+                "compressed_paths": 0,
                 "risk_distribution": {},
                 "highest_score": 0.0,
             }
@@ -223,6 +226,7 @@ class PathScorer:
 
         return {
             "total_paths": len(scored_paths),
+            "compressed_paths": len(self.compress_paths(scored_paths)),
             "risk_distribution": dist,
             "highest_score": scored_paths[0].total_score,
             "highest_risk_path": {
@@ -231,3 +235,45 @@ class PathScorer:
                 "edges": scored_paths[0].path.edges,
             },
         }
+
+    def compress_paths(self, scored_paths: list[ScoredPath]) -> list[ScoredPath]:
+        """Deduplicate paths sharing the same (root_cause, target) pair.
+
+        For each group of paths that have the same vulnerability type on
+        the first exploit edge and the same final target, keep only the
+        highest-scoring representative path.
+
+        This reduces noise when many paths lead to the same outcome via
+        the same root-cause vulnerability.
+        """
+        groups: dict[str, ScoredPath] = {}
+        for sp in scored_paths:
+            root_cause = self._root_cause_key(sp)
+            if root_cause not in groups or sp.total_score > groups[root_cause].total_score:
+                groups[root_cause] = sp
+
+        compressed = sorted(groups.values(), key=lambda s: s.total_score, reverse=True)
+
+        logger.info(
+            "Path compression: %d paths → %d unique root-cause groups",
+            len(scored_paths),
+            len(compressed),
+        )
+        return compressed
+
+    def _root_cause_key(self, scored_path: ScoredPath) -> str:
+        """Build a dedup key from the root-cause vulnerability and target."""
+        path = scored_path.path
+        # Find the first exploit edge's source node (the vulnerability)
+        root_vuln = "unknown"
+        for i, edge_type in enumerate(path.edges):
+            if edge_type == "exploit" and i < len(path.nodes):
+                node = self._graph.nodes.get(path.nodes[i])
+                if node:
+                    root_vuln = node.properties.get("artifact_type", node.label)
+                break
+
+        target_node = self._graph.nodes.get(path.target)
+        target_label = target_node.label if target_node else path.target
+        return f"{root_vuln}:{target_label}"
+

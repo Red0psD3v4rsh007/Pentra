@@ -12,6 +12,7 @@ Event flow:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from typing import Any
@@ -30,6 +31,9 @@ from app.engine.state_manager import StateManager
 from app.engine.artifact_bus import ArtifactBus
 
 logger = logging.getLogger(__name__)
+
+_JOB_EVENT_LOCK_RETRY_ATTEMPTS = 25
+_JOB_EVENT_LOCK_RETRY_DELAY_SECONDS = 0.2
 
 
 class OrchestratorService:
@@ -52,6 +56,21 @@ class OrchestratorService:
         self._redis = redis
         self._concurrency = ConcurrencyController(redis)
         self._retry_mgr = RetryManager()
+
+    async def _acquire_scan_lock_with_retry(
+        self,
+        scan_id: uuid.UUID,
+        *,
+        holder: str = "orchestrator",
+        attempts: int = 1,
+        delay_seconds: float = 0.0,
+    ) -> bool:
+        for attempt in range(1, max(attempts, 1) + 1):
+            if await self._concurrency.acquire_scan_lock(scan_id, holder=holder):
+                return True
+            if attempt < attempts and delay_seconds > 0:
+                await asyncio.sleep(delay_seconds)
+        return False
 
     # ── scan.created ─────────────────────────────────────────────
 
@@ -79,7 +98,7 @@ class OrchestratorService:
             return
 
         # Distributed lock
-        if not await self._concurrency.acquire_scan_lock(scan_id):
+        if not await self._acquire_scan_lock_with_retry(scan_id):
             logger.warning("Cannot acquire lock for scan %s — skipping", scan_id)
             return
 
@@ -102,7 +121,6 @@ class OrchestratorService:
                         scan_found = True
                         break
                     if attempt < 3:
-                        import asyncio
                         logger.debug(
                             "Scan %s not yet visible (attempt %d), waiting 1s...",
                             scan_id, attempt,
@@ -183,9 +201,12 @@ class OrchestratorService:
             logger.warning("job.completed missing node_id — skipping")
             return
 
-        if not await self._concurrency.acquire_scan_lock(scan_id):
-            logger.warning("Cannot acquire lock for scan %s", scan_id)
-            return
+        if not await self._acquire_scan_lock_with_retry(
+            scan_id,
+            attempts=_JOB_EVENT_LOCK_RETRY_ATTEMPTS,
+            delay_seconds=_JOB_EVENT_LOCK_RETRY_DELAY_SECONDS,
+        ):
+            raise RuntimeError(f"Cannot acquire lock for scan {scan_id}")
 
         try:
             async with self._session_factory() as session:
@@ -301,8 +322,12 @@ class OrchestratorService:
         if not node_id:
             return
 
-        if not await self._concurrency.acquire_scan_lock(scan_id):
-            return
+        if not await self._acquire_scan_lock_with_retry(
+            scan_id,
+            attempts=_JOB_EVENT_LOCK_RETRY_ATTEMPTS,
+            delay_seconds=_JOB_EVENT_LOCK_RETRY_DELAY_SECONDS,
+        ):
+            raise RuntimeError(f"Cannot acquire lock for scan {scan_id}")
 
         try:
             async with self._session_factory() as session:

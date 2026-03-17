@@ -16,7 +16,13 @@ import {
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { TopBar } from "@/components/dashboard/top-bar"
 import { Spinner } from "@/components/ui/spinner"
-import { downloadScanReportExport, listScans, type ReportExportFormat, type Scan } from "@/lib/scans-store"
+import {
+  downloadScanReportExport,
+  extractVerificationCounts,
+  listScans,
+  type ReportExportFormat,
+  type Scan,
+} from "@/lib/scans-store"
 import { cn } from "@/lib/utils"
 
 function formatDate(dateString: string) {
@@ -100,6 +106,10 @@ export default function ReportsPage() {
 
   const uniqueTargets = new Set(reports.map((report) => report.target)).size
   const criticalReports = reports.filter((report) => report.findings.critical > 0).length
+  const verifiedFindings = reports.reduce(
+    (sum, report) => sum + extractVerificationCounts(report.resultSummary).verified,
+    0
+  )
 
   return (
     <div className="min-h-screen bg-background">
@@ -121,8 +131,8 @@ export default function ReportsPage() {
           <div className="mb-6 grid grid-cols-4 gap-4">
             {[
               { icon: FileText, label: "Completed Reports", value: reports.length, color: "text-foreground" },
-              { icon: Shield, label: "Critical Present", value: criticalReports, color: "text-critical" },
-              { icon: CheckCircle, label: "Buyer Ready", value: reports.length, color: "text-low" },
+              { icon: Shield, label: "Critical Reports", value: criticalReports, color: "text-critical" },
+              { icon: CheckCircle, label: "Verified Findings", value: verifiedFindings, color: "text-low" },
               { icon: Target, label: "Unique Targets", value: uniqueTargets, color: "text-high" },
             ].map((stat) => (
               <div key={stat.label} className="rounded-lg border border-border bg-card p-4">

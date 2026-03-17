@@ -14,6 +14,7 @@ import {
   getExpectedPhases,
   type ApiFinding,
   type ApiScanJob,
+  type ApiScanProfileContract,
   type ScanAsset,
   type ScanType,
 } from "@/lib/scans-store"
@@ -31,6 +32,7 @@ interface OverviewTabProps {
     createdAt: string
     target: string
     errorMessage: string | null
+    executionContract: ApiScanProfileContract | null
     severity: {
       critical: number
       high: number
@@ -188,7 +190,7 @@ export function OverviewTab({ scan, asset, jobs, findings }: OverviewTabProps) {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {latestJobs.map((job) => (
-                    <tr key={job.id} className="text-sm">
+                    <tr key={job.id} className="text-sm group">
                       <td className="px-4 py-3 font-medium text-foreground">{job.tool}</td>
                       <td className="px-4 py-3 text-muted-foreground">{formatPhase(job.phase)}</td>
                       <td className="px-4 py-3">
@@ -220,7 +222,17 @@ export function OverviewTab({ scan, asset, jobs, findings }: OverviewTabProps) {
                               {formatExecutionProvenance(job.execution_provenance)}
                             </span>
                           ) : null}
+                          {job.retry_count > 0 ? (
+                            <span className="rounded-full bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-600" title={`Retried ${job.retry_count} time(s)`}>
+                              ↻ {job.retry_count}
+                            </span>
+                          ) : null}
                         </div>
+                        {(job.status === "failed" || job.status === "blocked") && job.error_message ? (
+                          <p className="mt-1.5 text-xs text-critical/80 leading-relaxed">
+                            {job.error_message}
+                          </p>
+                        ) : null}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         {formatRelativeTime(job.completed_at ?? job.started_at ?? job.created_at)}
@@ -246,12 +258,45 @@ export function OverviewTab({ scan, asset, jobs, findings }: OverviewTabProps) {
               <MetaRow label="Project">{asset?.project?.name ?? "Unassigned"}</MetaRow>
               <MetaRow label="Scan Type">{formatScanType(scan.scanType)}</MetaRow>
               <MetaRow label="Priority">{formatPriority(scan.priority)}</MetaRow>
+              <MetaRow label="Execution Lane">
+                {formatExecutionLane(scan.executionContract?.execution_mode)}
+              </MetaRow>
+              <MetaRow label="Scope Policy">
+                {formatScopePolicy(scan.executionContract?.target_policy)}
+              </MetaRow>
               <MetaRow label="Started">{scan.startedAt ? formatRelativeTime(scan.startedAt) : "Waiting"}</MetaRow>
               <MetaRow label="Created">{formatRelativeTime(scan.createdAt)}</MetaRow>
               <MetaRow label="Finished">
                 {scan.completedAt ? formatRelativeTime(scan.completedAt) : "In progress"}
               </MetaRow>
             </div>
+
+            {scan.executionContract ? (
+              <div className="mt-4 space-y-3 border-t border-border pt-4">
+                <ToolSection label="Live Tools" tone="live" tools={scan.executionContract.live_tools} />
+                {scan.executionContract.conditional_live_tools.length > 0 ? (
+                  <ToolSection
+                    label="Conditional Verification"
+                    tone="conditional"
+                    tools={scan.executionContract.conditional_live_tools}
+                  />
+                ) : null}
+                {scan.executionContract.derived_tools.length > 0 ? (
+                  <ToolSection
+                    label="Derived Layers"
+                    tone="derived"
+                    tools={scan.executionContract.derived_tools}
+                  />
+                ) : null}
+                {scan.executionContract.unsupported_tools.length > 0 ? (
+                  <ToolSection
+                    label="Not Included In This Live Profile"
+                    tone="unsupported"
+                    tools={scan.executionContract.unsupported_tools}
+                  />
+                ) : null}
+              </div>
+            ) : null}
 
             {scan.errorMessage ? (
               <div className="mt-4 rounded-lg border border-critical/30 bg-critical/5 p-3 text-sm text-critical">
@@ -327,6 +372,64 @@ function MetaRow({
     <div className="flex items-center justify-between gap-4">
       <span className="text-muted-foreground">{label}</span>
       <span className="text-right font-medium text-foreground">{children}</span>
+    </div>
+  )
+}
+
+function formatExecutionLane(mode?: string | null): string {
+  switch (mode) {
+    case "controlled_live_local":
+      return "Controlled Live · Local"
+    case "controlled_live_scoped":
+      return "Controlled Live · Scoped"
+    case "demo_simulated":
+      return "Demo Simulated"
+    default:
+      return "Not declared"
+  }
+}
+
+function formatScopePolicy(policy?: string | null): string {
+  switch (policy) {
+    case "local_only":
+      return "Loopback/private targets only"
+    case "in_scope":
+      return "Declared in-scope hosts and domains only"
+    default:
+      return "Not declared"
+  }
+}
+
+function ToolSection({
+  label,
+  tools,
+  tone,
+}: {
+  label: string
+  tools: string[]
+  tone: "live" | "conditional" | "derived" | "unsupported"
+}) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        {label}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {tools.map((tool) => (
+          <span
+            key={`${label}:${tool}`}
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-[11px] font-medium",
+              tone === "live" && "border-low/20 bg-low/10 text-low",
+              tone === "conditional" && "border-primary/20 bg-primary/10 text-primary",
+              tone === "derived" && "border-border bg-background text-foreground",
+              tone === "unsupported" && "border-critical/20 bg-critical/10 text-critical"
+            )}
+          >
+            {tool}
+          </span>
+        ))}
+      </div>
     </div>
   )
 }

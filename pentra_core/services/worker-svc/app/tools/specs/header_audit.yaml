@@ -1,0 +1,16 @@
+name: header_audit
+worker_family: web
+image: projectdiscovery/httpx:latest
+command:
+  - -l
+  - "{httpx_targets_file}"
+  - -json
+  - -silent
+  - -include-response-header
+  - -status-code
+  - -title
+  - -o
+  - "{output_dir}/header_audit.json"
+output_parser: json
+artifact_type: vulnerabilities
+default_timeout: 300

@@ -355,4 +355,4 @@ def _sqlmap_target_url(*, base_url: str, config: dict[str, Any]) -> str:
                 return path
             return f"{base_url.rstrip('/')}/{path.lstrip('/')}"
 
-    return f"{base_url.rstrip('/')}/api/v1/auth/login?username=admin&password=admin123"
+    return base_url.rstrip("/")

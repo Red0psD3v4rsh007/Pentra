@@ -6,6 +6,8 @@ request patterns, endpoint groupings, and interaction flows.
 
 from __future__ import annotations
 
+__classification__ = "runtime_optional"
+
 import logging
 import re
 from dataclasses import dataclass, field

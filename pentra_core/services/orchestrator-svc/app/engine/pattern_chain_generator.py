@@ -7,6 +7,8 @@ can score, budget-check, and convert to dynamic scan_nodes.
 
 from __future__ import annotations
 
+__classification__ = "runtime_optional"
+
 import logging
 from typing import Any
 

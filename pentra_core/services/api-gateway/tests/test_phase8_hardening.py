@@ -72,6 +72,29 @@ def test_enforce_safe_scan_config_rejects_excessive_http_rate_limit():
         raise AssertionError("Expected excessive rate limit validation to fail")
 
 
+def test_enforce_safe_scan_config_rejects_demo_mode_by_default():
+    from pentra_common.profiles import enforce_safe_scan_config, prepare_scan_config
+
+    config = prepare_scan_config(
+        scan_type="full",
+        asset_type="web_app",
+        asset_target="https://app.example.com",
+        config={"execution": {"mode": "demo_simulated"}},
+    )
+
+    try:
+        enforce_safe_scan_config(
+            scan_type="full",
+            asset_type="web_app",
+            asset_target="https://app.example.com",
+            config=config,
+        )
+    except ValueError as exc:
+        assert "demo_simulated" in str(exc)
+    else:  # pragma: no cover - explicit failure branch
+        raise AssertionError("Expected demo mode validation to fail")
+
+
 def test_with_request_metadata_includes_idempotency_key():
     from app.services.scan_service import _with_request_metadata
 

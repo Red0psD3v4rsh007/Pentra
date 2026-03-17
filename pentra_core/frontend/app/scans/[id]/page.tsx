@@ -124,6 +124,7 @@ export default function ScanDetailPage() {
     scanTypeLabel: formatScanType(currentScan.scanType),
     priorityLabel: formatPriority(currentScan.priority),
     severity: currentScan.findings,
+    errorMessage: currentScan.errorMessage,
   }
 
   function renderTabContent() {
@@ -142,6 +143,7 @@ export default function ScanDetailPage() {
               createdAt: currentScan.createdAt,
               target: currentScan.target,
               errorMessage: currentScan.errorMessage,
+              executionContract: currentScan.executionContract,
               severity: currentScan.findings,
             }}
             asset={asset}
@@ -155,6 +157,8 @@ export default function ScanDetailPage() {
         return (
           <AttackGraphTab
             graph={attackGraph}
+            report={report}
+            evidence={evidence}
             advisory={aiReasoning}
             advisoryMode={advisoryMode}
             onChangeAdvisoryMode={selectAdvisoryMode}

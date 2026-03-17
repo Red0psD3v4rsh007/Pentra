@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     max_stateful_replays: int = 10
     artifact_retention_days: int = 30
     scan_idempotency_window_hours: int = 24
+    allow_demo_simulated_scans: bool = False
 
     # ── Advisory AI Reasoning ────────────────────────────────────
     ai_reasoning_enabled: bool = True

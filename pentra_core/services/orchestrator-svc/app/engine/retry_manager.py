@@ -8,6 +8,8 @@ Determines whether a failed node should be retried based on:
 
 from __future__ import annotations
 
+__classification__ = "runtime_hot_path"
+
 import asyncio
 import logging
 import uuid

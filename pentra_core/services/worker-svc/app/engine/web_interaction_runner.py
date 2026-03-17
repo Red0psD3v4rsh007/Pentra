@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
+import re
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
@@ -30,8 +31,11 @@ class _DiscoveryParser(HTMLParser):
         self.links: list[str] = []
         self.forms: list[_ParsedForm] = []
         self.title: str = ""
+        self.ajax_urls: list[str] = []
         self._current_form: _ParsedForm | None = None
         self._in_title = False
+        self._in_script = False
+        self._script_content = ""
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attr_map = {name.lower(): value or "" for name, value in attrs}
@@ -65,15 +69,25 @@ class _DiscoveryParser(HTMLParser):
         if tag == "title":
             self._in_title = True
 
+        if tag == "script":
+            self._in_script = True
+            self._script_content = ""
+
     def handle_endtag(self, tag: str) -> None:
         if tag == "form":
             self._current_form = None
         elif tag == "title":
             self._in_title = False
+        elif tag == "script":
+            self._in_script = False
+            if self._script_content:
+                self.ajax_urls.extend(_extract_ajax_urls(self._script_content))
 
     def handle_data(self, data: str) -> None:
         if self._in_title and data.strip():
             self.title += data.strip()
+        if self._in_script:
+            self._script_content += data
 
 
 class WebInteractionRunner:
@@ -89,8 +103,8 @@ class WebInteractionRunner:
         seed_paths = _string_list(stateful.get("seed_paths")) or ["/", "/login"]
         start_urls = [_join_url(base_url, path) for path in seed_paths]
 
-        max_depth = _bounded_int(stateful.get("crawl_max_depth"), default=2, minimum=1, maximum=4)
-        max_pages = _bounded_int(stateful.get("max_pages"), default=18, minimum=1, maximum=40)
+        max_depth = _bounded_int(stateful.get("crawl_max_depth"), default=3, minimum=1, maximum=6)
+        max_pages = _bounded_int(stateful.get("max_pages"), default=24, minimum=1, maximum=60)
         max_replays = _bounded_int(stateful.get("max_replays"), default=4, minimum=0, maximum=10)
 
         pages: list[dict[str, Any]] = []
@@ -128,7 +142,43 @@ class WebInteractionRunner:
                     "landing_url": public.get("landing_url") or start_urls[0],
                 }
             )
+        # Try API-token auth if configured (Bearer / X-API-Key)
+        for token_config in _api_token_credentials(scan_config):
+            auth_header = _build_auth_header(token_config)
+            if not auth_header:
+                continue
+            async with httpx.AsyncClient(
+                follow_redirects=True,
+                timeout=10.0,
+                headers={"User-Agent": "Pentra-WebInteract/phase8", **auth_header},
+            ) as client:
+                token_label = str(token_config.get("label") or "api_token")
+                token_crawl = await self._crawl_session(
+                    client=client,
+                    base_url=base_url,
+                    start_urls=start_urls,
+                    session_label=token_label,
+                    auth_state="authenticated",
+                    max_depth=max_depth,
+                    max_pages=max_pages,
+                    max_replays=max_replays,
+                )
+                pages.extend(token_crawl["pages"])
+                forms.extend(token_crawl["forms"])
+                workflows.extend(token_crawl["workflows"])
+                replays.extend(token_crawl["replays"])
+                sessions.append(
+                    {
+                        "session_label": token_label,
+                        "auth_state": "authenticated",
+                        "auth_method": "api_token",
+                        "cookie_names": [],
+                        "csrf_tokens": [],
+                        "landing_url": token_crawl.get("landing_url") or start_urls[0],
+                    }
+                )
 
+        # Try form-based login for each credential set
         for credentials in _auth_credentials(scan_config):
             async with httpx.AsyncClient(
                 follow_redirects=True,
@@ -298,6 +348,175 @@ class WebInteractionRunner:
                 "references": [f"workflow:{workflow_type}", *result["evidence"]],
             }
         ]
+
+    async def run_rate_limit_check(
+        self,
+        *,
+        base_url: str,
+        scan_config: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Check for missing rate limiting on sensitive endpoints."""
+        stateful = _stateful_config(scan_config)
+        endpoints = _string_list(stateful.get("rate_limit_endpoints")) or ["/login", "/api/v1/auth/login"]
+        findings: list[dict[str, Any]] = []
+
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=5.0,
+            headers={"User-Agent": "Pentra-RateLimitCheck/phase8"},
+        ) as client:
+            for endpoint in endpoints[:3]:
+                url = _join_url(base_url, endpoint)
+                success_count = 0
+                for _ in range(10):
+                    try:
+                        resp = await client.post(url, data={"username": "test", "password": "test"})
+                        if resp.status_code not in {429, 503}:
+                            success_count += 1
+                    except httpx.HTTPError:
+                        break
+
+                if success_count >= 8:
+                    findings.append({
+                        "title": f"Missing Rate Limiting on {endpoint}",
+                        "severity": "medium",
+                        "confidence": 80,
+                        "target": url,
+                        "endpoint": url,
+                        "description": (
+                            f"Pentra sent 10 rapid requests to {endpoint} and received "
+                            f"{success_count} successful responses without rate limiting."
+                        ),
+                        "tool_source": "web_interact",
+                        "vulnerability_type": "missing_rate_limit",
+                        "surface": "web",
+                        "route_group": _route_group(url),
+                    })
+        return findings
+
+    async def run_parameter_tampering(
+        self,
+        *,
+        base_url: str,
+        scan_config: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Tamper with price/quantity fields in discovered forms."""
+        stateful = _stateful_config(scan_config)
+        if not stateful.get("parameter_tampering", True):
+            return []
+
+        findings: list[dict[str, Any]] = []
+        credential = _preferred_workflow_credential(scan_config)
+
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=10.0,
+            headers={"User-Agent": "Pentra-ParamTamper/phase8"},
+        ) as client:
+            if credential is not None:
+                await self._login(
+                    client=client,
+                    base_url=base_url,
+                    scan_config=scan_config,
+                    credentials=credential,
+                )
+
+            tamper_paths = _string_list(stateful.get("tamper_endpoints")) or [
+                "/portal/checkout/confirm", "/api/v1/orders",
+            ]
+            for path in tamper_paths[:3]:
+                url = _join_url(base_url, path)
+                for field, original, tampered in [
+                    ("price", "29.99", "0.01"),
+                    ("quantity", "1", "-1"),
+                    ("discount", "0", "100"),
+                ]:
+                    try:
+                        resp = await client.post(
+                            url,
+                            data={field: tampered, "item_id": "widget-7", "csrf_token": "demo-csrf"},
+                        )
+                        if resp.status_code == 200 and "error" not in resp.text.lower():
+                            findings.append({
+                                "title": f"Parameter Tampering Accepted: {field}={tampered}",
+                                "severity": "high",
+                                "confidence": 75,
+                                "target": url,
+                                "endpoint": url,
+                                "description": (
+                                    f"Server accepted {field}={tampered} (original: {original}) "
+                                    f"without validation."
+                                ),
+                                "tool_source": "web_interact",
+                                "vulnerability_type": "parameter_tampering",
+                                "payload": f"{field}={tampered}",
+                                "surface": "web",
+                                "route_group": _route_group(url),
+                            })
+                            break  # One finding per endpoint is enough
+                    except httpx.HTTPError:
+                        continue
+        return findings
+
+    async def run_role_switch_test(
+        self,
+        *,
+        base_url: str,
+        scan_config: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Access admin-only pages with lower-privilege credentials."""
+        credentials = _auth_credentials(scan_config)
+        if len(credentials) < 2:
+            return []
+
+        admin_creds = [c for c in credentials if str(c.get("role") or "").lower() in {"admin", "superuser"}]
+        user_creds = [c for c in credentials if c not in admin_creds]
+        if not admin_creds or not user_creds:
+            return []
+
+        stateful = _stateful_config(scan_config)
+        admin_paths = _string_list(stateful.get("admin_paths")) or [
+            "/admin", "/admin/users", "/portal/admin/settings",
+        ]
+        findings: list[dict[str, Any]] = []
+
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=10.0,
+            headers={"User-Agent": "Pentra-RoleSwitch/phase8"},
+        ) as client:
+            login_result = await self._login(
+                client=client,
+                base_url=base_url,
+                scan_config=scan_config,
+                credentials=user_creds[0],
+            )
+            if not login_result["success"]:
+                return []
+
+            for path in admin_paths[:4]:
+                url = _join_url(base_url, path)
+                try:
+                    resp = await client.get(url)
+                    if resp.status_code == 200 and "admin" in resp.text.lower():
+                        findings.append({
+                            "title": f"Privilege Escalation — Admin Page Accessible",
+                            "severity": "critical",
+                            "confidence": 85,
+                            "target": url,
+                            "endpoint": url,
+                            "description": (
+                                f"User '{user_creds[0].get('username')}' (role: user) "
+                                f"can access admin page {path}."
+                            ),
+                            "tool_source": "web_interact",
+                            "vulnerability_type": "privilege_escalation",
+                            "surface": "web",
+                            "route_group": _route_group(url),
+                        })
+                except httpx.HTTPError:
+                    continue
+        return findings
 
     async def _crawl_session(
         self,
@@ -597,6 +816,51 @@ def _preferred_workflow_credential(scan_config: dict[str, Any]) -> dict[str, Any
 def _stateful_config(scan_config: dict[str, Any]) -> dict[str, Any]:
     value = scan_config.get("stateful_testing", {})
     return value if isinstance(value, dict) else {}
+
+
+def _extract_ajax_urls(script_content: str) -> list[str]:
+    """Extract API endpoint URLs from JavaScript source (fetch/XHR patterns)."""
+    patterns = [
+        r"""fetch\s*\(\s*['"]([^'"]+)['"]""",            # fetch('/api/...')
+        r"""\.open\s*\(\s*['"][A-Z]+['"]\s*,\s*['"]([^'"]+)['"]""",  # xhr.open('GET', '/api/...')
+        r"""axios\s*\.\w+\s*\(\s*['"]([^'"]+)['"]""",    # axios.get('/api/...')
+        r"""url\s*:\s*['"]([^'"]+api[^'"]+)['"]""",       # url: '/api/...'
+    ]
+    urls: list[str] = []
+    for pattern in patterns:
+        for match in re.finditer(pattern, script_content):
+            candidate = match.group(1).strip()
+            if candidate and candidate.startswith("/"):
+                urls.append(candidate)
+    return urls
+
+
+def _api_token_credentials(scan_config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract API-token auth configurations from scan_config."""
+    stateful = _stateful_config(scan_config)
+    auth = stateful.get("auth", {})
+    if not isinstance(auth, dict):
+        return []
+    tokens = auth.get("api_tokens", [])
+    if not isinstance(tokens, list):
+        return []
+    return [t for t in tokens if isinstance(t, dict) and (t.get("token") or t.get("api_key"))]
+
+
+def _build_auth_header(token_config: dict[str, Any]) -> dict[str, str]:
+    """Build an HTTP auth header from a token configuration."""
+    token = str(token_config.get("token") or "").strip()
+    api_key = str(token_config.get("api_key") or "").strip()
+    header_name = str(token_config.get("header") or "").strip()
+
+    if token:
+        return {"Authorization": f"Bearer {token}"}
+    if api_key and header_name:
+        return {header_name: api_key}
+    if api_key:
+        return {"X-API-Key": api_key}
+    return {}
+
 
 
 def _string_list(value: Any) -> list[str]:

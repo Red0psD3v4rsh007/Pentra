@@ -1,0 +1,17 @@
+name: cors_check
+worker_family: web
+image: projectdiscovery/httpx:latest
+command:
+  - -l
+  - "{httpx_targets_file}"
+  - -json
+  - -silent
+  - -H
+  - "Origin: https://evil.pentra.test"
+  - -include-response-header
+  - -status-code
+  - -o
+  - "{output_dir}/cors_check.json"
+output_parser: json
+artifact_type: vulnerabilities
+default_timeout: 300

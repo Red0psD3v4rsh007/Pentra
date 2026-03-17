@@ -1,0 +1,17 @@
+name: nikto
+worker_family: web
+image: secfigo/nikto:latest
+command:
+  - -h
+  - "{target}"
+  - -Format
+  - json
+  - -output
+  - "{output_dir}/nikto.json"
+  - -maxtime
+  - "300"
+  - -Tuning
+  - "1234567890abc"
+output_parser: json
+artifact_type: vulnerabilities
+default_timeout: 600

@@ -111,7 +111,7 @@ Status: Completed (AI Attack Reasoning Engine — advanced path ranking, strateg
 # Product Layer
 
 MOD-14  
-Status: In Progress (Frontend UI — active workspace `pentra_core/frontend/`; dashboard, scan flows, attack graph views, and product pages exist as a UI prototype; backend integration is still pending)
+Status: In Progress (Frontend/Product surface — real scan flow is integrated end to end; Reset 0 through Reset 6 are implemented; Reset 4 still needs a fresh browser/runtime proof pass for the attack-graph UX; Reset 6 adds system status bar, failure diagnostics, retention cleanup, and startup validation)
 
 ---
 
@@ -130,3 +130,14 @@ Status: Pending (CI/CD — automated build, testing, and deployment pipelines)
 - Reporting utilities exist in `pentra_core/services/orchestrator-svc/app/engine/` (`report_generator.py`, `attack_narrative.py`, `evidence_extractor.py`, `risk_prioritizer.py`, `compliance_mapper.py`) as supporting capabilities. They do not replace any official module identity in `MASTER_INDEX.md`.
 - Differential-analysis utilities also exist in the orchestrator engine layer as supporting capabilities and should not be treated as a renamed roadmap module.
 - The frontend canonical workspace is `pentra_core/frontend/`. All active UI work should remain there.
+- Current product reset sequence:
+  - Reset 0 Completed — explicit execution truth and mode separation
+  - Reset 1 Completed — real asset and target intake
+  - Reset 2 Completed — convert remaining main-nav pages to real data or honest simplified states
+  - Reset 3 Completed — intelligence module backed by persisted scan truth
+  - Reset 4 In Progress — path-first attack graph UX, clustering, filters, and evidence-first triage implemented; still needs a fresh browser/runtime proof pass
+  - Reset 5 Completed — honest product-safe live profile contracts, unsupported-tool exclusion, per-job execution truth, launcher detach fix, and orchestrator lock-race fix for repeatable scans
+  - Reset 6 Completed — reliability and operator trust: system status bar in sidebar, enhanced /ready endpoint (Redis check), /api/v1/system/status endpoint, better scan creation error handling, visible job failure reasons and retry counts, retention cleanup job, launcher startup config validation
+  - Reset 7 Completed — prune or park non-product engines: classified all 75 orchestrator engine modules (9 hot-path, 27 runtime-optional, 39 experimental), moved dormant modules to `_experimental/`, created `ENGINE_CLASSIFICATION.md` manifest
+  - Reset 8 Completed — beast lane expansion: API-token auth + AJAX discovery in crawl, 4 new tool specs (nikto, cors_check, header_audit, tech_detect) wired into DAG, rate-limit/parameter-tamper/role-switch business-logic tests, evidence strength classification in impact verifier, path compression + root-cause grouping, cross-scan intelligence store with trending patterns and target knowledge
+- Canonical reset plan: `PENTRA_PRODUCT_REALITY_RESET_PLAN.md`

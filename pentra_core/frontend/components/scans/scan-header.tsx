@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ChevronRight, RefreshCw } from "lucide-react"
+import { AlertTriangle, ChevronRight, RefreshCw } from "lucide-react"
 
 import { Progress } from "@/components/ui/progress"
 import { Spinner } from "@/components/ui/spinner"
@@ -24,6 +24,7 @@ interface ScanHeaderProps {
       medium: number
       low: number
     }
+    errorMessage?: string | null
   }
   isRefreshing?: boolean
   onRefresh?: () => void
@@ -151,6 +152,16 @@ export function ScanHeader({ scan, isRefreshing = false, onRefresh }: ScanHeader
             ) : null}
           </div>
         </div>
+
+        {scan.status === "failed" && scan.errorMessage ? (
+          <div className="flex items-start gap-2.5 rounded-lg border border-critical/30 bg-critical/5 px-4 py-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-critical" />
+            <div>
+              <p className="text-sm font-medium text-critical">Scan failed</p>
+              <p className="mt-0.5 text-xs text-critical/80 leading-relaxed">{scan.errorMessage}</p>
+            </div>
+          </div>
+        ) : null}
       </div>
     </header>
   )

@@ -29,12 +29,12 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
-import { useAssetCatalog, useCreateScan } from "@/hooks/use-scans"
+import { useAssetCatalog, useCreateScan, useScanProfiles } from "@/hooks/use-scans"
 import {
   formatAssetType,
   formatPriority,
   isDevAuthBypassEnabled,
-  scanProfiles,
+  type ApiScanProfileContract,
   type ScanAsset,
   type ScanType,
 } from "@/lib/scans-store"
@@ -88,7 +88,24 @@ export default function NewScanPage() {
       })
 
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId)
-  const selectedProfileData = scanProfiles.find((profile) => profile.id === selectedProfile)
+  const {
+    profiles,
+    isLoading: isProfilesLoading,
+    error: profilesError,
+    refresh: refreshProfiles,
+  } = useScanProfiles(selectedAsset?.asset_type, selectedAsset?.target)
+  const selectedProfileData =
+    profiles.find((profile) => profile.scan_type === selectedProfile) ?? null
+
+  useEffect(() => {
+    if (!profiles.length) {
+      return
+    }
+
+    if (!selectedProfile || !profiles.some((profile) => profile.scan_type === selectedProfile)) {
+      setSelectedProfile(profiles[0].scan_type)
+    }
+  }, [profiles, selectedProfile])
 
   function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter" && filteredAssets.length === 1) {
@@ -103,10 +120,10 @@ export default function NewScanPage() {
     }
 
     if (currentStep === 2) {
-      return Boolean(selectedProfile)
+      return Boolean(selectedProfileData)
     }
 
-    return Boolean(selectedAssetId && selectedProfile)
+    return Boolean(selectedAssetId && selectedProfileData)
   }
 
   async function handleSubmit() {
@@ -117,12 +134,11 @@ export default function NewScanPage() {
     try {
       const created = await createScan({
         assetId: selectedAssetId,
-        scanType: selectedProfileData.id,
+        scanType: selectedProfileData.scan_type,
         priority: selectedProfileData.priority,
         config: {
-          source: "frontend-phase1",
-          profile: selectedProfileData.id,
-          ...selectedProfileData.config,
+          source: "frontend-reset5",
+          profile: selectedProfileData.scan_type,
         },
       })
 
@@ -408,66 +424,141 @@ export default function NewScanPage() {
                   <div>
                     <h2 className="text-xl font-semibold text-foreground">Choose a profile</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Profiles map directly to real backend scan types and priorities.
+                      Profiles come from the API and show exactly which tools run live for the selected target.
                     </p>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-3">
-                    {scanProfiles.map((profile) => {
-                      const Icon = profileIcons[profile.id]
-                      const isSelected = selectedProfile === profile.id
-
-                      return (
+                  {profilesError ? (
+                    <Alert variant="destructive" className="border border-critical/40">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Could not load scan profiles</AlertTitle>
+                      <AlertDescription>
+                        <p>{profilesError}</p>
                         <button
-                          key={profile.id}
                           type="button"
-                          onClick={() => setSelectedProfile(profile.id)}
-                          className={cn(
-                            "flex flex-col items-start gap-4 rounded-xl border p-6 text-left transition-all",
-                            isSelected
-                              ? "border-primary bg-primary/10 shadow-lg shadow-primary/10"
-                              : "border-border bg-card hover:border-border/80 hover:bg-elevated"
-                          )}
+                          onClick={refreshProfiles}
+                          className="mt-2 text-sm font-medium underline underline-offset-4"
                         >
-                          <div
+                          Retry profile lookup
+                        </button>
+                      </AlertDescription>
+                    </Alert>
+                  ) : isProfilesLoading ? (
+                    <div className="flex min-h-[280px] items-center justify-center rounded-xl border border-border bg-card">
+                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                        <Spinner className="h-5 w-5" />
+                        Loading truthful execution profiles...
+                      </div>
+                    </div>
+                  ) : profiles.length === 0 ? (
+                    <Empty className="min-h-[280px] rounded-xl border border-border bg-card">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <Shield className="h-6 w-6" />
+                        </EmptyMedia>
+                        <EmptyTitle>No live product profiles for this asset yet</EmptyTitle>
+                        <EmptyDescription>
+                          Pentra currently exposes honest product-safe live profiles only for `web_app`
+                          and `api` assets.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  ) : (
+                    <div className="grid gap-4 xl:grid-cols-3">
+                      {profiles.map((profile) => {
+                        const Icon = profileIcons[profile.scan_type]
+                        const isSelected = selectedProfile === profile.scan_type
+
+                        return (
+                          <button
+                            key={profile.scan_type}
+                            type="button"
+                            onClick={() => setSelectedProfile(profile.scan_type)}
                             className={cn(
-                              "flex h-12 w-12 items-center justify-center rounded-xl",
-                              isSelected ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+                              "flex flex-col items-start gap-4 rounded-xl border p-6 text-left transition-all",
+                              isSelected
+                                ? "border-primary bg-primary/10 shadow-lg shadow-primary/10"
+                                : "border-border bg-card hover:border-border/80 hover:bg-elevated"
                             )}
                           >
-                            <Icon className="h-6 w-6" />
-                          </div>
-
-                          <div>
-                            <h3
-                              className={cn(
-                                "text-base font-semibold",
-                                isSelected ? "text-primary" : "text-foreground"
-                              )}
-                            >
-                              {profile.name}
-                            </h3>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              {profile.description}
-                            </p>
-                          </div>
-
-                          <div className="space-y-2 text-sm">
-                            <div className="flex items-center justify-between gap-4">
-                              <span className="text-muted-foreground">Expected duration</span>
-                              <span className="font-medium text-foreground">{profile.duration}</span>
+                            <div className="flex w-full items-start justify-between gap-3">
+                              <div
+                                className={cn(
+                                  "flex h-12 w-12 items-center justify-center rounded-xl",
+                                  isSelected
+                                    ? "bg-primary/20 text-primary"
+                                    : "bg-muted text-muted-foreground"
+                                )}
+                              >
+                                <Icon className="h-6 w-6" />
+                              </div>
+                              <div className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                                {formatExecutionMode(profile.execution_mode)}
+                              </div>
                             </div>
-                            <div className="flex items-center justify-between gap-4">
-                              <span className="text-muted-foreground">Priority</span>
-                              <span className="font-medium text-foreground">
-                                {formatPriority(profile.priority)}
-                              </span>
+
+                            <div>
+                              <h3
+                                className={cn(
+                                  "text-base font-semibold",
+                                  isSelected ? "text-primary" : "text-foreground"
+                                )}
+                              >
+                                {profile.name}
+                              </h3>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                {profile.description}
+                              </p>
                             </div>
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
+
+                            <div className="w-full space-y-2 text-sm">
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="text-muted-foreground">Expected duration</span>
+                                <span className="font-medium text-foreground">{profile.duration}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="text-muted-foreground">Priority</span>
+                                <span className="font-medium text-foreground">
+                                  {formatPriority(profile.priority)}
+                                </span>
+                              </div>
+                              <div className="flex items-start justify-between gap-4">
+                                <span className="text-muted-foreground">Scope policy</span>
+                                <span className="max-w-[220px] text-right text-foreground">
+                                  {formatTargetPolicy(profile.target_policy)}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="w-full space-y-3 rounded-xl border border-border/70 bg-background/70 p-4">
+                              <ProfileToolSection label="Live tools" tools={profile.live_tools} tone="live" />
+                              {profile.conditional_live_tools.length > 0 ? (
+                                <ProfileToolSection
+                                  label="Conditional verification"
+                                  tools={profile.conditional_live_tools}
+                                  tone="conditional"
+                                />
+                              ) : null}
+                              {profile.derived_tools.length > 0 ? (
+                                <ProfileToolSection
+                                  label="Derived layers"
+                                  tools={profile.derived_tools}
+                                  tone="derived"
+                                />
+                              ) : null}
+                              {profile.unsupported_tools.length > 0 ? (
+                                <ProfileToolSection
+                                  label="Not in this live profile"
+                                  tools={profile.unsupported_tools}
+                                  tone="unsupported"
+                                />
+                              ) : null}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </motion.div>
               ) : null}
 
@@ -513,7 +604,7 @@ export default function NewScanPage() {
                             <div className="flex items-center justify-between">
                               <span className="text-muted-foreground">Scan type</span>
                               <span className="font-medium text-foreground">
-                                {selectedProfileData.id}
+                                {selectedProfileData.scan_type}
                               </span>
                             </div>
                             <div className="flex items-center justify-between">
@@ -528,7 +619,46 @@ export default function NewScanPage() {
                                 {selectedProfileData.duration}
                               </span>
                             </div>
+                            <div className="flex items-start justify-between gap-4">
+                              <span className="text-muted-foreground">Execution lane</span>
+                              <span className="max-w-[220px] text-right font-medium text-foreground">
+                                {formatExecutionMode(selectedProfileData.execution_mode)}
+                              </span>
+                            </div>
+                            <div className="flex items-start justify-between gap-4">
+                              <span className="text-muted-foreground">Scope</span>
+                              <span className="max-w-[220px] text-right text-foreground">
+                                {selectedProfileData.scope_summary}
+                              </span>
+                            </div>
                           </div>
+
+                          <ProfileToolSection
+                            label="Live tools"
+                            tools={selectedProfileData.live_tools}
+                            tone="live"
+                          />
+                          {selectedProfileData.conditional_live_tools.length > 0 ? (
+                            <ProfileToolSection
+                              label="Conditional verification"
+                              tools={selectedProfileData.conditional_live_tools}
+                              tone="conditional"
+                            />
+                          ) : null}
+                          {selectedProfileData.derived_tools.length > 0 ? (
+                            <ProfileToolSection
+                              label="Derived layers"
+                              tools={selectedProfileData.derived_tools}
+                              tone="derived"
+                            />
+                          ) : null}
+                          {selectedProfileData.unsupported_tools.length > 0 ? (
+                            <ProfileToolSection
+                              label="Not in this live profile"
+                              tools={selectedProfileData.unsupported_tools}
+                              tone="unsupported"
+                            />
+                          ) : null}
                         </div>
                       ) : null}
                     </div>
@@ -537,7 +667,7 @@ export default function NewScanPage() {
                   <button
                     type="button"
                     onClick={handleSubmit}
-                    disabled={isSubmitting || !selectedAssetId || !selectedProfile}
+                    disabled={isSubmitting || !selectedAssetId || !selectedProfileData}
                     className="w-full rounded-lg bg-primary py-3.5 text-base font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 hover:shadow-xl hover:shadow-primary/25 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {isSubmitting ? (
@@ -601,6 +731,78 @@ export default function NewScanPage() {
             )}
           </div>
         </main>
+      </div>
+    </div>
+  )
+}
+
+function formatExecutionMode(mode: string): string {
+  switch (mode) {
+    case "controlled_live_local":
+      return "Live · Local"
+    case "controlled_live_scoped":
+      return "Live · Scoped"
+    case "demo_simulated":
+      return "Demo Only"
+    default:
+      return mode
+    }
+}
+
+function formatTargetPolicy(policy: string): string {
+  switch (policy) {
+    case "local_only":
+      return "Loopback/private targets only"
+    case "in_scope":
+      return "Only declared in-scope hosts and domains"
+    default:
+      return policy
+  }
+}
+
+function toolToneClasses(
+  tone: "live" | "conditional" | "derived" | "unsupported"
+): string {
+  switch (tone) {
+    case "live":
+      return "border-low/20 bg-low/10 text-low"
+    case "conditional":
+      return "border-primary/20 bg-primary/10 text-primary"
+    case "derived":
+      return "border-border bg-elevated text-foreground"
+    case "unsupported":
+      return "border-critical/20 bg-critical/10 text-critical"
+    default:
+      return "border-border bg-elevated text-foreground"
+  }
+}
+
+function ProfileToolSection({
+  label,
+  tools,
+  tone,
+}: {
+  label: string
+  tools: string[]
+  tone: "live" | "conditional" | "derived" | "unsupported"
+}) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        {label}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {tools.map((tool) => (
+          <span
+            key={`${label}:${tool}`}
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-[11px] font-medium",
+              toolToneClasses(tone)
+            )}
+          >
+            {tool}
+          </span>
+        ))}
       </div>
     </div>
   )

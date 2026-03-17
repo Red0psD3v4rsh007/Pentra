@@ -18,6 +18,8 @@ Handles:
 
 from __future__ import annotations
 
+__classification__ = "runtime_hot_path"
+
 import logging
 import uuid
 from datetime import datetime, timezone

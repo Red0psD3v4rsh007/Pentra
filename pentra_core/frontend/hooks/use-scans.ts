@@ -14,11 +14,13 @@ import {
   getScanAiReasoning,
   isActiveScanStatus,
   listProjectAssets,
+  listScanProfiles,
   listProjects,
   listScans,
   type AiAdvisoryMode,
   type ApiAsset,
   type ApiProject,
+  type ApiScanProfileContract,
   type CreateAssetInput,
   type CreateProjectInput,
   type CreateScanInput,
@@ -28,6 +30,64 @@ import {
 } from "@/lib/scans-store"
 
 const DEFAULT_POLL_INTERVAL_MS = 5000
+
+export function useScanProfiles(
+  assetType: ApiAsset["asset_type"] | undefined,
+  target: string | undefined
+) {
+  const [profiles, setProfiles] = useState<ApiScanProfileContract[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [reloadToken, setReloadToken] = useState(0)
+
+  useEffect(() => {
+    const normalizedTarget = target?.trim() ?? ""
+    if (!assetType || !normalizedTarget) {
+      setProfiles([])
+      setIsLoading(false)
+      setError(null)
+      return
+    }
+    const currentAssetType: ApiAsset["asset_type"] = assetType
+
+    let cancelled = false
+
+    async function load() {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const nextProfiles = await listScanProfiles({
+          assetType: currentAssetType,
+          target: normalizedTarget,
+        })
+        if (!cancelled) {
+          setProfiles(nextProfiles)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load scan profiles.")
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      cancelled = true
+    }
+  }, [assetType, target, reloadToken])
+
+  return {
+    profiles,
+    isLoading,
+    error,
+    refresh: () => setReloadToken((current) => current + 1),
+  }
+}
 
 export function useScans(options?: {
   page?: number

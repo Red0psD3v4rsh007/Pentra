@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { SystemStatusBar } from "@/components/system-status-bar"
 import {
   LayoutDashboard,
   PlayCircle,
@@ -132,7 +133,8 @@ export function DashboardSidebar() {
       </nav>
 
       {/* Bottom */}
-      <div className="border-t border-border p-3">
+      <div className="border-t border-border p-3 space-y-2">
+        <SystemStatusBar collapsed={collapsed} />
         <Link
           href="/settings"
           className={cn(
@@ -145,7 +147,7 @@ export function DashboardSidebar() {
         </Link>
         
         {!collapsed && (
-          <div className="mt-3 flex items-center gap-3 rounded-md bg-elevated px-3 py-2">
+          <div className="mt-1 flex items-center gap-3 rounded-md bg-elevated px-3 py-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
               JD
             </div>
@@ -156,7 +158,7 @@ export function DashboardSidebar() {
           </div>
         )}
         {collapsed && (
-          <div className="mt-3 flex justify-center">
+          <div className="mt-1 flex justify-center">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
               JD
             </div>

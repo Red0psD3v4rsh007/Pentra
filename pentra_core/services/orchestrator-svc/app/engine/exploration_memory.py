@@ -8,6 +8,8 @@ Memory key: (hypothesis_type, target_node_id, tool)
 
 from __future__ import annotations
 
+__classification__ = "runtime_optional"
+
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone

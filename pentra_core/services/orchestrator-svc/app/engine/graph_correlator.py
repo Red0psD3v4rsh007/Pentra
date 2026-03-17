@@ -17,6 +17,8 @@ It does NOT modify database schemas or scan_artifacts.
 
 from __future__ import annotations
 
+__classification__ = "runtime_optional"
+
 import ipaddress
 import logging
 from dataclasses import dataclass
@@ -356,12 +358,14 @@ class GraphCorrelator:
     def get_correlation_summary(self, new_edges: list[AttackEdge]) -> dict:
         """Summarize correlation results."""
         if not new_edges:
-            return {"total_inferred": 0, "rules_triggered": []}
+            return {"total_inferred": 0, "rules_triggered": [], "root_cause_groups": []}
 
         rules_triggered: dict[str, int] = {}
+        edge_type_counts: dict[str, int] = {}
         for e in new_edges:
             rule = e.properties.get("correlation_rule", "unknown")
             rules_triggered[rule] = rules_triggered.get(rule, 0) + 1
+            edge_type_counts[e.edge_type] = edge_type_counts.get(e.edge_type, 0) + 1
 
         return {
             "total_inferred": len(new_edges),
@@ -369,10 +373,59 @@ class GraphCorrelator:
                 {"rule": r, "edges_added": c}
                 for r, c in sorted(rules_triggered.items(), key=lambda x: -x[1])
             ],
-            "edge_types": dict(sorted(
-                {e.edge_type for e in new_edges}.__iter__().__class__.__name__
-                and [(et, sum(1 for e in new_edges if e.edge_type == et))
-                     for et in {e.edge_type for e in new_edges}],
-                key=lambda x: -x[1],
-            )),
+            "edge_types": dict(sorted(edge_type_counts.items(), key=lambda x: -x[1])),
+            "root_cause_groups": self.group_by_root_cause(new_edges),
         }
+
+    def group_by_root_cause(self, edges: list[AttackEdge]) -> list[dict[str, Any]]:
+        """Group correlated edges by their source vulnerability type.
+
+        When multiple paths lead to the same target via the same vulnerability type,
+        group them under a single 'attack narrative' to reduce noise.
+        """
+        groups: dict[str, dict[str, Any]] = {}
+        for edge in edges:
+            rule = str(edge.properties.get("correlation_rule", "unknown"))
+            source_node = self._graph.nodes.get(edge.source) if hasattr(self, "_graph") else None
+            target_node = self._graph.nodes.get(edge.target) if hasattr(self, "_graph") else None
+
+            source_type = source_node.properties.get("artifact_type", source_node.label) if source_node else edge.source
+            target_label = target_node.label if target_node else edge.target
+
+            key = f"{source_type}:{edge.edge_type}:{target_label}"
+            group = groups.setdefault(key, {
+                "root_cause": str(source_type),
+                "edge_type": edge.edge_type,
+                "target": str(target_label),
+                "correlation_rule": rule,
+                "path_count": 0,
+                "sources": set(),
+                "targets": set(),
+            })
+            group["path_count"] += 1
+            group["sources"].add(edge.source)
+            group["targets"].add(edge.target)
+
+        narratives = []
+        for group in groups.values():
+            narratives.append({
+                "root_cause": group["root_cause"],
+                "edge_type": group["edge_type"],
+                "target": group["target"],
+                "correlation_rule": group["correlation_rule"],
+                "path_count": group["path_count"],
+                "unique_sources": len(group["sources"]),
+                "unique_targets": len(group["targets"]),
+                "narrative": (
+                    f"{group['root_cause']} enables {group['edge_type']} "
+                    f"to {group['target']} ({group['path_count']} paths)"
+                ),
+            })
+
+        narratives.sort(key=lambda x: -x["path_count"])
+        return narratives[:20]
+
+    def _graph(self) -> AttackGraph:
+        """Access the stored graph reference (set during correlate)."""
+        raise AttributeError("Graph not available outside correlate()")
+

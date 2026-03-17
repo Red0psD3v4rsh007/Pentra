@@ -12,6 +12,7 @@ from pentra_common.config.settings import get_settings
 DEFAULT_EXTERNAL_WEB_API_PROFILE_ID = "external_web_api_v1"
 _WEB_API_ASSET_TYPES = {"web_app", "api"}
 _SAFE_LIVE_TOOLS = {
+    "scope_check",
     "httpx_probe",
     "ffuf",
     "nuclei",
@@ -19,6 +20,48 @@ _SAFE_LIVE_TOOLS = {
     "sqlmap_verify",
     "custom_poc",
     "web_interact",
+}
+_DERIVED_TOOLS = {"ai_triage", "report_gen"}
+_PRODUCT_UNSUPPORTED_TOOLS = ["subfinder", "amass", "nmap_discovery", "nmap_svc", "zap"]
+_GENERIC_HTTP_PROBE_PATHS = ["/", "/login", "/graphql", "/openapi.json", "/swagger.json"]
+_GENERIC_CONTENT_PATHS = [
+    "login",
+    "api",
+    "graphql",
+    "openapi.json",
+    "swagger.json",
+    "swagger",
+    "admin",
+    ".well-known/security.txt",
+]
+_PROFILE_CATALOG: dict[str, dict[str, Any]] = {
+    "recon": {
+        "name": "Recon Sweep",
+        "description": (
+            "Product-safe live recon for scoped web and API targets using scope validation "
+            "and HTTP probing only."
+        ),
+        "duration": "~3 min",
+        "priority": "normal",
+    },
+    "vuln": {
+        "name": "Vulnerability Assessment",
+        "description": (
+            "Controlled live enumeration and vulnerability scanning for web/API targets "
+            "with explicit scope enforcement."
+        ),
+        "duration": "~10 min",
+        "priority": "normal",
+    },
+    "full": {
+        "name": "Full Assessment",
+        "description": (
+            "Controlled live web/API assessment with safe verification, AI triage, "
+            "and report generation."
+        ),
+        "duration": "~20 min",
+        "priority": "high",
+    },
 }
 
 
@@ -56,13 +99,23 @@ def prepare_scan_config(
         normalized.setdefault("profile_id", profile_id)
         return normalized
 
-    base = external_web_api_profile(asset_type=asset_type, target=asset_target)
+    base = external_web_api_profile(
+        asset_type=asset_type,
+        target=asset_target,
+        scan_type=scan_type,
+    )
     merged = _deep_merge(base, normalized)
     merged["profile_id"] = DEFAULT_EXTERNAL_WEB_API_PROFILE_ID
     merged["profile"] = {
         **merged.get("profile", {}),
         "id": DEFAULT_EXTERNAL_WEB_API_PROFILE_ID,
     }
+    merged["execution_contract"] = build_scan_profile_contract(
+        scan_type=scan_type,
+        asset_type=asset_type,
+        target=asset_target,
+        config=merged,
+    )
     return merged
 
 
@@ -158,6 +211,10 @@ def enforce_safe_scan_config(
         if isinstance(normalized.get("execution"), dict)
         else {}
     )
+    execution_mode = str(execution.get("mode") or "").strip().lower()
+    if execution_mode == "demo_simulated" and not settings.allow_demo_simulated_scans:
+        raise ValueError("demo_simulated mode is disabled for product scans")
+
     live_tools = _normalize_string_list(execution.get("allowed_live_tools"))
     unknown_tools = sorted(set(live_tools) - _SAFE_LIVE_TOOLS)
     if unknown_tools:
@@ -202,7 +259,12 @@ def enforce_safe_scan_config(
     return normalized
 
 
-def external_web_api_profile(*, asset_type: str, target: str) -> dict[str, Any]:
+def external_web_api_profile(
+    *,
+    asset_type: str,
+    target: str,
+    scan_type: str,
+) -> dict[str, Any]:
     """Return the canonical External Web + API v1 profile."""
     context = derive_target_context(asset_type=asset_type, target=target)
     base_url = context["base_url"]
@@ -210,6 +272,11 @@ def external_web_api_profile(*, asset_type: str, target: str) -> dict[str, Any]:
     scope_domain = context["scope_domain"]
     allowed_hosts = [host] if host else []
     allowed_domains = [scope_domain] if scope_domain and scope_domain != host else []
+    local_target = _is_local_asset_host(host)
+    execution_mode = (
+        "controlled_live_local" if local_target else "controlled_live_scoped"
+    )
+    target_policy = "local_only" if local_target else "in_scope"
 
     http_rpm = 120
     ffuf_rpm = 60
@@ -217,14 +284,11 @@ def external_web_api_profile(*, asset_type: str, target: str) -> dict[str, Any]:
     zap_minutes = 3
     max_subdomains = 25
     max_endpoints = 60
-    content_paths = [
-        "graphql",
-        "openapi.json",
-        "api/v1/auth/login",
-        "api/v1/users/2",
-        "internal/debug",
-    ]
-    http_probe_paths = ["/", "/graphql", "/openapi.json"]
+    content_paths = list(_GENERIC_CONTENT_PATHS)
+    http_probe_paths = list(_GENERIC_HTTP_PROBE_PATHS)
+    sqlmap_path = (
+        "/api/v1/auth/login?username=admin&password=admin123" if local_target else "/"
+    )
 
     return {
         "profile_id": DEFAULT_EXTERNAL_WEB_API_PROFILE_ID,
@@ -263,8 +327,8 @@ def external_web_api_profile(*, asset_type: str, target: str) -> dict[str, Any]:
             "sqlmap_threads": 1,
         },
         "execution": {
-            "mode": "controlled_live_local",
-            "target_policy": "local_only",
+            "mode": execution_mode,
+            "target_policy": target_policy,
             "allowed_live_tools": [
                 "scope_check",
                 "httpx_probe",
@@ -336,7 +400,7 @@ def external_web_api_profile(*, asset_type: str, target: str) -> dict[str, Any]:
             ],
             "sqlmap": {
                 "method": "GET",
-                "path": "/api/v1/auth/login?username=admin&password=admin123",
+                "path": sqlmap_path,
                 "ignore_codes": [401],
                 "risk": 2,
                 "level": 3,
@@ -366,19 +430,7 @@ def external_web_api_profile(*, asset_type: str, target: str) -> dict[str, Any]:
             },
         },
         "deterministic_mode": True,
-        "toolchain": [
-            {"phase": "scope_validation", "tool": "scope_check"},
-            {"phase": "recon", "tool": "subfinder"},
-            {"phase": "recon", "tool": "amass"},
-            {"phase": "recon", "tool": "nmap_discovery"},
-            {"phase": "enum", "tool": "httpx_probe"},
-            {"phase": "enum", "tool": "web_interact"},
-            {"phase": "enum", "tool": "nmap_svc"},
-            {"phase": "enum", "tool": "ffuf"},
-            {"phase": "vuln_scan", "tool": "nuclei"},
-            {"phase": "vuln_scan", "tool": "zap"},
-            {"phase": "vuln_scan", "tool": "sqlmap"},
-        ],
+        "toolchain": _external_web_api_toolchain(scan_type),
         "command_context": {
             "base_url": base_url,
             "target_host": host,
@@ -407,6 +459,168 @@ def external_web_api_profile(*, asset_type: str, target: str) -> dict[str, Any]:
             "sqlmap_threads": 1,
         },
     }
+
+
+def list_scan_profile_contracts(*, asset_type: str, target: str) -> list[dict[str, Any]]:
+    """Return the honest product-safe profile catalog for an asset target."""
+    if asset_type not in _WEB_API_ASSET_TYPES:
+        return []
+
+    return [
+        build_scan_profile_contract(
+            scan_type=scan_type,
+            asset_type=asset_type,
+            target=target,
+            config=prepare_scan_config(
+                scan_type=scan_type,
+                asset_type=asset_type,
+                asset_target=target,
+                config={"profile": scan_type},
+            ),
+        )
+        for scan_type in ("recon", "vuln", "full")
+    ]
+
+
+def build_scan_profile_contract(
+    *,
+    scan_type: str,
+    asset_type: str,
+    target: str,
+    config: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Describe exactly what a product-safe profile will run for a target."""
+    if asset_type not in _WEB_API_ASSET_TYPES or scan_type not in _PROFILE_CATALOG:
+        return None
+
+    normalized_config = deepcopy(config or {})
+    execution = (
+        normalized_config.get("execution", {})
+        if isinstance(normalized_config.get("execution"), dict)
+        else {}
+    )
+    verification_policy = (
+        normalized_config.get("verification_policy", {})
+        if isinstance(normalized_config.get("verification_policy"), dict)
+        else {}
+    )
+    scope = (
+        normalized_config.get("scope", {})
+        if isinstance(normalized_config.get("scope"), dict)
+        else {}
+    )
+    targeting = (
+        normalized_config.get("targeting", {})
+        if isinstance(normalized_config.get("targeting"), dict)
+        else {}
+    )
+    catalog = _PROFILE_CATALOG[scan_type]
+    scheduled_tools = [entry["tool"] for entry in _external_web_api_toolchain(scan_type)]
+    allowed_live_tools = _normalize_string_list(execution.get("allowed_live_tools")) or sorted(
+        _SAFE_LIVE_TOOLS
+    )
+    conditional_live_tools = [
+        tool
+        for tool in _normalize_string_list(verification_policy.get("allowed_tools"))
+        if tool in _SAFE_LIVE_TOOLS and tool not in scheduled_tools
+    ]
+    derived_tools = [tool for tool in scheduled_tools if tool in _DERIVED_TOOLS]
+    live_tools = [
+        tool
+        for tool in scheduled_tools
+        if tool in allowed_live_tools and tool not in _DERIVED_TOOLS
+    ]
+    unsupported_tools = [tool for tool in _PRODUCT_UNSUPPORTED_TOOLS if tool not in live_tools]
+    allowed_hosts = _normalize_string_list(scope.get("allowed_hosts"))
+    allowed_domains = _normalize_string_list(scope.get("allowed_domains"))
+    execution_mode = str(execution.get("mode") or "controlled_live_local")
+    target_policy = str(execution.get("target_policy") or "local_only")
+
+    scope_summary = (
+        "Loopback/private targets only."
+        if target_policy == "local_only"
+        else _format_scope_summary(
+            allowed_hosts=allowed_hosts,
+            allowed_domains=allowed_domains,
+            fallback_target=str(targeting.get("host") or target),
+        )
+    )
+
+    return {
+        "scan_type": scan_type,
+        "profile_id": DEFAULT_EXTERNAL_WEB_API_PROFILE_ID,
+        "name": catalog["name"],
+        "description": catalog["description"],
+        "duration": catalog["duration"],
+        "priority": catalog["priority"],
+        "execution_mode": execution_mode,
+        "target_policy": target_policy,
+        "scope_summary": scope_summary,
+        "scheduled_tools": scheduled_tools,
+        "live_tools": live_tools,
+        "conditional_live_tools": conditional_live_tools,
+        "derived_tools": derived_tools,
+        "unsupported_tools": unsupported_tools,
+        "guardrails": [
+            "No silent simulation in product-safe live modes.",
+            "Only declared scope hosts/domains may be reached.",
+            "Safe verification is limited to selected finding classes.",
+            "Demo simulation mode is reserved for local validation only.",
+        ],
+        "honesty_notes": [
+            "Unsupported target-execution tools are excluded from this live profile instead of being simulated.",
+            "AI triage and report generation are derived from persisted artifacts, not direct target execution.",
+            "Conditional verification tools run only when findings and policy allow them.",
+        ],
+        "sellable": True,
+    }
+
+
+def _external_web_api_toolchain(scan_type: str) -> list[dict[str, str]]:
+    """Truthful product-safe toolchain for the External Web + API profile."""
+    if scan_type == "recon":
+        return [
+            {"phase": "scope_validation", "tool": "scope_check"},
+            {"phase": "recon", "tool": "httpx_probe"},
+        ]
+    if scan_type == "vuln":
+        return [
+            {"phase": "scope_validation", "tool": "scope_check"},
+            {"phase": "recon", "tool": "httpx_probe"},
+            {"phase": "enum", "tool": "web_interact"},
+            {"phase": "enum", "tool": "ffuf"},
+            {"phase": "vuln_scan", "tool": "nuclei"},
+            {"phase": "vuln_scan", "tool": "sqlmap"},
+        ]
+    if scan_type == "full":
+        return [
+            {"phase": "scope_validation", "tool": "scope_check"},
+            {"phase": "recon", "tool": "httpx_probe"},
+            {"phase": "enum", "tool": "web_interact"},
+            {"phase": "enum", "tool": "ffuf"},
+            {"phase": "vuln_scan", "tool": "nuclei"},
+            {"phase": "vuln_scan", "tool": "sqlmap"},
+            {"phase": "ai_analysis", "tool": "ai_triage"},
+            {"phase": "report_gen", "tool": "report_gen"},
+        ]
+    return []
+
+
+def _format_scope_summary(
+    *,
+    allowed_hosts: list[str],
+    allowed_domains: list[str],
+    fallback_target: str,
+) -> str:
+    if allowed_hosts and allowed_domains:
+        return (
+            f"Hosts: {', '.join(allowed_hosts)}. Domains: {', '.join(allowed_domains)}."
+        )
+    if allowed_hosts:
+        return f"Hosts: {', '.join(allowed_hosts)}."
+    if allowed_domains:
+        return f"Domains: {', '.join(allowed_domains)}."
+    return f"Target scope anchored to {fallback_target}."
 
 
 def derive_target_context(*, asset_type: str, target: str) -> dict[str, str]:

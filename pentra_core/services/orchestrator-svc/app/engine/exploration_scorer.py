@@ -11,6 +11,8 @@ Scoring signals:
 
 from __future__ import annotations
 
+__classification__ = "runtime_optional"
+
 import logging
 from dataclasses import dataclass
 from typing import Any

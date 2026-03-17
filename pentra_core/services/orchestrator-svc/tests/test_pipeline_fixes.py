@@ -115,7 +115,7 @@ def test_vuln_template():
 
 
 def test_external_web_api_full_profile_toolchain():
-    """Profile-specific full scans should include HTTP probing and web/API checks."""
+    """Profile-specific full scans should expose only the honest product-safe toolchain."""
     from pentra_common.profiles import prepare_scan_config
     from app.engine.dag_builder import _select_tools
 
@@ -132,12 +132,48 @@ def test_external_web_api_full_profile_toolchain():
     )
     tool_names = [tool.name for tool in tools]
 
+    assert "scope_check" in tool_names
     assert "httpx_probe" in tool_names
+    assert "web_interact" in tool_names
     assert "ffuf" in tool_names
     assert "nuclei" in tool_names
-    assert "zap" in tool_names
+    assert "sqlmap" in tool_names
+    assert "ai_triage" in tool_names
+    assert "report_gen" in tool_names
     assert tool_names.index("httpx_probe") < tool_names.index("nuclei")
+    assert tool_names.index("scope_check") < tool_names.index("httpx_probe")
     assert "metasploit" not in tool_names
+    assert "zap" not in tool_names
+    assert "subfinder" not in tool_names
+    assert "amass" not in tool_names
+    assert "nmap_discovery" not in tool_names
+    assert "nmap_svc" not in tool_names
+
+
+def test_orchestrator_retries_scan_lock_for_job_events():
+    from app.services.orchestrator_service import OrchestratorService
+
+    class FakeConcurrency:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def acquire_scan_lock(self, scan_id, holder="orchestrator") -> bool:
+            self.calls += 1
+            return self.calls >= 3
+
+    service = OrchestratorService(session_factory=None, redis=None)  # type: ignore[arg-type]
+    service._concurrency = FakeConcurrency()
+
+    acquired = asyncio.run(
+        service._acquire_scan_lock_with_retry(
+            uuid.uuid4(),
+            attempts=5,
+            delay_seconds=0.0,
+        )
+    )
+
+    assert acquired is True
+    assert service._concurrency.calls == 3
 
 
 def test_unknown_scan_type():

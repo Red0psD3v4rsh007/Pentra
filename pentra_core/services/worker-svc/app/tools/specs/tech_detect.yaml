@@ -1,0 +1,17 @@
+name: tech_detect
+worker_family: recon
+image: projectdiscovery/httpx:latest
+command:
+  - -l
+  - "{httpx_targets_file}"
+  - -json
+  - -silent
+  - -tech-detect
+  - -status-code
+  - -title
+  - -web-server
+  - -o
+  - "{output_dir}/tech_detect.json"
+output_parser: json
+artifact_type: technologies
+default_timeout: 300

