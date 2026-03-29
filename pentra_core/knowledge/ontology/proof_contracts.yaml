@@ -1,0 +1,439 @@
+version: 1
+program: phase10_public_source_first
+phase: 2
+generated_at: "2026-03-24T15:00:00+05:30"
+proof_contracts:
+  - key: browser_execution_xss
+    name: Browser execution XSS proof
+    description: >
+      Promote XSS only when browser-backed script execution is observed on the
+      target route.
+    proof_strength: browser_verified
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_wstg_stable
+    required_evidence:
+      - route_and_payload_identity
+      - execution_observation
+      - replayable_request_or_browser_steps
+    positive_requirements:
+      - script execution or equivalent browser-side sink activation observed
+      - execution ties to attacker-controlled input
+    negative_requirements:
+      - plain string reflection without execution is insufficient
+    replay_requirements:
+      - deterministic route
+      - payload capture
+      - browser-verifier artifact
+    prohibited_shortcuts:
+      - reflection_only_promotion
+      - static_sink_guess_without_execution
+    candidate_tool_ids:
+      - web_interact
+      - custom_poc
+    citations:
+      - fact_key: browser_execution_xss_contract_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - proof_patterns
+          - exploit_paths
+  - key: stored_execution_xss
+    name: Stored XSS workflow proof
+    description: >
+      Require successful persistence plus browser execution on a downstream
+      rendering path.
+    proof_strength: browser_verified
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_wstg_stable
+    required_evidence:
+      - write_path
+      - render_path
+      - browser_execution
+    positive_requirements:
+      - payload persisted
+      - later render triggers browser execution
+    negative_requirements:
+      - storage without render proof is insufficient
+    replay_requirements:
+      - workflow steps
+      - stored artifact reference
+      - browser trace
+    prohibited_shortcuts:
+      - stored_string_only_promotion
+    candidate_tool_ids:
+      - web_interact
+      - custom_poc
+    citations:
+      - fact_key: stored_execution_xss_contract_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - proof_patterns
+          - exploit_paths
+  - key: injection_replay_contract
+    name: Injection replay proof
+    description: >
+      Promote injection only when controlled, replayable request deltas support
+      the hypothesis.
+    proof_strength: replayable
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    required_evidence:
+      - baseline_request
+      - mutated_request
+      - reproducible_delta
+    positive_requirements:
+      - stable behavioral delta tied to crafted input
+    negative_requirements:
+      - heuristic scanner output without replay is insufficient
+    replay_requirements:
+      - exact request template
+      - request parameter identity
+    prohibited_shortcuts:
+      - promote_sqlmap_heuristic_output_without_replay
+    candidate_tool_ids:
+      - sqlmap
+      - custom_poc
+      - web_interact
+    citations:
+      - fact_key: injection_replay_contract_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_guidance
+          - testing_methodology
+  - key: role_differential_access_contract
+    name: Role differential access proof
+    description: >
+      Access control or auth abuse claims require comparative replay across at
+      least two identity states.
+    proof_strength: replayable
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    required_evidence:
+      - target_route
+      - role_a_outcome
+      - role_b_outcome
+    positive_requirements:
+      - same route or object behaves differently across roles in a way that
+        violates intended access boundary
+    negative_requirements:
+      - single-role success is insufficient for access-control claims
+    replay_requirements:
+      - role model
+      - request replay per role
+      - preserved differential evidence
+    prohibited_shortcuts:
+      - anonymous_or_admin_only_claim_without_comparison
+    candidate_tool_ids:
+      - web_interact
+      - custom_poc
+    citations:
+      - fact_key: role_differential_access_contract_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_paths
+          - proof_patterns
+  - key: sensitive_data_exposure_replay
+    name: Sensitive data exposure replay proof
+    description: >
+      Data exposure requires exact route and response replay with preserved
+      disclosed fields.
+    proof_strength: replayable
+    source_summary_keys:
+      - owasp_wstg_stable
+      - juice_shop_official_project
+    required_evidence:
+      - route_identity
+      - disclosed_fields
+      - replayable_response
+    positive_requirements:
+      - sensitive or privileged data present in a live replayable response
+    negative_requirements:
+      - assumption from route name alone is insufficient
+    replay_requirements:
+      - exact response sample
+      - field extraction
+    prohibited_shortcuts:
+      - inferred_admin_exposure_without_response
+    candidate_tool_ids:
+      - web_interact
+      - custom_poc
+    citations:
+      - fact_key: sensitive_data_exposure_replay_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_guidance
+          - testing_methodology
+  - key: stack_trace_disclosure_contract
+    name: Stack trace disclosure proof
+    description: >
+      Confirmed internal disclosure requires a replayable error response with
+      preserved internal details.
+    proof_strength: replayable
+    source_summary_keys:
+      - owasp_wstg_stable
+    required_evidence:
+      - exact triggering request
+      - replayable disclosed stack or path details
+    positive_requirements:
+      - internal file paths, stack frames, or diagnostic internals present
+    negative_requirements:
+      - generic 500 responses without internal details are insufficient
+    replay_requirements:
+      - request template
+      - response evidence reference
+    prohibited_shortcuts:
+      - noisy_error_title_only_promotion
+    candidate_tool_ids:
+      - custom_poc
+      - web_interact
+    citations:
+      - fact_key: stack_trace_disclosure_contract_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_guidance
+          - attack_preconditions
+  - key: weak_crypto_material_contract
+    name: Weak cryptographic material proof
+    description: >
+      Weak crypto claims require exposed material or a replayable verification
+      path tied to the target.
+    proof_strength: replayable
+    source_summary_keys:
+      - owasp_asvs
+      - owasp_cheat_sheet_series
+    required_evidence:
+      - cryptographic_material_reference
+      - weakness_description
+    positive_requirements:
+      - weak or unsafe crypto material demonstrably tied to the target
+    negative_requirements:
+      - generic “uses JWT” or “uses hashing” statements are insufficient
+    replay_requirements:
+      - material capture
+      - deterministic verification step
+    prohibited_shortcuts:
+      - generic_token_presence_claim
+    candidate_tool_ids:
+      - jwt_tool
+      - custom_poc
+      - web_interact
+    citations:
+      - fact_key: weak_crypto_material_contract_phase2
+        title: OWASP Application Security Verification Standard
+        source_key: owasp_asvs
+        source_url: https://owasp.org/www-project-application-security-verification-standard/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_requirements
+          - control_taxonomy
+  - key: xxe_parser_contract
+    name: XXE parser proof
+    description: >
+      XXE claims require parser-specific evidence under controlled XML inputs.
+    proof_strength: replayable
+    source_summary_keys:
+      - owasp_cheat_sheet_series
+      - portswigger_web_security_academy
+    required_evidence:
+      - xml_route_identity
+      - parser_behavior_delta
+    positive_requirements:
+      - parser behavior demonstrates unsafe entity handling
+    negative_requirements:
+      - content-type guess alone is insufficient
+    replay_requirements:
+      - XML payload
+      - parser response or side-effect artifact
+    prohibited_shortcuts:
+      - xml_route_presence_only_claim
+    candidate_tool_ids:
+      - custom_poc
+      - web_interact
+    citations:
+      - fact_key: xxe_parser_contract_phase2
+        title: OWASP Cheat Sheet Series
+        source_key: owasp_cheat_sheet_series
+        source_url: https://cheatsheetseries.owasp.org/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - payload_archetypes
+          - exploit_preconditions
+  - key: deserialization_replay_contract
+    name: Deserialization replay proof
+    description: >
+      Deserialization claims require replayable parser or object handling
+      evidence, not speculative gadget claims.
+    proof_strength: replayable
+    source_summary_keys:
+      - owasp_cheat_sheet_series
+      - portswigger_web_security_academy
+    required_evidence:
+      - serialized_input_reference
+      - parser_or_object_behavior_delta
+    positive_requirements:
+      - unsafe object or parser behavior triggered by crafted input
+    negative_requirements:
+      - framework presence alone is insufficient
+    replay_requirements:
+      - exact payload
+      - exact route
+    prohibited_shortcuts:
+      - gadget_chain_claim_without_runtime_effect
+    candidate_tool_ids:
+      - custom_poc
+      - web_interact
+    citations:
+      - fact_key: deserialization_replay_contract_phase2
+        title: OWASP Cheat Sheet Series
+        source_key: owasp_cheat_sheet_series
+        source_url: https://cheatsheetseries.owasp.org/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_preconditions
+          - payload_archetypes
+  - key: redirect_control_contract
+    name: Redirect control proof
+    description: >
+      Unvalidated redirect claims require controlled navigation to a
+      user-specified destination.
+    proof_strength: replayable
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    required_evidence:
+      - redirect_parameter
+      - controlled_target
+      - replayed_redirect_response
+    positive_requirements:
+      - target navigation is attacker-controlled without proper validation
+    negative_requirements:
+      - parameter presence without navigation change is insufficient
+    replay_requirements:
+      - exact URL
+      - resulting Location or browser navigation evidence
+    prohibited_shortcuts:
+      - open_redirect_assumption_from_parameter_name_only
+    candidate_tool_ids:
+      - web_interact
+      - custom_poc
+    citations:
+      - fact_key: redirect_control_contract_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_guidance
+          - attack_preconditions
+  - key: component_truth_contract
+    name: Component and hidden asset truth contract
+    description: >
+      Component claims require captured version or asset evidence tied to the
+      target, and must stay separate from exploit proof unless exploitation is
+      separately demonstrated.
+    proof_strength: candidate_only
+    source_summary_keys:
+      - owasp_asvs
+      - juice_shop_official_project
+    required_evidence:
+      - asset_or_version_reference
+    positive_requirements:
+      - specific component or hidden asset evidence captured
+    negative_requirements:
+      - unsupported “looks like library X” guesses are insufficient
+    replay_requirements:
+      - exact asset path or header evidence
+    prohibited_shortcuts:
+      - promote_as_exploited_without_separate_proof
+    candidate_tool_ids:
+      - httpx_probe
+      - web_interact
+    citations:
+      - fact_key: component_truth_contract_phase2
+        title: OWASP Application Security Verification Standard
+        source_key: owasp_asvs
+        source_url: https://owasp.org/www-project-application-security-verification-standard/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_requirements
+          - benchmark_truth_constraints
+  - key: misconfiguration_surface_contract
+    name: Misconfiguration surface proof
+    description: >
+      Misconfiguration claims require a replayable route or configuration
+      exposure, not just a guessed label.
+    proof_strength: replayable
+    source_summary_keys:
+      - owasp_wstg_stable
+      - owasp_cheat_sheet_series
+    required_evidence:
+      - route_identity
+      - exposed_misconfiguration_detail
+    positive_requirements:
+      - configuration or privileged surface is reachable and replayable in the
+        observed context
+    negative_requirements:
+      - admin-looking path names alone are insufficient
+    replay_requirements:
+      - exact route
+      - response artifact
+    prohibited_shortcuts:
+      - label_based_promotion
+    candidate_tool_ids:
+      - web_interact
+      - custom_poc
+      - httpx_probe
+    citations:
+      - fact_key: misconfiguration_surface_contract_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_guidance
+          - attack_preconditions

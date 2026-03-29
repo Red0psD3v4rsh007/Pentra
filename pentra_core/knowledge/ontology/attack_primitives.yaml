@@ -1,0 +1,736 @@
+version: 1
+program: phase10_public_source_first
+phase: 2
+generated_at: "2026-03-24T15:00:00+05:30"
+attack_primitives:
+  - key: reflected_xss_route_probe
+    name: Reflected XSS route probe
+    description: >
+      Stage route-specific payloads in query or parameter positions and look
+      for reflection candidates before browser verification.
+    challenge_family_keys: [xss]
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_wstg_stable
+    surfaces: [web, spa_route, search]
+    prerequisite_evidence:
+      - reflected_input_position
+      - reachable_route
+    discovery_signals:
+      - attacker-controlled input appears in HTML or JSON response
+      - route accepts untrusted search or filter parameters
+    preferred_tool_ids:
+      - web_interact
+      - ffuf
+      - custom_poc
+    proof_contract_keys:
+      - browser_execution_xss
+    planner_action_keys:
+      - stage_route_specific_xss_payloads
+    tags: [xss, reflected, candidate]
+    citations:
+      - fact_key: reflected_xss_route_probe_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_paths
+          - proof_patterns
+  - key: dom_xss_browser_probe
+    name: DOM XSS browser probe
+    description: >
+      Discover client-side sources and sinks from loaded scripts and verify real
+      script execution in a browser context.
+    challenge_family_keys: [xss]
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_wstg_stable
+    surfaces: [browser, spa_route, client_side]
+    prerequisite_evidence:
+      - client_script_inventory
+      - sink_or_source_markers
+    discovery_signals:
+      - DOM sink marker discovered
+      - route updates DOM from query or fragment input
+    preferred_tool_ids:
+      - web_interact
+      - custom_poc
+    proof_contract_keys:
+      - browser_execution_xss
+    planner_action_keys:
+      - map_client_side_sinks
+      - stage_route_specific_xss_payloads
+    tags: [xss, dom, browser]
+    citations:
+      - fact_key: dom_xss_browser_probe_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_paths
+          - proof_patterns
+  - key: stored_xss_workflow_probe
+    name: Stored XSS workflow replay probe
+    description: >
+      Inject content into persistent fields, replay the downstream rendering
+      workflow, and require browser execution before promotion.
+    challenge_family_keys: [xss, business_logic_abuse]
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_wstg_stable
+    surfaces: [browser, workflow, stored_data]
+    prerequisite_evidence:
+      - writable_persistent_input
+      - reachable_rendering_path
+    discovery_signals:
+      - comments, profile fields, or reviews render stored input later
+      - persistent route families observed in target model
+    preferred_tool_ids:
+      - web_interact
+      - custom_poc
+    proof_contract_keys:
+      - stored_execution_xss
+    planner_action_keys:
+      - replay_stored_xss_workflow
+      - mutate_business_workflows
+    tags: [xss, stored, workflow]
+    citations:
+      - fact_key: stored_xss_workflow_probe_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_paths
+          - proof_patterns
+  - key: sql_injection_parameter_diff
+    name: SQL injection parameter differential probe
+    description: >
+      Compare parameter behavior across boolean, time, or error conditions and
+      require replayable response deltas before promotion.
+    challenge_family_keys: [injection, input_validation]
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    surfaces: [api, web_form, parameter]
+    prerequisite_evidence:
+      - parameter_inventory
+      - repeatable_request_template
+    discovery_signals:
+      - conditional response delta
+      - time-based delta
+      - server error under structured payloads
+    preferred_tool_ids:
+      - sqlmap
+      - custom_poc
+      - web_interact
+    proof_contract_keys:
+      - injection_replay_contract
+    planner_action_keys:
+      - verify_suspected_injection
+    tags: [sqli, injection]
+    citations:
+      - fact_key: sql_injection_parameter_diff_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - verification_guidance
+  - key: nosql_and_graphql_injection_probe
+    name: NoSQL and GraphQL injection probe
+    description: >
+      Exercise JSON, GraphQL, and non-relational query surfaces with structure-
+      aware mutations and compare semantic response deltas.
+    challenge_family_keys: [injection, input_validation]
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_cheat_sheet_series
+    surfaces: [api, graphql, json]
+    prerequisite_evidence:
+      - api_schema_or_route_clues
+      - structured_request_body
+    discovery_signals:
+      - GraphQL introspection exposure
+      - altered response shape under structure mutations
+      - auth bypass through JSON operator injection
+    preferred_tool_ids:
+      - web_interact
+      - custom_poc
+      - graphql_cop
+    proof_contract_keys:
+      - injection_replay_contract
+    planner_action_keys:
+      - verify_suspected_injection
+    tags: [nosql, graphql, api]
+    citations:
+      - fact_key: nosql_and_graphql_injection_probe_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_paths
+          - web_attack_taxonomy
+  - key: idor_role_diff_probe
+    name: IDOR role differential probe
+    description: >
+      Replay object references across different identity contexts and compare
+      authorization outcomes.
+    challenge_family_keys: [broken_access_control]
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    surfaces: [api, object_reference, authenticated]
+    prerequisite_evidence:
+      - role_model
+      - replayable_authenticated_requests
+    discovery_signals:
+      - object identifiers exposed in routes or responses
+      - differing access outcome across roles
+    preferred_tool_ids:
+      - web_interact
+      - custom_poc
+    proof_contract_keys:
+      - role_differential_access_contract
+    planner_action_keys:
+      - compare_role_access
+    tags: [idor, access_control]
+    citations:
+      - fact_key: idor_role_diff_probe_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - challenge_family_mapping
+          - exploit_paths
+  - key: privileged_api_surface_diff
+    name: Privileged API surface differential probe
+    description: >
+      Compare public, user, and privileged access to admin-facing APIs and
+      responses to expose unauthorized surface.
+    challenge_family_keys: [broken_access_control, sensitive_data_exposure, security_misconfiguration]
+    source_summary_keys:
+      - juice_shop_official_project
+      - owasp_wstg_stable
+    surfaces: [api, admin_surface, role_differential]
+    prerequisite_evidence:
+      - route_group_summary
+      - role_model
+    discovery_signals:
+      - admin-labeled or privileged route groups
+      - differing status code or body content by role
+    preferred_tool_ids:
+      - web_interact
+      - httpx_probe
+      - custom_poc
+    proof_contract_keys:
+      - role_differential_access_contract
+      - sensitive_data_exposure_replay
+      - misconfiguration_surface_contract
+    planner_action_keys:
+      - compare_role_access
+      - enumerate_privileged_api_surface
+    tags: [privileged_api, access_control]
+    citations:
+      - fact_key: privileged_api_surface_diff_phase2
+        title: OWASP Juice Shop Project Page
+        source_key: juice_shop_official_project
+        source_url: https://owasp.org/www-project-juice-shop/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - benchmark_target_identity
+          - challenge_family_mapping
+  - key: session_and_token_abuse_probe
+    name: Session and token abuse probe
+    description: >
+      Exercise weak session, JWT, or token flows across login and authenticated
+      requests.
+    challenge_family_keys: [broken_authentication, cryptographic_issues]
+    source_summary_keys:
+      - owasp_cheat_sheet_series
+      - owasp_asvs
+    surfaces: [auth, token, session]
+    prerequisite_evidence:
+      - auth_surface_summary
+      - captured_tokens_or_cookies
+    discovery_signals:
+      - unsigned or weak token acceptance
+      - token replay across contexts
+      - session survives unexpected state change
+    preferred_tool_ids:
+      - web_interact
+      - jwt_tool
+      - custom_poc
+    proof_contract_keys:
+      - weak_crypto_material_contract
+      - role_differential_access_contract
+    planner_action_keys:
+      - pressure_auth_tokens_and_login_flows
+    tags: [auth, jwt, session]
+    citations:
+      - fact_key: session_and_token_abuse_probe_phase2
+        title: OWASP Cheat Sheet Series
+        source_key: owasp_cheat_sheet_series
+        source_url: https://cheatsheetseries.owasp.org/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_preconditions
+          - implementation_guidance
+  - key: login_and_reset_flow_mutation_probe
+    name: Login and reset flow mutation probe
+    description: >
+      Mutate login, forgot-password, and recovery workflows to find state and
+      identity handling flaws.
+    challenge_family_keys: [broken_authentication, business_logic_abuse]
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    surfaces: [auth, workflow]
+    prerequisite_evidence:
+      - login_or_reset_routes
+      - replayable_browser_or_http_flow
+    discovery_signals:
+      - missing state validation
+      - weak reset token handling
+      - inconsistent account lockout behavior
+    preferred_tool_ids:
+      - web_interact
+      - custom_poc
+    proof_contract_keys:
+      - role_differential_access_contract
+    planner_action_keys:
+      - pressure_auth_tokens_and_login_flows
+      - mutate_business_workflows
+    tags: [auth, reset, workflow]
+    citations:
+      - fact_key: login_and_reset_flow_mutation_probe_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - attack_preconditions
+  - key: anti_automation_limit_probe
+    name: Anti-automation limit probe
+    description: >
+      Measure throttling, lockout, and repeated action constraints to detect
+      automation abuse paths.
+    challenge_family_keys: [broken_anti_automation]
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_wstg_stable
+    surfaces: [auth, repeated_action, rate_limit]
+    prerequisite_evidence:
+      - repeatable_route
+      - safe_request_budget
+    discovery_signals:
+      - missing lockout
+      - repeated action succeeds without challenge
+      - predictable throttling bypass
+    preferred_tool_ids:
+      - web_interact
+      - ffuf
+      - custom_poc
+    proof_contract_keys:
+      - role_differential_access_contract
+    planner_action_keys:
+      - probe_rate_limits_and_anti_automation
+    tags: [automation, limits]
+    citations:
+      - fact_key: anti_automation_limit_probe_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_paths
+          - challenge_family_mapping
+  - key: secret_and_config_exposure_probe
+    name: Secret and configuration exposure probe
+    description: >
+      Enumerate debug, config, and data-bearing responses that leak secrets or
+      privileged configuration.
+    challenge_family_keys: [sensitive_data_exposure, security_misconfiguration]
+    source_summary_keys:
+      - owasp_wstg_stable
+      - juice_shop_official_project
+    surfaces: [api, config, debug]
+    prerequisite_evidence:
+      - route_inventory
+      - disclosure_candidate_response
+    discovery_signals:
+      - configuration JSON exposed
+      - admin metadata exposed anonymously
+      - secrets or tokens present in public responses
+    preferred_tool_ids:
+      - web_interact
+      - httpx_probe
+      - custom_poc
+    proof_contract_keys:
+      - sensitive_data_exposure_replay
+      - misconfiguration_surface_contract
+    planner_action_keys:
+      - inspect_config_and_secret_exposure
+    tags: [config, disclosure]
+    citations:
+      - fact_key: secret_and_config_exposure_probe_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_guidance
+          - testing_methodology
+  - key: stack_trace_and_log_disclosure_probe
+    name: Stack trace and log disclosure probe
+    description: >
+      Trigger and replay error conditions to confirm unintended internal
+      disclosure.
+    challenge_family_keys: [observability_failures]
+    source_summary_keys:
+      - owasp_wstg_stable
+      - juice_shop_runtime_inventory_local_19_2_1
+    surfaces: [api, error_handling]
+    prerequisite_evidence:
+      - candidate_error_route
+      - reproducible_request
+    discovery_signals:
+      - stack trace in response
+      - file path disclosure
+      - log or diagnostics leaked to client
+    preferred_tool_ids:
+      - web_interact
+      - custom_poc
+    proof_contract_keys:
+      - stack_trace_disclosure_contract
+    planner_action_keys:
+      - inspect_error_and_log_disclosure
+    tags: [stack_trace, disclosure]
+    citations:
+      - fact_key: stack_trace_and_log_disclosure_probe_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_guidance
+          - attack_preconditions
+  - key: weak_crypto_material_inspection
+    name: Weak cryptographic material inspection
+    description: >
+      Inspect exposed secrets, hashes, or token formats for weak or unsafe
+      patterns that can be replayed or verified locally.
+    challenge_family_keys: [cryptographic_issues]
+    source_summary_keys:
+      - owasp_asvs
+      - owasp_cheat_sheet_series
+    surfaces: [crypto, tokens, hashes]
+    prerequisite_evidence:
+      - exposed_cryptographic_material
+    discovery_signals:
+      - unsafe hash disclosure
+      - weak JWT handling
+      - insecure secret storage exposed to client
+    preferred_tool_ids:
+      - web_interact
+      - jwt_tool
+      - custom_poc
+    proof_contract_keys:
+      - weak_crypto_material_contract
+    planner_action_keys:
+      - pressure_auth_tokens_and_login_flows
+    tags: [crypto, secret]
+    citations:
+      - fact_key: weak_crypto_material_inspection_phase2
+        title: OWASP Application Security Verification Standard
+        source_key: owasp_asvs
+        source_url: https://owasp.org/www-project-application-security-verification-standard/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_requirements
+          - control_taxonomy
+  - key: xxe_parser_endpoint_probe
+    name: XXE parser endpoint probe
+    description: >
+      Exercise XML-handling endpoints with safe parser-focused probes and
+      require parser-behavior evidence for promotion.
+    challenge_family_keys: [xxe]
+    source_summary_keys:
+      - owasp_cheat_sheet_series
+      - portswigger_web_security_academy
+    surfaces: [xml, parser, upload]
+    prerequisite_evidence:
+      - xml_accepting_route
+    discovery_signals:
+      - XML parser in use
+      - parser errors or transformed entity behavior
+    preferred_tool_ids:
+      - web_interact
+      - custom_poc
+    proof_contract_keys:
+      - xxe_parser_contract
+    planner_action_keys:
+      - probe_parser_boundaries
+    tags: [xxe, parser]
+    citations:
+      - fact_key: xxe_parser_endpoint_probe_phase2
+        title: OWASP Cheat Sheet Series
+        source_key: owasp_cheat_sheet_series
+        source_url: https://cheatsheetseries.owasp.org/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - payload_archetypes
+          - exploit_preconditions
+  - key: deserialization_replay_probe
+    name: Deserialization replay probe
+    description: >
+      Apply safe local serialization mutations to confirm parser or object
+      handling weaknesses without relying on unbounded gadget execution claims.
+    challenge_family_keys: [insecure_deserialization]
+    source_summary_keys:
+      - owasp_cheat_sheet_series
+      - portswigger_web_security_academy
+    surfaces: [serialized_data, parser]
+    prerequisite_evidence:
+      - serialized_input_path
+    discovery_signals:
+      - parser exception under crafted object
+      - unsafe type handling
+      - unsafe deserialization marker in code or response
+    preferred_tool_ids:
+      - web_interact
+      - custom_poc
+    proof_contract_keys:
+      - deserialization_replay_contract
+    planner_action_keys:
+      - probe_parser_boundaries
+    tags: [deserialization, parser]
+    citations:
+      - fact_key: deserialization_replay_probe_phase2
+        title: OWASP Cheat Sheet Series
+        source_key: owasp_cheat_sheet_series
+        source_url: https://cheatsheetseries.owasp.org/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - payload_archetypes
+          - exploit_preconditions
+  - key: redirect_target_control_probe
+    name: Redirect target control probe
+    description: >
+      Confirm that attacker-controlled redirect targets change navigation
+      without sufficient validation.
+    challenge_family_keys: [unvalidated_redirects, input_validation]
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    surfaces: [redirect, navigation]
+    prerequisite_evidence:
+      - redirect_parameter
+    discovery_signals:
+      - user-controlled absolute or protocol-relative redirect target
+      - navigation away from trusted origin
+    preferred_tool_ids:
+      - web_interact
+      - custom_poc
+    proof_contract_keys:
+      - redirect_control_contract
+    planner_action_keys:
+      - validate_redirect_targets
+    tags: [redirect, navigation]
+    citations:
+      - fact_key: redirect_target_control_probe_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - attack_preconditions
+          - verification_guidance
+  - key: component_and_asset_fingerprint_probe
+    name: Component and asset fingerprint probe
+    description: >
+      Fingerprint exposed assets, versions, and libraries to prioritize hidden
+      routes and vulnerable dependency pressure.
+    challenge_family_keys: [vulnerable_components, security_through_obscurity]
+    source_summary_keys:
+      - owasp_asvs
+      - juice_shop_official_project
+    surfaces: [assets, client_bundles, headers]
+    prerequisite_evidence:
+      - asset_inventory
+    discovery_signals:
+      - library version disclosure
+      - hidden asset or path marker
+      - unsupported component signal
+    preferred_tool_ids:
+      - httpx_probe
+      - web_interact
+      - custom_poc
+    proof_contract_keys:
+      - component_truth_contract
+    planner_action_keys:
+      - fingerprint_components_and_hidden_assets
+    tags: [components, hidden_assets]
+    citations:
+      - fact_key: component_and_asset_fingerprint_probe_phase2
+        title: OWASP Juice Shop Project Page
+        source_key: juice_shop_official_project
+        source_url: https://owasp.org/www-project-juice-shop/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - benchmark_target_identity
+          - project_scope
+  - key: hidden_route_and_asset_enumeration_probe
+    name: Hidden route and asset enumeration probe
+    description: >
+      Expand discoverability pressure around non-linked routes, client bundles,
+      and obscured features.
+    challenge_family_keys: [security_through_obscurity]
+    source_summary_keys:
+      - juice_shop_official_guide
+      - owasp_wstg_stable
+    surfaces: [routes, assets, client_side]
+    prerequisite_evidence:
+      - asset_inventory
+      - bundle_or_route_markers
+    discovery_signals:
+      - hidden route names in bundle
+      - non-linked API surface
+      - obscured admin features
+    preferred_tool_ids:
+      - ffuf
+      - web_interact
+      - httpx_probe
+    proof_contract_keys:
+      - component_truth_contract
+      - misconfiguration_surface_contract
+    planner_action_keys:
+      - fingerprint_components_and_hidden_assets
+      - enumerate_privileged_api_surface
+    tags: [hidden_routes, enumeration]
+    citations:
+      - fact_key: hidden_route_and_asset_enumeration_probe_phase2
+        title: OWASP Juice Shop Official Guide
+        source_key: juice_shop_official_guide
+        source_url: https://help.owasp-juice.shop/part1/challenges.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - feature_to_challenge_hints
+          - challenge_family_mapping
+  - key: misconfiguration_surface_probe
+    name: Misconfiguration surface probe
+    description: >
+      Look for exposed admin, debug, or deployment-specific surfaces that
+      should not be reachable or readable in the active context.
+    challenge_family_keys: [security_misconfiguration]
+    source_summary_keys:
+      - owasp_wstg_stable
+      - owasp_cheat_sheet_series
+    surfaces: [admin_surface, config, deployment]
+    prerequisite_evidence:
+      - route_group_summary
+      - privileged_surface_hint
+    discovery_signals:
+      - debug or config endpoints publicly reachable
+      - admin paths exposed without proper controls
+      - permissive CORS or deployment leakage
+    preferred_tool_ids:
+      - web_interact
+      - httpx_probe
+      - cors_scanner
+    proof_contract_keys:
+      - misconfiguration_surface_contract
+    planner_action_keys:
+      - inspect_config_and_secret_exposure
+      - enumerate_privileged_api_surface
+    tags: [misconfig, deployment]
+    citations:
+      - fact_key: misconfiguration_surface_probe_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - attack_preconditions
+          - testing_methodology
+  - key: business_workflow_mutation_probe
+    name: Business workflow mutation probe
+    description: >
+      Replay and mutate stateful product workflows to expose logic abuse, order
+      changes, or step-skipping behavior.
+    challenge_family_keys: [miscellaneous, business_logic_abuse]
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    surfaces: [workflow, stateful, browser]
+    prerequisite_evidence:
+      - workflow_edge_summary
+      - repeatable_session_state
+    discovery_signals:
+      - step skipping changes outcome
+      - route ordering changes result
+      - state transition lacks validation
+    preferred_tool_ids:
+      - web_interact
+      - custom_poc
+    proof_contract_keys:
+      - role_differential_access_contract
+      - sensitive_data_exposure_replay
+    planner_action_keys:
+      - mutate_business_workflows
+    tags: [workflow, business_logic]
+    citations:
+      - fact_key: business_workflow_mutation_probe_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - attack_preconditions

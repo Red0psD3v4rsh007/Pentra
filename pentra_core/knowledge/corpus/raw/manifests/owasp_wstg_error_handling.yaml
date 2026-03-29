@@ -1,0 +1,32 @@
+key: owasp_wstg_error_handling_phase1
+phase: 1
+source_key: owasp_wstg_error_handling
+title: OWASP WSTG Error Handling Testing acquisition manifest
+acquisition_scope: >
+  Capture official error-handling methodology for reproducing verbose failures,
+  stack traces, and internal disclosure without confusing them with generic
+  error states.
+parser_key: manual_structured_summary
+normalization_units:
+  - error_handling_summary
+target_outputs:
+  - normalized/source_summaries/owasp_wstg_error_handling.yaml
+focus_areas:
+  - verbose_errors
+  - stack_trace_markers
+  - replayable_triggers
+usage_notes: >
+  Preserve bounded replay and evidence-capture guidance. Do not add crash or
+  resource-exhaustion instructions.
+citations:
+  - fact_key: owasp_wstg_error_handling_source
+    title: OWASP WSTG Error Handling Testing
+    source_key: owasp_wstg_error_handling
+    source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/08-Testing_for_Error_Handling/README
+    trust_tier: official_public
+    retrieved_at: "2026-03-27T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - verbose_error_testing_methodology
+      - stack_trace_testing_methodology
+      - error_disclosure_testing

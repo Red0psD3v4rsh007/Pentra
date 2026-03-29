@@ -1,0 +1,74 @@
+pack_key: p3a_access_control_workflow_abuse
+name: Access-control and workflow-abuse capability pack
+phase: 3
+description: >
+  Access-control and workflow-abuse capability pack for IDOR, privileged route
+  exposure, workflow-state mutation, and replay-aware contradictory evidence.
+ontology_family_keys:
+  - broken_access_control
+  - business_logic_abuse
+attack_primitive_keys:
+  - idor_role_diff_probe
+  - privileged_api_surface_diff
+  - business_workflow_mutation_probe
+proof_contract_keys:
+  - role_differential_access_contract
+  - sensitive_data_exposure_replay
+planner_action_keys:
+  - compare_role_access
+  - enumerate_privileged_api_surface
+  - mutate_business_workflows
+target_profile_keys:
+  - workflow_heavy_commerce
+  - auth_heavy_admin_portal
+  - spa_rest_api
+pack_dependency_keys:
+  - p3a_multi_role_stateful_auth
+knowledge_dependencies:
+  ontology_index_path: pentra_core/knowledge/ontology/index.yaml
+  source_profile: public_source_first
+  cheatsheet_category_keys:
+    - authorization_and_access_control
+  source_registry_keys:
+    - owasp_authorization_cheat_sheet
+    - owasp_idor_prevention_cheat_sheet
+    - owasp_session_management_cheat_sheet
+    - owasp_wstg_stable
+    - portswigger_web_security_academy
+  corpus_dependency_notes:
+    - Consume official access-control and workflow-abuse guidance from the Phase 0 to 2 registries.
+    - Reuse the multi-role auth role matrix and differential route assessments instead of duplicating auth inference.
+subphases:
+  - key: p3a_3a
+    name: ontology_and_corpus_binding
+  - key: p3a_3b
+    name: discovery
+  - key: p3a_3c
+    name: candidate_generation
+  - key: p3a_3d
+    name: proof_and_negative_evidence
+  - key: p3a_3e
+    name: benchmark_and_regression
+runtime_dependencies:
+  - web_interact
+  - custom_poc
+  - ffuf
+candidate_generators:
+  - role_differential_object_candidate
+  - privileged_surface_candidate
+  - workflow_mutation_candidate
+verifier_entrypoints:
+  - role_differential_access
+  - workflow_mutation_replay
+ai_advisory:
+  enabled: true
+  advisory_mode: access_control_workflow_focus
+  prompt_contract_id: pentra.ai.advisory
+  trust_boundary: advisor_only
+negative_evidence_behavior:
+  - contradictory role outcomes or converged behavior demote access-control pressure
+  - workflow routes without replayable divergence stay advisory-only and do not promote findings
+benchmark_target_keys:
+  - juice_shop_local
+  - webgoat_local
+  - repo_demo_api

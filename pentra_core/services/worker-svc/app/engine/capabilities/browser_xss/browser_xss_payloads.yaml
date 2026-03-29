@@ -1,0 +1,197 @@
+registry_version: 1
+pack_key: p3a_browser_xss
+description: >
+  Safe browser-XSS canary archetypes for context-aware candidate generation and
+  browser proof. These are benign marker transport plans, not executable
+  exploit payloads.
+payload_archetypes:
+  - key: query_canary_reflection
+    title: Query-string canary reflection
+    description: >
+      Uses a benign marker in a query parameter to observe whether browser
+      input flows into dangerous DOM sinks.
+    flow_modes:
+      - reflected
+    candidate_kinds:
+      - query
+      - form_get
+    source_markers:
+      - location.search
+      - urlsearchparams
+      - location.href
+    sink_markers:
+      - innerHTML
+      - outerHTML
+      - insertAdjacentHTML
+      - document.write
+      - document.writeln
+      - srcdoc
+      - eval
+      - new Function
+      - setTimeout-string
+      - setInterval-string
+    context_tags:
+      - query
+      - reflected
+      - browser
+      - safe_canary
+    target_profile_keys:
+      - spa_rest_api
+      - traditional_server_rendered
+    browser_compatibility:
+      - chromium
+      - firefox
+      - webkit
+    interaction_requirement: none
+    proof_contract: browser_execution_xss
+    transport: query
+    canary_template: "{{CANARY_MARKER}}"
+    parameter_required: true
+    requires_safe_replay: false
+    source_keys:
+      - portswigger_xss_cheat_sheet
+      - owasp_xss_prevention_cheat_sheet
+      - owasp_dom_xss_prevention_cheat_sheet
+    cheatsheet_entry_keys:
+      - portswigger_xss_vectors
+      - owasp_xss_context_model
+      - owasp_dom_xss_sink_model
+  - key: hash_query_canary_dom
+    title: Hash-query DOM canary
+    description: >
+      Places a benign marker in SPA hash-route query parameters to validate
+      client-side sink reachability without executing code.
+    flow_modes:
+      - reflected
+    candidate_kinds:
+      - hash_query
+    source_markers:
+      - location.hash
+      - location.href
+      - urlsearchparams
+    sink_markers:
+      - innerHTML
+      - outerHTML
+      - insertAdjacentHTML
+      - document.write
+      - srcdoc
+      - eval
+      - new Function
+      - setTimeout-string
+      - setInterval-string
+    context_tags:
+      - hash_query
+      - dom
+      - spa
+      - safe_canary
+    target_profile_keys:
+      - spa_rest_api
+    browser_compatibility:
+      - chromium
+      - firefox
+      - webkit
+    interaction_requirement: none
+    proof_contract: browser_execution_xss
+    transport: hash_query
+    canary_template: "{{CANARY_MARKER}}"
+    parameter_required: true
+    requires_safe_replay: false
+    source_keys:
+      - portswigger_xss_cheat_sheet
+      - owasp_dom_xss_prevention_cheat_sheet
+    cheatsheet_entry_keys:
+      - portswigger_xss_vectors
+      - owasp_dom_xss_sink_model
+  - key: hash_fragment_canary_dom
+    title: Hash-fragment DOM canary
+    description: >
+      Uses a benign fragment marker for client-side route flows that read from
+      raw location hashes.
+    flow_modes:
+      - reflected
+    candidate_kinds:
+      - hash_fragment
+    source_markers:
+      - location.hash
+      - location.href
+    sink_markers:
+      - innerHTML
+      - outerHTML
+      - insertAdjacentHTML
+      - document.write
+      - srcdoc
+      - eval
+      - new Function
+      - setTimeout-string
+      - setInterval-string
+    context_tags:
+      - hash_fragment
+      - dom
+      - spa
+      - safe_canary
+    target_profile_keys:
+      - spa_rest_api
+    browser_compatibility:
+      - chromium
+      - firefox
+      - webkit
+    interaction_requirement: none
+    proof_contract: browser_execution_xss
+    transport: hash_fragment
+    canary_template: "{{CANARY_MARKER}}"
+    parameter_required: false
+    requires_safe_replay: false
+    source_keys:
+      - portswigger_xss_cheat_sheet
+      - owasp_dom_xss_prevention_cheat_sheet
+    cheatsheet_entry_keys:
+      - portswigger_xss_vectors
+      - owasp_dom_xss_sink_model
+  - key: stored_form_canary_replay
+    title: Stored-form canary replay
+    description: >
+      Submits a benign canary through a safe replay form and then revisits the
+      render route to observe dangerous sink activation.
+    flow_modes:
+      - stored
+    candidate_kinds:
+      - stored_form
+    source_markers:
+      - persistent_form_field
+    sink_markers:
+      - innerHTML
+      - outerHTML
+      - insertAdjacentHTML
+      - document.write
+      - srcdoc
+      - eval
+      - new Function
+      - setTimeout-string
+      - setInterval-string
+    context_tags:
+      - stored
+      - form
+      - browser
+      - safe_canary
+    target_profile_keys:
+      - spa_rest_api
+      - traditional_server_rendered
+      - workflow_heavy_commerce
+    browser_compatibility:
+      - chromium
+      - firefox
+      - webkit
+    interaction_requirement: workflow_replay
+    proof_contract: stored_execution_xss
+    transport: stored_form
+    canary_template: "{{CANARY_MARKER}}"
+    parameter_required: true
+    requires_safe_replay: true
+    source_keys:
+      - portswigger_xss_cheat_sheet
+      - owasp_xss_prevention_cheat_sheet
+      - owasp_dom_xss_prevention_cheat_sheet
+    cheatsheet_entry_keys:
+      - portswigger_xss_vectors
+      - owasp_xss_context_model
+      - owasp_dom_xss_sink_model

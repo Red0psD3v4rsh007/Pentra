@@ -1,0 +1,51 @@
+id: jwt_tool
+name: jwt_tool
+image: ticarpi/jwt_tool:latest
+worker_family: web
+command:
+  - python3
+  - jwt_tool.py
+  - "{jwt_token}"
+  - -M
+  - at
+  - -t
+  - "{target}"
+  - -rh
+  - "Authorization: Bearer"
+  - -cv
+  - "200"
+description: |
+  JWT vulnerability testing toolkit. Automates none algorithm bypass,
+  key confusion attacks, HMAC secret cracking, claim tampering, and
+  JWK injection attacks.
+
+capabilities:
+  - None algorithm bypass
+  - Algorithm confusion (RS256 → HS256)
+  - HMAC secret brute-force
+  - Claim tampering
+  - JWK header injection
+  - KID injection
+  - Token expiry bypass
+
+input_artifacts:
+  - endpoints
+
+required_inputs:
+  - jwt_token
+
+output_artifact_type: vulnerabilities
+output_parser: raw
+artifact_type: vulnerabilities
+
+resource_limits:
+  memory: "1g"
+  cpu: 1.0
+  timeout_seconds: 300
+default_timeout: 300
+
+attack_vectors:
+  - jwt_none_algo
+  - jwt_key_confusion
+  - jwt_weak_secret
+  - broken_auth

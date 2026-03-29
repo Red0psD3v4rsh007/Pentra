@@ -1,0 +1,42 @@
+key: portswigger_graphql_api_vulnerabilities
+title: PortSwigger GraphQL API vulnerabilities normalized source summary
+source_key: portswigger_graphql_api_vulnerabilities
+document_type: source_summary
+generated_at: "2026-03-26T00:00:00Z"
+summary: >
+  PortSwigger's GraphQL methodology is useful for discovery and probe planning:
+  find the endpoint, test introspection and suggestions, and keep batching or
+  universal queries as bounded attack-surface indicators rather than proof.
+facts:
+  - fact_key: portswigger_graphql_endpoint_discovery_patterns
+    title: GraphQL endpoint discovery and probe patterns
+    fact_type: methodology_summary
+    summary: >
+      GraphQL testing starts with endpoint discovery, then schema discovery via
+      introspection or suggestions, then bounded probes for batching and other
+      GraphQL-specific behavior.
+    tags:
+      - graphql
+      - endpoint_discovery
+      - introspection
+    data:
+      discovery_sequence:
+        - discover_graphql_endpoint
+        - attempt_introspection
+        - test_suggestions
+        - classify_batching_support
+      replay_implications:
+        - Treat endpoint discovery and schema discovery as advisory unless a stable operation path is observed.
+        - Preserve operation names, variables, and batch shape when present.
+    citations:
+      - fact_key: portswigger_graphql_endpoint_discovery_patterns
+        title: GraphQL API vulnerabilities
+        source_key: portswigger_graphql_api_vulnerabilities
+        source_url: https://portswigger.net/web-security/graphql
+        trust_tier: official_public
+        retrieved_at: "2026-03-26T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - graphql_endpoint_discovery
+          - graphql_attack_surface_guidance
+          - replayable_graphql_probe_patterns

@@ -17,6 +17,8 @@ class IntelligenceOverviewResponse(BaseModel):
     recurring_patterns: int
     technology_clusters: int
     route_groups: int
+    trending_patterns: int = 0
+    tracked_assets: int = 0
 
 
 class IntelligencePatternMatchResponse(BaseModel):
@@ -98,6 +100,55 @@ class IntelligenceAdvisorySummaryResponse(BaseModel):
     remediation_focus: list[str] = Field(default_factory=list)
 
 
+class IntelligenceTrendingPatternResponse(BaseModel):
+    vulnerability_type: str
+    recent_count: int
+    previous_count: int
+    direction: str
+    delta: int
+
+
+class IntelligenceTargetKnowledgeResponse(BaseModel):
+    asset_id: UUID
+    asset_name: str
+    target: str
+    scan_count: int
+    known_endpoints: int
+    known_forms: int
+    known_technologies: list[str] = Field(default_factory=list)
+    known_auth_surfaces: list[str] = Field(default_factory=list)
+    known_vulnerability_types: list[str] = Field(default_factory=list)
+    first_seen: datetime | None = None
+    last_seen: datetime | None = None
+
+
+class AssetHistoryEntryResponse(BaseModel):
+    scan_id: UUID
+    scan_type: str
+    status: str
+    priority: str
+    generated_at: datetime | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    severity_counts: dict[str, int] = Field(default_factory=dict)
+    verification_counts: dict[str, int] = Field(default_factory=dict)
+    total_findings: int = 0
+    comparison_summary: str | None = None
+    comparison_counts: dict[str, int] = Field(default_factory=dict)
+    baseline_scan_id: UUID | None = None
+
+
+class AssetHistoryResponse(BaseModel):
+    asset_id: UUID
+    asset_name: str
+    target: str
+    generated_at: datetime
+    total_scans: int
+    known_technologies: list[str] = Field(default_factory=list)
+    tracked_vulnerability_types: list[str] = Field(default_factory=list)
+    entries: list[AssetHistoryEntryResponse] = Field(default_factory=list)
+
+
 class IntelligenceSummaryResponse(BaseModel):
     generated_at: datetime
     definition: str
@@ -109,3 +160,5 @@ class IntelligenceSummaryResponse(BaseModel):
     exploit_trends: list[IntelligenceExploitTrendResponse] = Field(default_factory=list)
     retest_deltas: list[IntelligenceRetestDeltaResponse] = Field(default_factory=list)
     advisory_summaries: list[IntelligenceAdvisorySummaryResponse] = Field(default_factory=list)
+    trending_patterns: list[IntelligenceTrendingPatternResponse] = Field(default_factory=list)
+    target_knowledge: list[IntelligenceTargetKnowledgeResponse] = Field(default_factory=list)

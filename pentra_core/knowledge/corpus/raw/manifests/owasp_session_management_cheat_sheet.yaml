@@ -1,0 +1,31 @@
+key: owasp_session_management_cheat_sheet_phase1
+phase: 1
+source_key: owasp_session_management_cheat_sheet
+title: OWASP Session Management Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official session lifecycle guidance that shapes bootstrap, token
+  handling, and replay constraints for stateful testing.
+parser_key: manual_structured_summary
+normalization_units:
+  - session_lifecycle_summary
+target_outputs:
+  - normalized/source_summaries/owasp_session_management_cheat_sheet.yaml
+focus_areas:
+  - session_id_properties
+  - rotation_and_expiry
+  - secure_cookie_handling
+usage_notes: >
+  Preserve session lifecycle constraints and token-handling facts. Do not
+  treat weak session hygiene as proof without runtime confirmation.
+citations:
+  - fact_key: owasp_session_management_cheat_sheet_source
+    title: OWASP Session Management Cheat Sheet
+    source_key: owasp_session_management_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-27T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - session_bootstrap_guidance
+      - token_lifecycle_guidance
+      - session_replay_constraints

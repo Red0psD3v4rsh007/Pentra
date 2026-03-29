@@ -1,0 +1,42 @@
+id: graphql_cop
+name: graphql_cop
+image: dolevf/graphql-cop:latest
+worker_family: web
+working_dir: /app
+command:
+  - -t
+  - "{graphql_target_url}"
+  - -o
+  - json
+description: |
+  GraphQL endpoint security auditor. Tests for introspection exposure,
+  query depth/complexity attacks, injection, batching abuse, and
+  authorization bypass patterns.
+
+capabilities:
+  - Introspection enabled detection
+  - Query depth limit bypass
+  - Query complexity DoS testing
+  - Field suggestion abuse
+  - Batching attack detection
+  - Directive overloading
+  - Alias-based DoS
+
+input_artifacts:
+  - endpoints
+
+output_artifact_type: vulnerabilities
+output_parser: json
+artifact_type: vulnerabilities
+
+resource_limits:
+  memory: "1g"
+  cpu: 1.0
+  timeout_seconds: 300
+default_timeout: 300
+
+attack_vectors:
+  - graphql_introspection
+  - graphql_dos
+  - graphql_injection
+  - sensitive_data_exposure

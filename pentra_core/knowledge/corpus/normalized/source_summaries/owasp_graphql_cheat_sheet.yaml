@@ -1,0 +1,45 @@
+key: owasp_graphql_cheat_sheet
+title: OWASP GraphQL Cheat Sheet normalized source summary
+source_key: owasp_graphql_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-26T00:00:00Z"
+summary: >
+  OWASP's GraphQL guidance gives Pentra the main GraphQL boundary conditions:
+  introspection and suggestions expose schema shape, query depth and amount must
+  be bounded, and authorization must be enforced separately for queries and
+  mutations.
+facts:
+  - fact_key: owasp_graphql_attack_surface_controls
+    title: GraphQL attack-surface controls
+    fact_type: api_attack_surface_summary
+    summary: >
+      GraphQL endpoints need explicit control over introspection, batching,
+      depth, amount, and field-level authorization. Those features are the
+      first-class signals for GraphQL-heavy target classification.
+    tags:
+      - graphql
+      - api_abuse
+      - access_control
+    data:
+      high_signal_graphql_features:
+        - introspection_queries
+        - schema_suggestions
+        - query_depth
+        - query_amount
+        - batching
+        - query_and_mutation_access_control
+      replay_implications:
+        - Separate schema discovery evidence from authorization evidence.
+        - Preserve GraphQL operation names and variable keys as stable replay anchors.
+    citations:
+      - fact_key: owasp_graphql_attack_surface_controls
+        title: OWASP GraphQL Cheat Sheet
+        source_key: owasp_graphql_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-26T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - graphql_attack_guidance
+          - batching_attack_guidance
+          - api_abuse_patterns

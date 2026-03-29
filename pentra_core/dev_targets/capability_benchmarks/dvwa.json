@@ -1,0 +1,75 @@
+{
+  "key": "dvwa_local",
+  "enabled": true,
+  "asset_name": "Phase 9 DVWA",
+  "asset_type": "web_app",
+  "target": "http://127.0.0.1:3002",
+  "healthcheck_url": "http://127.0.0.1:3002/",
+  "launch_mode": "docker_script",
+  "launch_recipe": {
+    "script": "pentra_core/scripts/local/run_phase9_benchmark_targets.sh",
+    "args": [
+      "ensure",
+      "dvwa_local"
+    ]
+  },
+  "ground_truth_source": "pentra_core/dev_targets/capability_benchmarks/dvwa.json",
+  "notes": "Pinned DVWA benchmark target. The benchmark expectation set intentionally focuses on a narrow class Pentra should eventually detect reliably under a generic web profile.",
+  "expectations": {
+    "expected_vulnerability_types": [
+      "sql_injection"
+    ],
+    "expected_verified_types": [],
+    "minimum_detected_recall": 1.0,
+    "minimum_verified_recall": 0.0,
+    "minimum_verified_share": 0.0
+  },
+  "scan_plans": [
+    {
+      "key": "dvwa_full",
+      "label": "DVWA / full",
+      "scan_type": "full",
+      "config_template": "stateful_full",
+      "timeout_seconds": 420,
+      "config_overrides": {
+        "selected_checks": {
+          "sqlmap": {
+            "path": "/vulnerabilities/sqli/?id=1&Submit=Submit"
+          },
+          "http_probe_paths": [
+            "/",
+            "/login.php",
+            "/vulnerabilities/sqli/"
+          ],
+          "content_paths": [
+            "login.php",
+            "index.php",
+            "vulnerabilities/sqli/"
+          ]
+        },
+        "stateful_testing": {
+          "seed_paths": [
+            "/",
+            "/login.php",
+            "/index.php",
+            "/vulnerabilities/sqli/"
+          ],
+          "auth": {
+            "login_page_path": "/login.php",
+            "username_field": "username",
+            "password_field": "password",
+            "success_path_contains": "index.php",
+            "credentials": [
+              {
+                "label": "admin",
+                "username": "admin",
+                "password": "password",
+                "role": "admin"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

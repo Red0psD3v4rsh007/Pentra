@@ -1,0 +1,238 @@
+version: 1
+program: phase10_real_world_capability
+phase: 3
+generated_at: "2026-03-26T12:00:00+05:30"
+target_profiles:
+  - key: spa_rest_api
+    name: SPA plus REST API
+    description: >
+      Client-heavy single-page application with browser routing and a JSON/REST
+      backend surface.
+    route_indicators:
+      - "/#/"
+      - "/api/"
+      - "/rest/"
+      - "/graphql"
+    asset_indicators:
+      - endpoints
+      - vulnerabilities
+      - findings_scored
+    technology_indicators:
+      - javascript
+      - spa
+      - rest
+    auth_expectations:
+      - browser_session
+      - api_auth
+    workflow_state_keys:
+      - anonymous_surface
+      - authenticated_surface
+      - client_search_reflection_state
+    likely_challenge_family_keys:
+      - xss
+      - broken_authentication
+      - broken_access_control
+      - injection
+    preferred_capability_pack_keys:
+      - p3a_browser_xss
+      - p3a_multi_role_stateful_auth
+      - p3a_access_control_workflow_abuse
+      - p3a_injection
+    planner_bias_rules:
+      - prefer browser-aware route grouping before generic fuzzing
+      - combine route and API evidence when prioritizing follow-up
+    benchmark_target_keys:
+      - juice_shop_local
+      - webgoat_local
+      - repo_demo_api
+  - key: traditional_server_rendered
+    name: Traditional server-rendered app
+    description: >
+      Multi-page application with server-rendered forms, route transitions, and
+      relatively low client-side routing complexity.
+    route_indicators:
+      - "/login"
+      - "/register"
+      - "/search"
+      - "/admin"
+    asset_indicators:
+      - endpoints
+      - findings_scored
+    technology_indicators:
+      - html
+      - form
+      - server_rendered
+    auth_expectations:
+      - form_login
+      - csrf_forms
+    workflow_state_keys:
+      - anonymous_surface
+      - authenticated_surface
+    likely_challenge_family_keys:
+      - xss
+      - broken_authentication
+      - injection
+    preferred_capability_pack_keys:
+      - p3a_browser_xss
+      - p3a_multi_role_stateful_auth
+      - p3a_injection
+    planner_bias_rules:
+      - prioritize form-aware replay and server-rendered workflow edges
+      - prefer parameter and session comparison over broad client-side assumptions
+    benchmark_target_keys:
+      - dvwa_local
+  - key: graphql_heavy_application
+    name: GraphQL-heavy application
+    description: >
+      API-first application exposing a meaningful GraphQL surface or schema-led
+      mutation/query behavior.
+    route_indicators:
+      - "/graphql"
+      - "operationName"
+      - "__schema"
+    asset_indicators:
+      - endpoints
+      - vulnerabilities
+    technology_indicators:
+      - graphql
+      - schema
+      - introspection
+    auth_expectations:
+      - token_auth
+      - api_auth
+    workflow_state_keys:
+      - anonymous_surface
+      - authenticated_surface
+    likely_challenge_family_keys:
+      - injection
+      - broken_access_control
+      - sensitive_data_exposure
+    preferred_capability_pack_keys:
+      - p3a_injection
+      - p3a_multi_role_stateful_auth
+      - p3a_access_control_workflow_abuse
+    planner_bias_rules:
+      - prefer query-shape and authorization pressure before generic web scans
+      - keep endpoint focus centered on schema-bearing routes
+    benchmark_target_keys:
+      - webgoat_local
+      - repo_demo_api
+  - key: auth_heavy_admin_portal
+    name: Auth-heavy admin portal
+    description: >
+      Application with privileged route families, multi-role access boundaries,
+      and admin-facing management workflows.
+    route_indicators:
+      - "/admin"
+      - "/manage"
+      - "/settings"
+      - "/users"
+    asset_indicators:
+      - endpoints
+      - findings_scored
+      - access_levels
+    technology_indicators:
+      - admin
+      - portal
+      - management
+    auth_expectations:
+      - multi_role
+      - privileged_routes
+      - session_transition
+    workflow_state_keys:
+      - authenticated_surface
+      - privileged_surface
+      - role_transition_state
+    likely_challenge_family_keys:
+      - broken_authentication
+      - broken_access_control
+      - sensitive_data_exposure
+    preferred_capability_pack_keys:
+      - p3a_multi_role_stateful_auth
+      - p3a_access_control_workflow_abuse
+      - p3a_disclosure_misconfig_crypto
+    planner_bias_rules:
+      - prefer differential replay across roles before generic verification
+      - focus privileged APIs and management routes early
+    benchmark_target_keys:
+      - juice_shop_local
+      - repo_demo_api
+  - key: workflow_heavy_commerce
+    name: Workflow-heavy commerce app
+    description: >
+      Application dominated by multi-step basket, checkout, order, or account
+      management workflows where state transitions matter.
+    route_indicators:
+      - "/cart"
+      - "/basket"
+      - "/checkout"
+      - "/orders"
+      - "/payment"
+    asset_indicators:
+      - endpoints
+      - findings_scored
+      - verified_impact
+    technology_indicators:
+      - checkout
+      - order
+      - commerce
+    auth_expectations:
+      - browser_session
+      - workflow_state
+      - multi_step_replay
+    workflow_state_keys:
+      - authenticated_surface
+      - basket_checkout_workflow
+      - account_management_workflow
+    likely_challenge_family_keys:
+      - business_logic_abuse
+      - broken_access_control
+      - broken_authentication
+    preferred_capability_pack_keys:
+      - p3a_multi_role_stateful_auth
+      - p3a_access_control_workflow_abuse
+      - p3a_browser_xss
+    planner_bias_rules:
+      - preserve workflow ordering and replay checkpoints
+      - favor route sequences over isolated endpoints
+    benchmark_target_keys:
+      - juice_shop_local
+      - repo_demo_api
+  - key: upload_parser_heavy
+    name: Upload and parser-heavy app
+    description: >
+      Application with meaningful file upload, parser, conversion, or document
+      ingestion surfaces.
+    route_indicators:
+      - "/upload"
+      - "/import"
+      - "/export"
+      - "/files"
+      - "/attachments"
+    asset_indicators:
+      - endpoints
+      - findings_scored
+    technology_indicators:
+      - multipart
+      - parser
+      - file
+      - upload
+    auth_expectations:
+      - browser_session
+      - upload_workflow
+    workflow_state_keys:
+      - authenticated_surface
+      - file_upload_workflow
+    likely_challenge_family_keys:
+      - insecure_deserialization
+      - xxe
+      - security_misconfiguration
+    preferred_capability_pack_keys:
+      - p3a_parser_file_abuse
+      - p3a_disclosure_misconfig_crypto
+      - p3a_multi_role_stateful_auth
+    planner_bias_rules:
+      - require parser-boundary evidence before broad mutation
+      - keep upload workflow context attached to follow-up actions
+    benchmark_target_keys:
+      - repo_parser_upload_demo

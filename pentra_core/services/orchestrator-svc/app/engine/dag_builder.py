@@ -71,6 +71,8 @@ _PHASES: dict[str, list[PhaseSpec]] = {
         PhaseSpec(1, "recon", 0.33),
         PhaseSpec(2, "enum", 0.50),
         PhaseSpec(3, "vuln_scan", 0.66),
+        PhaseSpec(5, "ai_analysis", 1.0),
+        PhaseSpec(6, "report_gen", 1.0),
     ],
     "full": [
         PhaseSpec(0, "scope_validation", 1.0),
@@ -116,7 +118,7 @@ _TOOLS: dict[str, list[ToolSpec]] = {
 
 
 def _build_vuln_tools() -> list[ToolSpec]:
-    """Build vuln scan type tool list (recon + enum + vuln phases)."""
+    """Build vuln scan type tool list (recon + enum + vuln + ai + report phases)."""
     recon = list(_TOOLS["recon"])
     enum = [
         ToolSpec("nmap_svc", "network", phase=2, timeout_seconds=900, max_retries=2,
@@ -142,8 +144,35 @@ def _build_vuln_tools() -> list[ToolSpec]:
         ToolSpec("nikto", "web", phase=3, timeout_seconds=600, max_retries=1,
                  depends_on=("ffuf",), data_keys=("endpoints",),
                  output_artifact_type="vulnerabilities"),
+        # Specialized attack tools
+        ToolSpec("dalfox", "web", phase=3, timeout_seconds=60, max_retries=0,
+                 depends_on=("ffuf",), data_keys=("endpoints",),
+                 output_artifact_type="vulnerabilities"),
+        ToolSpec("graphql_cop", "web", phase=3, timeout_seconds=300, max_retries=1,
+                 depends_on=("ffuf",), data_keys=("endpoints",),
+                 output_artifact_type="vulnerabilities"),
+        ToolSpec("jwt_tool", "web", phase=3, timeout_seconds=300, max_retries=1,
+                 depends_on=("ffuf",), data_keys=("endpoints",),
+                 output_artifact_type="vulnerabilities"),
+        ToolSpec("cors_scanner", "web", phase=3, timeout_seconds=180, max_retries=1,
+                 depends_on=("ffuf",), data_keys=("endpoints",),
+                 output_artifact_type="vulnerabilities"),
+        ToolSpec("header_audit_tool", "web", phase=3, timeout_seconds=120, max_retries=1,
+                 depends_on=("ffuf",), data_keys=("endpoints",),
+                 output_artifact_type="vulnerabilities"),
     ]
-    return recon + enum + vuln
+    ai = [
+        ToolSpec("ai_triage", "recon", phase=5, timeout_seconds=300, max_retries=1,
+                 depends_on=("nuclei", "zap", "sqlmap"),
+                 data_keys=("vulnerabilities",),
+                 output_artifact_type="findings_scored"),
+    ]
+    report = [
+        ToolSpec("report_gen", "recon", phase=6, timeout_seconds=300, max_retries=1,
+                 depends_on=("ai_triage",), data_keys=("findings_scored",),
+                 output_artifact_type="report"),
+    ]
+    return recon + enum + vuln + ai + report
 
 
 def _build_full_tools(config: dict[str, Any] | None = None) -> list[ToolSpec]:
@@ -175,36 +204,42 @@ def _build_external_web_api_recon_tools() -> list[ToolSpec]:
     return [
         ToolSpec("scope_check", "recon", phase=0, timeout_seconds=30, max_retries=0,
                  output_artifact_type="scope"),
+        ToolSpec("subfinder", "recon", phase=1, timeout_seconds=600, max_retries=1,
+                 depends_on=("scope_check",), data_keys=("scope",),
+                 output_artifact_type="subdomains"),
+        ToolSpec("amass", "recon", phase=1, timeout_seconds=600, max_retries=1,
+                 depends_on=("scope_check",), data_keys=("scope",),
+                 output_artifact_type="subdomains"),
+        ToolSpec("nmap_discovery", "network", phase=1, timeout_seconds=900, max_retries=1,
+                 depends_on=("scope_check",), data_keys=("scope",),
+                 output_artifact_type="hosts"),
         ToolSpec("httpx_probe", "web", phase=1, timeout_seconds=600, max_retries=1,
                  depends_on=("scope_check",), data_keys=("scope",),
                  output_artifact_type="endpoints"),
     ]
 
 
-def _build_external_web_api_vuln_tools() -> list[ToolSpec]:
+def _build_external_web_api_vuln_tools(config: dict[str, Any] | None = None) -> list[ToolSpec]:
     """Full pre-exploit profile for external web apps and APIs."""
     recon = _build_external_web_api_recon_tools()
     enum = [
         ToolSpec("web_interact", "web", phase=2, timeout_seconds=900, max_retries=1,
                  depends_on=("httpx_probe",), data_keys=("endpoints",),
                  output_artifact_type="endpoints"),
+        ToolSpec("nmap_svc", "network", phase=2, timeout_seconds=900, max_retries=1,
+                 depends_on=("nmap_discovery",), data_keys=("hosts",),
+                 output_artifact_type="services"),
         ToolSpec("ffuf", "web", phase=2, timeout_seconds=900, max_retries=1,
                  depends_on=("httpx_probe",), data_keys=("endpoints",),
                  output_artifact_type="endpoints"),
-        ToolSpec("tech_detect", "recon", phase=2, timeout_seconds=300, max_retries=1,
-                 depends_on=("httpx_probe",), data_keys=("endpoints",),
-                 output_artifact_type="technologies"),
-        ToolSpec("cors_check", "web", phase=2, timeout_seconds=300, max_retries=1,
-                 depends_on=("httpx_probe",), data_keys=("endpoints",),
-                 output_artifact_type="vulnerabilities"),
-        ToolSpec("header_audit", "web", phase=2, timeout_seconds=300, max_retries=1,
-                 depends_on=("httpx_probe",), data_keys=("endpoints",),
-                 output_artifact_type="vulnerabilities"),
     ]
     vuln = [
         ToolSpec("nuclei", "vuln", phase=3, timeout_seconds=1800, max_retries=1,
                  depends_on=("httpx_probe", "ffuf"),
                  data_keys=("endpoints", "endpoints"),
+                 output_artifact_type="vulnerabilities"),
+        ToolSpec("zap", "web", phase=3, timeout_seconds=1800, max_retries=1,
+                 depends_on=("ffuf",), data_keys=("endpoints",),
                  output_artifact_type="vulnerabilities"),
         ToolSpec("sqlmap", "vuln", phase=3, timeout_seconds=1200, max_retries=0,
                  depends_on=("ffuf",), data_keys=("endpoints",),
@@ -212,23 +247,31 @@ def _build_external_web_api_vuln_tools() -> list[ToolSpec]:
         ToolSpec("nikto", "web", phase=3, timeout_seconds=600, max_retries=1,
                  depends_on=("httpx_probe",), data_keys=("endpoints",),
                  output_artifact_type="vulnerabilities"),
+        ToolSpec("dalfox", "web", phase=3, timeout_seconds=60, max_retries=0,
+                 depends_on=("ffuf",), data_keys=("endpoints",),
+                 output_artifact_type="vulnerabilities"),
     ]
-    return recon + enum + vuln
-
-
-def _build_external_web_api_full_tools(config: dict[str, Any] | None = None) -> list[ToolSpec]:
-    vuln_tools = _build_external_web_api_vuln_tools()
-    exploit: list[ToolSpec] = []
-    if _include_static_metasploit(config):
-        exploit = [
-            ToolSpec("metasploit", "exploit", phase=4, timeout_seconds=1200, max_retries=0,
-                     depends_on=("nuclei",), data_keys=("vulnerabilities",),
-                     output_artifact_type="access_levels"),
-        ]
+    if _profile_declares_graphql_surface(config):
+        vuln.append(
+            ToolSpec("graphql_cop", "web", phase=3, timeout_seconds=300, max_retries=1,
+                     depends_on=("ffuf",), data_keys=("endpoints",),
+                     output_artifact_type="vulnerabilities"),
+        )
+    vuln.append(
+        ToolSpec("cors_scanner", "web", phase=3, timeout_seconds=300, max_retries=1,
+                 depends_on=("httpx_probe",), data_keys=("endpoints",),
+                 output_artifact_type="vulnerabilities"),
+    )
+    vuln.append(
+        ToolSpec("jwt_tool", "web", phase=3, timeout_seconds=300, max_retries=1,
+                 depends_on=("ffuf",), data_keys=("endpoints",),
+                 output_artifact_type="vulnerabilities"),
+    )
+    vuln_dependency_names = tuple(tool.name for tool in vuln)
     ai = [
         ToolSpec("ai_triage", "recon", phase=5, timeout_seconds=300, max_retries=1,
-                 depends_on=("nuclei", "zap", "sqlmap"),
-                 data_keys=("vulnerabilities", "vulnerabilities", "vulnerabilities"),
+                 depends_on=vuln_dependency_names,
+                 data_keys=("vulnerabilities",) * len(vuln_dependency_names),
                  output_artifact_type="findings_scored"),
     ]
     report = [
@@ -236,23 +279,128 @@ def _build_external_web_api_full_tools(config: dict[str, Any] | None = None) -> 
                  depends_on=("ai_triage",), data_keys=("findings_scored",),
                  output_artifact_type="report"),
     ]
-    return vuln_tools + exploit + ai + report
+    return recon + enum + vuln + ai + report
+
+
+def _build_external_web_api_full_tools(config: dict[str, Any] | None = None) -> list[ToolSpec]:
+    vuln_tools = _build_external_web_api_vuln_tools(config)
+    exploit: list[ToolSpec] = []
+    if _include_static_metasploit(config):
+        exploit = [
+            ToolSpec("metasploit", "exploit", phase=4, timeout_seconds=1200, max_retries=0,
+                     depends_on=("nuclei",), data_keys=("vulnerabilities",),
+                     output_artifact_type="access_levels"),
+        ]
+    return vuln_tools + exploit
 
 
 def _select_tools(scan_type: str, asset_type: str, config: dict[str, Any] | None) -> list[ToolSpec] | None:
-    """Choose either the generic template or the profile-specific toolchain."""
+    """Choose the right toolchain based on scan type, asset type, methodology, and profile.
+
+    Methodology-aware selection:
+      - blackbox (default): standard external tools only
+      - greybox: adds git_clone + semgrep + trufflehog
+      - whitebox: adds full SAST suite + API spec parsing + dependency audit
+    """
     profile_id = str((config or {}).get("profile_id") or (config or {}).get("profile", {}).get("id") or "")
+    methodology = str((config or {}).get("methodology", "blackbox")).strip().lower()
+
+    # Profile-specific toolchains (override methodology selection)
     if asset_type in {"web_app", "api"} and profile_id == DEFAULT_EXTERNAL_WEB_API_PROFILE_ID:
         if scan_type == "recon":
-            return _build_external_web_api_recon_tools()
+            return _apply_tool_exclusions(_build_external_web_api_recon_tools(), config)
         if scan_type == "vuln":
-            return _build_external_web_api_vuln_tools()
+            return _apply_tool_exclusions(_build_external_web_api_vuln_tools(config), config)
         if scan_type == "full":
-            return _build_external_web_api_full_tools(config)
+            return _apply_tool_exclusions(_build_external_web_api_full_tools(config), config)
 
+    # Standard toolchain selection
     if scan_type == "full":
-        return _build_full_tools(config)
-    return _TOOLS.get(scan_type)
+        base_tools = _build_full_tools(config)
+    else:
+        base_tools = list(_TOOLS.get(scan_type) or [])
+
+    if not base_tools:
+        return None
+
+    # Inject methodology-specific tools
+    extra_tools = _get_methodology_tools(methodology)
+    if extra_tools:
+        base_tools = base_tools + extra_tools
+        logger.info(
+            "Methodology=%s: added %d extra tools (%s)",
+            methodology, len(extra_tools),
+            [t.name for t in extra_tools],
+        )
+
+    base_tools = _apply_tool_exclusions(base_tools, config)
+    return base_tools
+
+
+def _get_methodology_tools(methodology: str) -> list[ToolSpec]:
+    """Return extra tools based on scan methodology.
+
+    - greybox: adds source code analysis (semgrep, trufflehog)
+    - whitebox: adds full SAST + API spec parsing + dependency audit
+    """
+    if methodology == "greybox":
+        return [
+            ToolSpec("git_clone", "recon", phase=1, timeout_seconds=120, max_retries=1,
+                     depends_on=("scope_check",), data_keys=("scope",),
+                     output_artifact_type="source_code"),
+            ToolSpec("semgrep", "vuln", phase=3, timeout_seconds=1800, max_retries=1,
+                     depends_on=("git_clone",), data_keys=("source_code",),
+                     output_artifact_type="vulnerabilities"),
+            ToolSpec("trufflehog", "vuln", phase=3, timeout_seconds=600, max_retries=1,
+                     depends_on=("git_clone",), data_keys=("source_code",),
+                     output_artifact_type="secrets"),
+        ]
+    elif methodology == "whitebox":
+        return [
+            ToolSpec("git_clone", "recon", phase=1, timeout_seconds=120, max_retries=1,
+                     depends_on=("scope_check",), data_keys=("scope",),
+                     output_artifact_type="source_code"),
+            ToolSpec("semgrep", "vuln", phase=3, timeout_seconds=1800, max_retries=1,
+                     depends_on=("git_clone",), data_keys=("source_code",),
+                     output_artifact_type="vulnerabilities"),
+            ToolSpec("trufflehog", "vuln", phase=3, timeout_seconds=600, max_retries=1,
+                     depends_on=("git_clone",), data_keys=("source_code",),
+                     output_artifact_type="secrets"),
+            ToolSpec("dependency_audit", "vuln", phase=3, timeout_seconds=600, max_retries=1,
+                     depends_on=("git_clone",), data_keys=("source_code",),
+                     output_artifact_type="vulnerabilities"),
+            ToolSpec("api_spec_parser", "web", phase=2, timeout_seconds=300, max_retries=1,
+                     depends_on=("git_clone",), data_keys=("source_code",),
+                     output_artifact_type="endpoints"),
+        ]
+    # blackbox — no extra tools
+    return []
+
+
+def _apply_tool_exclusions(
+    tools: list[ToolSpec],
+    config: dict[str, Any] | None,
+) -> list[ToolSpec]:
+    selected_checks = (config or {}).get("selected_checks", {})
+    if not isinstance(selected_checks, dict):
+        return tools
+
+    excluded = {
+        str(tool_name).strip().lower()
+        for tool_name in selected_checks.get("exclude_tools", [])
+        if str(tool_name).strip()
+    }
+    if not excluded:
+        return tools
+
+    filtered = [tool for tool in tools if tool.name.lower() not in excluded]
+    if len(filtered) != len(tools):
+        logger.info(
+            "Selected checks excluded %d tool(s): %s",
+            len(tools) - len(filtered),
+            sorted(excluded),
+        )
+    return filtered
 
 
 def _include_static_metasploit(config: dict[str, Any] | None) -> bool:
@@ -272,6 +420,31 @@ def _include_static_metasploit(config: dict[str, Any] | None) -> bool:
     if mode == "safe_first" and "metasploit" not in allowed_tools and "msf_verify" not in allowed_tools:
         return False
     return True
+
+
+def _profile_declares_graphql_surface(config: dict[str, Any] | None) -> bool:
+    selected_checks = (config or {}).get("selected_checks", {})
+    if not isinstance(selected_checks, dict):
+        return False
+
+    for collection_key in ("http_probe_paths", "content_paths", "api_checks"):
+        values = selected_checks.get(collection_key, [])
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            if "graphql" in str(value or "").strip().lower():
+                return True
+    return False
+
+
+def get_tool_catalog(
+    scan_type: str,
+    asset_type: str,
+    config: dict[str, Any] | None = None,
+) -> list[ToolSpec]:
+    """Return the effective tool catalog for a scan/profile combination."""
+    tools = _select_tools(scan_type, asset_type, config)
+    return list(tools or [])
 
 
 # Initialize composite templates
@@ -364,6 +537,12 @@ class DAGBuilder:
                 "config": json.dumps({
                     "max_retries": tool.max_retries,
                     "timeout_seconds": tool.timeout_seconds,
+                    # Propagate scan-level config to each node
+                    "scope": (config or {}).get("scope", {}),
+                    "credentials": (config or {}).get("credentials", {}),
+                    "rate_limits": (config or {}).get("rate_limits", {}),
+                    "methodology": (config or {}).get("methodology", "blackbox"),
+                    "mode": (config or {}).get("mode", "autonomous"),
                 }),
             })
 
@@ -378,6 +557,7 @@ class DAGBuilder:
                 await self._session.execute(text("""
                     INSERT INTO scan_edges (dag_id, source_node_id, target_node_id, data_key)
                     VALUES (:did, :src, :tgt, :key)
+                    ON CONFLICT (source_node_id, target_node_id, data_key) DO NOTHING
                 """), {
                     "did": str(dag_id), "src": str(source_id),
                     "tgt": str(target_id), "key": data_key,

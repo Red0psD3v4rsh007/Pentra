@@ -1,0 +1,44 @@
+key: owasp_sql_injection_prevention_cheat_sheet
+title: OWASP SQL Injection Prevention Cheat Sheet normalized source summary
+source_key: owasp_sql_injection_prevention_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-26T00:00:00Z"
+summary: >
+  OWASP's SQL injection prevention guidance gives Pentra the right defensive
+  boundary model for query construction: parameterize values, treat dynamic
+  identifiers separately, and keep unsafe escaping out of the proof model.
+facts:
+  - fact_key: owasp_sql_injection_prevention_primary_defenses
+    title: Primary SQL injection prevention controls
+    fact_type: prevention_control_summary
+    summary: >
+      Parameterized queries are the default control. Stored procedures can be
+      safe when used like prepared statements. Identifier and sort-order
+      decisions still need allowlists instead of free-form user input.
+    tags:
+      - sql_injection_prevention
+      - parameterization
+      - allowlist_validation
+    data:
+      primary_controls:
+        - parameterized_queries
+        - safely_implemented_stored_procedures
+        - allowlist_validation_for_dynamic_identifiers
+      discouraged_control:
+        - blanket_escaping_only
+      replay_implications:
+        - Treat value-bearing parameters differently from identifier-bearing inputs.
+        - Rank operator-bearing and quote-bearing inputs higher when the request shape is otherwise stable.
+        - Demote routes that only expose allowlisted sort or field selectors without structural query change.
+    citations:
+      - fact_key: owasp_sql_injection_prevention_primary_defenses
+        title: OWASP SQL Injection Prevention Cheat Sheet
+        source_key: owasp_sql_injection_prevention_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-26T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - sql_injection_prevention_guidance
+          - parameterization_guidance
+          - dynamic_query_allowlist_guidance

@@ -21,8 +21,9 @@ logger = logging.getLogger(__name__)
 _LOCK_PREFIX = "pentra:lock:scan"
 _PROCESSED_PREFIX = "pentra:processed"
 _TENANT_ACTIVE_PREFIX = "pentra:tenant:active_scans"
-_LOCK_TTL_SECONDS = 30
+_LOCK_TTL_SECONDS = 120
 _PROCESSED_TTL_SECONDS = 86400  # 24 hours
+MAX_TENANT_CONCURRENT_SCANS = 5  # configurable per deployment
 
 
 class ConcurrencyController:
@@ -114,3 +115,21 @@ class ConcurrencyController:
             await self._redis.delete(key)
             return 0
         return int(count)
+
+    async def can_start_scan(
+        self, tenant_id: uuid.UUID, *, max_concurrent: int | None = None
+    ) -> tuple[bool, str]:
+        """Check if a tenant can start a new scan.
+
+        Returns (allowed, reason).  When *allowed* is ``False`` the caller
+        should surface *reason* to the user as a clear error message.
+        """
+        limit = max_concurrent or MAX_TENANT_CONCURRENT_SCANS
+        key = f"{_TENANT_ACTIVE_PREFIX}:{tenant_id}"
+        current = int(await self._redis.get(key) or 0)
+        if current >= limit:
+            return False, (
+                f"Concurrency limit reached ({current}/{limit} active scans). "
+                "Wait for a running scan to complete or cancel one before starting a new scan."
+            )
+        return True, ""

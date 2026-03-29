@@ -1,0 +1,43 @@
+key: owasp_authorization_cheat_sheet
+title: OWASP Authorization Cheat Sheet normalized source summary
+source_key: owasp_authorization_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's authorization guidance gives Pentra the core decision model for
+  access-control testing: deny by default, validate on every request, and keep
+  subject-object-action context explicit.
+facts:
+  - fact_key: owasp_authorization_enforcement_principles
+    title: Authorization enforcement principles
+    fact_type: access_control_summary
+    summary: >
+      Access-control reasoning should model authorization as a per-request
+      decision over subject, object, action, and context rather than a one-time
+      login outcome.
+    tags:
+      - authorization
+      - access_control
+      - roles
+    data:
+      high_signal_authorization_principles:
+        - deny_by_default
+        - validate_every_request
+        - least_privilege
+        - per_object_enforcement
+        - rbac_abac_context
+      replay_implications:
+        - Compare responses across roles, not only across endpoints.
+        - Preserve object identifiers and action semantics for replay.
+    citations:
+      - fact_key: owasp_authorization_enforcement_principles
+        title: OWASP Authorization Cheat Sheet
+        source_key: owasp_authorization_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - authorization_guidance
+          - object_access_validation_guidance
+          - role_and_attribute_modeling

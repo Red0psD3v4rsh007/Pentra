@@ -1,0 +1,73 @@
+pack_key: p3a_multi_role_stateful_auth
+name: Multi-role stateful auth capability pack
+phase: 3
+description: >
+  Multi-role stateful auth capability pack for session bootstrap, route and
+  role differential analysis, auth-workflow checkpoints, and replay-aware
+  negative evidence without direct exploit execution.
+ontology_family_keys:
+  - broken_authentication
+  - broken_access_control
+attack_primitive_keys:
+  - session_and_token_abuse_probe
+  - login_and_reset_flow_mutation_probe
+  - privileged_api_surface_diff
+proof_contract_keys:
+  - role_differential_access_contract
+planner_action_keys:
+  - compare_role_access
+  - pressure_auth_tokens_and_login_flows
+  - enumerate_privileged_api_surface
+target_profile_keys:
+  - auth_heavy_admin_portal
+  - spa_rest_api
+  - workflow_heavy_commerce
+pack_dependency_keys: []
+knowledge_dependencies:
+  ontology_index_path: pentra_core/knowledge/ontology/index.yaml
+  source_profile: public_source_first
+  cheatsheet_category_keys:
+    - authentication_and_sessions
+    - authorization_and_access_control
+  source_registry_keys:
+    - owasp_authentication_cheat_sheet
+    - owasp_authorization_cheat_sheet
+    - owasp_session_management_cheat_sheet
+    - owasp_idor_prevention_cheat_sheet
+    - owasp_wstg_stable
+    - portswigger_web_security_academy
+  corpus_dependency_notes:
+    - Consume role, workflow, auth, and access-control guidance from the Phase 0 to 2 registries.
+    - Replayable differential evidence is required before auth or access-control claims are promoted.
+subphases:
+  - key: p3a_2a
+    name: ontology_and_corpus_binding
+  - key: p3a_2b
+    name: session_bootstrap
+  - key: p3a_2c
+    name: role_differential_runtime
+  - key: p3a_2d
+    name: proof_and_negative_evidence
+  - key: p3a_2e
+    name: benchmark_and_regression
+runtime_dependencies:
+  - web_interact
+  - custom_poc
+candidate_generators:
+  - role_differential_route_candidate
+  - auth_transition_candidate
+  - privileged_surface_candidate
+verifier_entrypoints:
+  - role_differential_access
+ai_advisory:
+  enabled: true
+  advisory_mode: multi_role_auth_route_focus
+  prompt_contract_id: pentra.ai.advisory
+  trust_boundary: advisor_only
+negative_evidence_behavior:
+  - converged behavior across roles demotes route pressure after replay
+  - single-role success never certifies auth or access-control abuse
+benchmark_target_keys:
+  - juice_shop_local
+  - webgoat_local
+  - repo_demo_api

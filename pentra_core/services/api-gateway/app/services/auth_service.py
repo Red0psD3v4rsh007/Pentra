@@ -56,7 +56,7 @@ class TokenPair:
 # ── Public service functions ─────────────────────────────────────────
 
 
-def get_google_auth_url() -> str:
+def get_google_auth_url(*, state: str | None = None) -> str:
     """Build the Google OAuth 2.0 consent screen redirect URL."""
     params = {
         "client_id": settings.google_client_id,
@@ -66,6 +66,8 @@ def get_google_auth_url() -> str:
         "access_type": "offline",
         "prompt": "consent",
     }
+    if state:
+        params["state"] = state
     return f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
 
 

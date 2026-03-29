@@ -43,6 +43,8 @@ class ToolDefinition:
     artifact_type: str  # subdomains | hosts | services | vulnerabilities | etc.
     default_timeout: int = 600
     env_vars: dict[str, str] = field(default_factory=dict)
+    working_dir: str | None = None
+    entrypoint: list[str] | None = None
 
 
 # ── Registry ─────────────────────────────────────────────────────────
@@ -71,6 +73,8 @@ def _load_specs() -> None:
                 artifact_type=data.get("artifact_type", "tool_output"),
                 default_timeout=data.get("default_timeout", 600),
                 env_vars=data.get("env_vars", {}),
+                working_dir=data.get("working_dir"),
+                entrypoint=data.get("entrypoint"),
             )
             _REGISTRY[tool.name] = tool
             logger.debug("Loaded tool spec: %s (%s)", tool.name, path.name)

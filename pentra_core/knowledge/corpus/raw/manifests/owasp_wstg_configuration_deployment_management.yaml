@@ -1,0 +1,31 @@
+key: owasp_wstg_configuration_deployment_management_phase1
+phase: 1
+source_key: owasp_wstg_configuration_deployment_management
+title: OWASP WSTG Configuration and Deployment Management Testing acquisition manifest
+acquisition_scope: >
+  Capture official deployment and configuration testing guidance for exposed
+  admin, backup, debug, and hidden-asset surfaces.
+parser_key: manual_structured_summary
+normalization_units:
+  - configuration_deployment_summary
+target_outputs:
+  - normalized/source_summaries/owasp_wstg_configuration_deployment_management.yaml
+focus_areas:
+  - backup_and_unreferenced_files
+  - default_install_artifacts
+  - debug_and_admin_surfaces
+usage_notes: >
+  Preserve route and artifact-oriented methodology. Do not add destructive
+  tampering guidance or unsafe production changes.
+citations:
+  - fact_key: owasp_wstg_configuration_deployment_management_source
+    title: OWASP WSTG Configuration and Deployment Management Testing
+    source_key: owasp_wstg_configuration_deployment_management
+    source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/README
+    trust_tier: official_public
+    retrieved_at: "2026-03-27T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - deployment_misconfiguration_methodology
+      - hidden_asset_testing_methodology
+      - config_surface_testing_guidance

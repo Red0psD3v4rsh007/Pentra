@@ -95,3 +95,10 @@ class Project(Base, TenantMixin, TimestampMixin, SoftDeleteMixin):
         cascade="all, delete-orphan",
         lazy="select",
     )
+
+    asset_groups: Mapped[list["AssetGroup"]] = relationship(
+        "AssetGroup",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )

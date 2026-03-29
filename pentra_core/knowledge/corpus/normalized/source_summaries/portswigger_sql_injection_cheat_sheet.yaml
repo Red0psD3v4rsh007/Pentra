@@ -1,0 +1,43 @@
+key: portswigger_sql_injection_cheat_sheet
+title: PortSwigger SQL Injection Cheat Sheet normalized source summary
+source_key: portswigger_sql_injection_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-26T00:00:00Z"
+summary: >
+  PortSwigger's SQL injection cheat sheet gives Pentra compact DB-flavor syntax
+  differences that matter for safe query-shape mutation and replayable
+  injection probing.
+facts:
+  - fact_key: portswigger_sql_injection_db_flavor_matrix
+    title: DB flavor syntax matrix
+    fact_type: syntax_reference
+    summary: >
+      Core SQLi probes vary by database family across comments, string
+      concatenation, substring extraction, and union syntax. Pentra should
+      encode those as DB-flavor metadata, not raw payload dumps.
+    tags:
+      - sql_injection
+      - db_flavors
+      - syntax_reference
+    data:
+      db_flavor_dimensions:
+        - comments
+        - string_concatenation
+        - substring_extraction
+        - union_query_shape
+        - version_detection
+      replay_implications:
+        - Keep DB-flavor guesses advisory until runtime evidence narrows the surface.
+        - Prefer syntax families that match observed error markers or framework hints.
+    citations:
+      - fact_key: portswigger_sql_injection_db_flavor_matrix
+        title: PortSwigger SQL Injection Cheat Sheet
+        source_key: portswigger_sql_injection_cheat_sheet
+        source_url: https://portswigger.net/web-security/sql-injection/cheat-sheet
+        trust_tier: official_public
+        retrieved_at: "2026-03-26T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - injection_payload_archetypes
+          - db_flavor_syntax_guidance
+          - replayable_injection_patterns

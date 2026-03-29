@@ -1,0 +1,43 @@
+key: owasp_authentication_cheat_sheet
+title: OWASP Authentication Cheat Sheet normalized source summary
+source_key: owasp_authentication_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's authentication guidance gives Pentra the workflow constraints that
+  matter for real targets: login, recovery, reauthentication, and throttling
+  should be treated as separate auth states and replay checkpoints.
+facts:
+  - fact_key: owasp_authentication_general_controls
+    title: Authentication workflow controls
+    fact_type: auth_workflow_summary
+    summary: >
+      Authentication assessment should preserve rate limiting, lockout, MFA or
+      step-up flows, and reauthentication triggers after account changes or
+      risky events.
+    tags:
+      - authentication
+      - sessions
+      - anti_automation
+    data:
+      high_signal_auth_workflows:
+        - login_flow
+        - recovery_flow
+        - step_up_or_mfa_gate
+        - reauthentication_after_risk_events
+        - throttling_and_lockout
+      replay_implications:
+        - Preserve auth checkpoints as workflow states instead of a single login flag.
+        - Distinguish auth failure, partial auth, and elevated auth in role matrices.
+    citations:
+      - fact_key: owasp_authentication_general_controls
+        title: OWASP Authentication Cheat Sheet
+        source_key: owasp_authentication_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - authentication_workflow_guidance
+          - anti_automation_guidance
+          - password_and_recovery_guidance

@@ -1,0 +1,42 @@
+key: owasp_wstg_weak_cryptography
+title: OWASP WSTG Weak Cryptography Testing normalized source summary
+source_key: owasp_wstg_weak_cryptography
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's weak-cryptography guidance gives Pentra the review boundary for
+  crypto findings: transport, algorithm, and token/key material claims require
+  captured evidence instead of guesses from a single token-shaped value.
+facts:
+  - fact_key: owasp_wstg_weak_crypto_review_patterns
+    title: Weak-cryptography review patterns
+    fact_type: crypto_summary
+    summary: >
+      Crypto review should focus on captured transport and material evidence so
+      weak-crypto candidates stay grounded in observable configuration or
+      artifacts.
+    tags:
+      - crypto
+      - transport
+      - disclosure
+    data:
+      high_signal_crypto_review_controls:
+        - transport_encryption_baseline
+        - weak_or_legacy_algorithm_review
+        - key_and_token_material_exposure_review
+        - certificate_and_configuration_review
+      replay_implications:
+        - Require captured crypto material or configuration evidence before promotion.
+        - Token presence alone is insufficient to classify weak cryptography.
+    citations:
+      - fact_key: owasp_wstg_weak_crypto_review_patterns
+        title: OWASP WSTG Weak Cryptography Testing
+        source_key: owasp_wstg_weak_cryptography
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/09-Testing_for_Weak_Cryptography/README
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - weak_cryptography_testing_methodology
+          - transport_encryption_testing
+          - crypto_material_review

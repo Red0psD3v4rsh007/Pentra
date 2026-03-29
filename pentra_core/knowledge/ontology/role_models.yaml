@@ -1,0 +1,105 @@
+version: 1
+program: phase10_public_source_first
+phase: 2
+generated_at: "2026-03-24T15:00:00+05:30"
+role_models:
+  - key: generic_web_roles
+    name: Generic web role model
+    description: >
+      Cross-target identity model for public, authenticated, and privileged
+      states.
+    target_keys: []
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    roles:
+      - key: anonymous
+        label: Anonymous
+        description: Public unauthenticated user
+        privilege_level: 0
+        acquisition_modes: [none]
+        observable_markers:
+          - no session token
+          - public routes only
+      - key: authenticated_user
+        label: Authenticated user
+        description: Standard signed-in user
+        privilege_level: 1
+        acquisition_modes: [known_credentials, registration, session_bootstrap]
+        observable_markers:
+          - session token present
+          - user profile or basket routes available
+      - key: privileged_user
+        label: Privileged user
+        description: Administrative or elevated user
+        privilege_level: 2
+        acquisition_modes: [known_credentials, captured_session]
+        observable_markers:
+          - admin route groups
+          - management APIs
+    transition_pairs:
+      - anonymous->authenticated_user
+      - authenticated_user->privileged_user
+      - anonymous->privileged_user
+    citations:
+      - fact_key: generic_web_roles_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - attack_preconditions
+  - key: juice_shop_local_roles
+    name: Juice Shop local role model
+    description: >
+      Role model for the pinned local Juice Shop benchmark lane.
+    target_keys:
+      - juice_shop_local
+    source_summary_keys:
+      - juice_shop_official_project
+      - juice_shop_official_guide
+      - juice_shop_runtime_inventory_local_19_2_1
+    roles:
+      - key: anonymous
+        label: Anonymous
+        description: Public browsing state for the local Juice Shop app
+        privilege_level: 0
+        acquisition_modes: [none]
+        observable_markers:
+          - public storefront routes
+          - no authentication token
+      - key: customer
+        label: Customer
+        description: Standard authenticated shopper role
+        privilege_level: 1
+        acquisition_modes: [registration, known_credentials, session_bootstrap]
+        observable_markers:
+          - basket routes
+          - order history
+          - user profile access
+      - key: admin
+        label: Admin
+        description: Elevated management role used to compare privileged routes
+        privilege_level: 2
+        acquisition_modes: [known_credentials, session_bootstrap]
+        observable_markers:
+          - admin route groups
+          - management API responses
+    transition_pairs:
+      - anonymous->customer
+      - customer->admin
+      - anonymous->admin
+    citations:
+      - fact_key: juice_shop_local_roles_phase2
+        title: OWASP Juice Shop Official Guide
+        source_key: juice_shop_official_guide
+        source_url: https://help.owasp-juice.shop/part1/challenges.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - benchmark_context
+          - feature_to_challenge_hints

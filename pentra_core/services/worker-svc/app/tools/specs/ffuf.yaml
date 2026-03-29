@@ -1,6 +1,6 @@
 name: ffuf
 worker_family: web
-image: parrotsec/ffuf:latest
+image: secsi/ffuf:latest
 command:
   - -u
   - "{base_url}/FUZZ"

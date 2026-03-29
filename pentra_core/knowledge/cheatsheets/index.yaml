@@ -1,0 +1,4 @@
+version: 1
+program: phase10_public_source_first
+phase: 2
+category_catalog_path: category_catalog.yaml

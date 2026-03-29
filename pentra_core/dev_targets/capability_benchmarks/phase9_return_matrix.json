@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "project_id": "33333333-3333-3333-3333-333333333333",
+  "target_manifests": [
+    "pentra_core/dev_targets/capability_benchmarks/repo_demo_api.json",
+    "pentra_core/dev_targets/capability_benchmarks/juice_shop.json",
+    "pentra_core/dev_targets/capability_benchmarks/dvwa.json"
+  ]
+}

@@ -1,0 +1,31 @@
+key: owasp_xss_prevention_cheat_sheet_phase1
+phase: 1
+source_key: owasp_xss_prevention_cheat_sheet
+title: OWASP Cross Site Scripting Prevention Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official XSS context rules that shape sink modeling, encoding
+  boundaries, and context-specific browser proof expectations.
+parser_key: manual_structured_summary
+normalization_units:
+  - xss_context_rules_summary
+target_outputs:
+  - normalized/source_summaries/owasp_xss_prevention_cheat_sheet.yaml
+focus_areas:
+  - output_encoding
+  - sink_contexts
+  - html_attribute_script_url_rules
+usage_notes: >
+  Preserve context taxonomy and sink constraints. Do not mirror raw payload
+  examples into the repo.
+citations:
+  - fact_key: owasp_xss_prevention_cheat_sheet_source
+    title: OWASP Cross Site Scripting Prevention Cheat Sheet
+    source_key: owasp_xss_prevention_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-27T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - xss_context_taxonomy
+      - sanitization_guidance
+      - sink_context_modeling

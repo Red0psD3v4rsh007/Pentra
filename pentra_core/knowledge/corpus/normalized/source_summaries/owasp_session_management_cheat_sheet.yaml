@@ -1,0 +1,42 @@
+key: owasp_session_management_cheat_sheet
+title: OWASP Session Management Cheat Sheet normalized source summary
+source_key: owasp_session_management_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's session-management guidance gives Pentra the token and cookie
+  lifecycle constraints that matter for stateful replay and multi-role auth
+  modeling.
+facts:
+  - fact_key: owasp_session_management_core_constraints
+    title: Session lifecycle constraints
+    fact_type: session_lifecycle_summary
+    summary: >
+      Session identifiers need secure transport, rotation on privilege change
+      or authentication events, and clear expiry and invalidation rules.
+    tags:
+      - sessions
+      - cookies
+      - tokens
+    data:
+      high_signal_session_controls:
+        - secure_session_identifier_properties
+        - rotation_after_auth_or_privilege_change
+        - expiry_and_invalidation
+        - cookie_scope_and_flags
+        - session_binding_to_auth_state
+      replay_implications:
+        - Preserve session label, auth state, and token transitions per workflow step.
+        - Treat session rotation as a state transition, not incidental noise.
+    citations:
+      - fact_key: owasp_session_management_core_constraints
+        title: OWASP Session Management Cheat Sheet
+        source_key: owasp_session_management_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - session_bootstrap_guidance
+          - token_lifecycle_guidance
+          - session_replay_constraints

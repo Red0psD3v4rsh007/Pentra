@@ -1,0 +1,42 @@
+key: owasp_deserialization_cheat_sheet
+title: OWASP Deserialization Cheat Sheet normalized source summary
+source_key: owasp_deserialization_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's deserialization guidance gives Pentra the key review boundaries for
+  serialized input: untrusted data, format choice, and unsafe object material
+  must be treated as parser and trust problems first.
+facts:
+  - fact_key: owasp_deserialization_review_patterns
+    title: Deserialization review patterns
+    fact_type: parser_boundary_summary
+    summary: >
+      Deserialization risk is driven by accepting untrusted serialized data,
+      enabling dangerous type materialization, and failing to constrain which
+      formats or classes can be instantiated.
+    tags:
+      - deserialization
+      - serialization
+      - parsers
+    data:
+      high_signal_deserialization_controls:
+        - avoid_untrusted_deserialization
+        - restrict_allowed_types_or_formats
+        - integrity_and_origin_checks
+        - reduce_gadget_or_type_surface
+      replay_implications:
+        - Preserve serialization format and trust boundary in candidate context.
+        - Require parser-boundary evidence before promotion.
+    citations:
+      - fact_key: owasp_deserialization_review_patterns
+        title: OWASP Deserialization Cheat Sheet
+        source_key: owasp_deserialization_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - deserialization_guidance
+          - serialization_payload_patterns
+          - parser_safety_constraints

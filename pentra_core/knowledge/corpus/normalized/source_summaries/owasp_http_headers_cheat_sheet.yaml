@@ -1,0 +1,44 @@
+key: owasp_http_headers_cheat_sheet
+title: OWASP HTTP Headers Cheat Sheet normalized source summary
+source_key: owasp_http_headers_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's HTTP header guidance gives Pentra the baseline for browser-facing
+  hardening review: header findings need exact route and header evidence, not
+  generic assumptions about missing protection.
+facts:
+  - fact_key: owasp_http_headers_baseline_controls
+    title: HTTP security-header baseline controls
+    fact_type: misconfiguration_summary
+    summary: >
+      Browser-facing routes should be reviewed against a concrete header
+      baseline so Pentra can distinguish missing hardening from other route or
+      disclosure issues.
+    tags:
+      - headers
+      - misconfiguration
+      - transport
+    data:
+      high_signal_header_controls:
+        - content_security_policy_baseline
+        - strict_transport_security
+        - x_content_type_options
+        - frame_ancestors_or_x_frame_options
+        - referrer_policy
+        - controlled_cors_policy
+      replay_implications:
+        - Capture exact response headers per route before promoting a header misconfiguration.
+        - Separate missing header hardening from exposed config or debug content in findings.
+    citations:
+      - fact_key: owasp_http_headers_baseline_controls
+        title: OWASP HTTP Headers Cheat Sheet
+        source_key: owasp_http_headers_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - header_misconfiguration_guidance
+          - transport_header_guidance
+          - browser_security_header_baselines

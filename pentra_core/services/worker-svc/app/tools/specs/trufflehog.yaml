@@ -1,0 +1,12 @@
+name: trufflehog
+worker_family: vuln
+image: trufflesecurity/trufflehog:latest
+command:
+  - filesystem
+  - --directory
+  - "{input_dir}/repo"
+  - --json
+  - --no-update
+output_parser: json
+artifact_type: credential_leak
+default_timeout: 600

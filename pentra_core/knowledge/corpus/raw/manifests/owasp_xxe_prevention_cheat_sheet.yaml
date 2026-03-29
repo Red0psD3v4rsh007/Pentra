@@ -1,0 +1,31 @@
+key: owasp_xxe_prevention_cheat_sheet_phase1
+phase: 1
+source_key: owasp_xxe_prevention_cheat_sheet
+title: OWASP XML External Entity Prevention Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official XML parser guidance that shapes entity-resolution checks,
+  DTD handling, and parser-hardening assumptions for XXE categories.
+parser_key: manual_structured_summary
+normalization_units:
+  - xxe_parser_hardening_summary
+target_outputs:
+  - normalized/source_summaries/owasp_xxe_prevention_cheat_sheet.yaml
+focus_areas:
+  - dtd_disablement
+  - external_entity_resolution
+  - parser_configuration
+usage_notes: >
+  Preserve parser-hardening boundaries and XML handling constraints only.
+  Avoid adding raw XXE payloads to the corpus.
+citations:
+  - fact_key: owasp_xxe_prevention_cheat_sheet_source
+    title: OWASP XML External Entity Prevention Cheat Sheet
+    source_key: owasp_xxe_prevention_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-27T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - xxe_guidance
+      - parser_hardening_patterns
+      - xml_payload_constraints

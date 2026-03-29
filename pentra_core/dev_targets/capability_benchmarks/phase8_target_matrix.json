@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "project_id": "33333333-3333-3333-3333-333333333333",
+  "targets": [
+    {
+      "key": "repo_demo_api",
+      "enabled": true,
+      "asset_name": "Phase 8 Capability Demo API",
+      "asset_type": "api",
+      "target": "http://127.0.0.1:8088",
+      "healthcheck_url": "http://127.0.0.1:8088/healthz",
+      "launch_mode": "repo_local",
+      "ground_truth_source": "pentra_core/dev_targets/external_web_api_v1_demo/app.py",
+      "notes": "Repo-shipped local benchmark target with known auth, IDOR, SQLi, workflow, and GraphQL exposure.",
+      "expectations": {
+        "expected_vulnerability_types": [
+          "auth_bypass",
+          "idor",
+          "sql_injection",
+          "workflow_bypass",
+          "graphql_introspection"
+        ],
+        "expected_verified_types": [
+          "auth_bypass",
+          "idor",
+          "workflow_bypass"
+        ],
+        "minimum_detected_recall": 0.8,
+        "minimum_verified_recall": 0.667,
+        "minimum_verified_share": 0.5
+      },
+      "scan_plans": [
+        {
+          "key": "repo_demo_api_vuln",
+          "label": "Repo demo API / vuln",
+          "scan_type": "vuln",
+          "config_template": "default_external_web_api_v1"
+        },
+        {
+          "key": "repo_demo_api_full",
+          "label": "Repo demo API / full",
+          "scan_type": "full",
+          "config_template": "default_external_web_api_v1"
+        },
+        {
+          "key": "repo_demo_api_full_stateful",
+          "label": "Repo demo API / full stateful",
+          "scan_type": "full",
+          "config_template": "stateful_full"
+        }
+      ]
+    },
+    {
+      "key": "juice_shop_local",
+      "enabled": false,
+      "asset_name": "Phase 8 Juice Shop",
+      "asset_type": "web_app",
+      "target": "http://127.0.0.1:3001",
+      "healthcheck_url": "http://127.0.0.1:3001/",
+      "launch_mode": "docker",
+      "ground_truth_source": "pending_manifest",
+      "notes": "Planned intentionally vulnerable SPA/API benchmark. Keep disabled until launch recipe and ground truth are committed.",
+      "expectations": {
+        "expected_vulnerability_types": [],
+        "expected_verified_types": [],
+        "minimum_detected_recall": 0.0,
+        "minimum_verified_recall": 0.0,
+        "minimum_verified_share": 0.0
+      },
+      "scan_plans": [
+        {
+          "key": "juice_shop_full",
+          "label": "Juice Shop / full",
+          "scan_type": "full",
+          "config_template": "default_external_web_api_v1"
+        }
+      ]
+    },
+    {
+      "key": "dvwa_local",
+      "enabled": false,
+      "asset_name": "Phase 8 DVWA",
+      "asset_type": "web_app",
+      "target": "http://127.0.0.1:3002",
+      "healthcheck_url": "http://127.0.0.1:3002/",
+      "launch_mode": "docker",
+      "ground_truth_source": "pending_manifest",
+      "notes": "Planned classic web benchmark. Keep disabled until launch recipe and ground truth are committed.",
+      "expectations": {
+        "expected_vulnerability_types": [],
+        "expected_verified_types": [],
+        "minimum_detected_recall": 0.0,
+        "minimum_verified_recall": 0.0,
+        "minimum_verified_share": 0.0
+      },
+      "scan_plans": [
+        {
+          "key": "dvwa_full",
+          "label": "DVWA / full",
+          "scan_type": "full",
+          "config_template": "default_external_web_api_v1"
+        }
+      ]
+    },
+    {
+      "key": "webgoat_local",
+      "enabled": false,
+      "asset_name": "Phase 8 WebGoat",
+      "asset_type": "web_app",
+      "target": "http://127.0.0.1:3003",
+      "healthcheck_url": "http://127.0.0.1:3003/",
+      "launch_mode": "docker",
+      "ground_truth_source": "pending_manifest",
+      "notes": "Planned stateful training target. Keep disabled until launch recipe and ground truth are committed.",
+      "expectations": {
+        "expected_vulnerability_types": [],
+        "expected_verified_types": [],
+        "minimum_detected_recall": 0.0,
+        "minimum_verified_recall": 0.0,
+        "minimum_verified_share": 0.0
+      },
+      "scan_plans": [
+        {
+          "key": "webgoat_full",
+          "label": "WebGoat / full",
+          "scan_type": "full",
+          "config_template": "stateful_full"
+        }
+      ]
+    },
+    {
+      "key": "crapi_local",
+      "enabled": false,
+      "asset_name": "Phase 8 crAPI",
+      "asset_type": "api",
+      "target": "http://127.0.0.1:3004",
+      "healthcheck_url": "http://127.0.0.1:3004/",
+      "launch_mode": "docker",
+      "ground_truth_source": "pending_manifest",
+      "notes": "Planned API benchmark with deeper auth and workflow state. Keep disabled until launch recipe and ground truth are committed.",
+      "expectations": {
+        "expected_vulnerability_types": [],
+        "expected_verified_types": [],
+        "minimum_detected_recall": 0.0,
+        "minimum_verified_recall": 0.0,
+        "minimum_verified_share": 0.0
+      },
+      "scan_plans": [
+        {
+          "key": "crapi_full",
+          "label": "crAPI / full",
+          "scan_type": "full",
+          "config_template": "stateful_full"
+        }
+      ]
+    }
+  ]
+}

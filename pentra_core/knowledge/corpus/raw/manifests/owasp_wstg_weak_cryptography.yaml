@@ -1,0 +1,31 @@
+key: owasp_wstg_weak_cryptography_phase1
+phase: 1
+source_key: owasp_wstg_weak_cryptography
+title: OWASP WSTG Weak Cryptography Testing acquisition manifest
+acquisition_scope: >
+  Capture official weak-cryptography methodology for transport, algorithm, and
+  exposed crypto-material review in disclosure and misconfiguration packs.
+parser_key: manual_structured_summary
+normalization_units:
+  - weak_crypto_summary
+target_outputs:
+  - normalized/source_summaries/owasp_wstg_weak_cryptography.yaml
+focus_areas:
+  - transport_encryption_review
+  - weak_algorithm_review
+  - token_and_key_material_review
+usage_notes: >
+  Preserve evidence constraints for crypto claims. Do not add downgrade or
+  cipher-breaking procedures.
+citations:
+  - fact_key: owasp_wstg_weak_cryptography_source
+    title: OWASP WSTG Weak Cryptography Testing
+    source_key: owasp_wstg_weak_cryptography
+    source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/09-Testing_for_Weak_Cryptography/README
+    trust_tier: official_public
+    retrieved_at: "2026-03-27T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - weak_cryptography_testing_methodology
+      - transport_encryption_testing
+      - crypto_material_review

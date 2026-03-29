@@ -1,0 +1,301 @@
+version: 1
+program: phase10_public_source_first
+phase: 2
+generated_at: "2026-03-24T15:00:00+05:30"
+workflow_states:
+  - key: anonymous_surface
+    name: Anonymous surface
+    description: >
+      Unauthenticated browsing or API access state used for initial inventory
+      and public-route pressure.
+    state_type: anonymous_surface
+    source_summary_keys:
+      - owasp_wstg_stable
+      - juice_shop_runtime_inventory_local_19_2_1
+    auth_state: anonymous
+    role_hints: [anonymous]
+    entry_signals:
+      - no authentication cookies or tokens
+      - public routes accessible
+    transition_targets:
+      - authenticated_surface
+      - client_search_reflection_state
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: anonymous_surface_state_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - attack_preconditions
+  - key: authenticated_surface
+    name: Authenticated user surface
+    description: >
+      General authenticated application state for a non-privileged user.
+    state_type: authenticated_surface
+    source_summary_keys:
+      - owasp_wstg_stable
+      - juice_shop_official_project
+    auth_state: authenticated
+    role_hints: [user, customer]
+    entry_signals:
+      - session token or cookie present
+      - profile or basket routes available
+    transition_targets:
+      - privileged_surface
+      - basket_checkout_workflow
+      - account_management_workflow
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: authenticated_surface_state_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - attack_preconditions
+  - key: privileged_surface
+    name: Privileged surface
+    description: >
+      Administrative or elevated state where sensitive routes and management
+      features may appear.
+    state_type: privileged_surface
+    source_summary_keys:
+      - juice_shop_official_project
+      - juice_shop_official_guide
+    auth_state: privileged
+    role_hints: [admin]
+    entry_signals:
+      - admin-labeled routes available
+      - elevated management responses observed
+    transition_targets:
+      - admin_api_surface_state
+      - role_transition_state
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: privileged_surface_state_phase2
+        title: OWASP Juice Shop Project Page
+        source_key: juice_shop_official_project
+        source_url: https://owasp.org/www-project-juice-shop/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - benchmark_target_identity
+          - challenge_family_mapping
+  - key: role_transition_state
+    name: Role transition state
+    description: >
+      Differential state used when Pentra compares access outcomes across two or
+      more identities.
+    state_type: role_transition
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    auth_state: differential
+    role_hints: [anonymous, customer, admin]
+    entry_signals:
+      - multiple active identity contexts available
+      - same route replayed under different identities
+    transition_targets:
+      - authenticated_surface
+      - privileged_surface
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: role_transition_state_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_paths
+          - challenge_family_mapping
+  - key: client_search_reflection_state
+    name: Client-side search and reflection state
+    description: >
+      Browser route state where search, fragment, or query reflection is
+      visible and suitable for browser-backed XSS verification.
+    state_type: client_side_route
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - juice_shop_runtime_inventory_local_19_2_1
+    auth_state: anonymous
+    role_hints: [anonymous, user]
+    entry_signals:
+      - query or fragment drives DOM content
+      - client-side search or filter route identified
+    transition_targets:
+      - authenticated_surface
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: client_search_reflection_state_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_paths
+          - proof_patterns
+  - key: account_management_workflow
+    name: Account management workflow
+    description: >
+      Profile, login, reset, and account-edit workflow family.
+    state_type: business_workflow
+    source_summary_keys:
+      - owasp_wstg_stable
+      - juice_shop_official_guide
+    auth_state: mixed
+    role_hints: [anonymous, customer, admin]
+    entry_signals:
+      - login, profile, or reset routes identified
+      - account mutation forms present
+    transition_targets:
+      - authenticated_surface
+      - password_reset_workflow
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: account_management_workflow_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - attack_preconditions
+  - key: basket_checkout_workflow
+    name: Basket and checkout workflow
+    description: >
+      Multi-step commerce workflow where state mutation and sequencing often
+      matter.
+    state_type: business_workflow
+    source_summary_keys:
+      - juice_shop_official_guide
+      - owasp_wstg_stable
+    auth_state: authenticated
+    role_hints: [customer]
+    entry_signals:
+      - basket or checkout route group present
+      - stateful order transitions observed
+    transition_targets:
+      - authenticated_surface
+      - role_transition_state
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: basket_checkout_workflow_phase2
+        title: OWASP Juice Shop Official Guide
+        source_key: juice_shop_official_guide
+        source_url: https://help.owasp-juice.shop/part1/challenges.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - feature_to_challenge_hints
+          - benchmark_context
+  - key: admin_api_surface_state
+    name: Admin API surface
+    description: >
+      Route group state centered on admin or management APIs that should be
+      carefully compared across roles.
+    state_type: privileged_surface
+    source_summary_keys:
+      - juice_shop_official_project
+      - juice_shop_runtime_inventory_local_19_2_1
+    auth_state: privileged
+    role_hints: [admin]
+    entry_signals:
+      - admin-prefixed routes or route groups
+      - management endpoints observed in target model
+    transition_targets:
+      - role_transition_state
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: admin_api_surface_state_phase2
+        title: OWASP Juice Shop Project Page
+        source_key: juice_shop_official_project
+        source_url: https://owasp.org/www-project-juice-shop/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - benchmark_target_identity
+          - challenge_family_mapping
+  - key: file_upload_workflow
+    name: File or parser upload workflow
+    description: >
+      Upload or parser flow state used for XXE, deserialization, and file-based
+      abuse probes.
+    state_type: business_workflow
+    source_summary_keys:
+      - owasp_cheat_sheet_series
+      - portswigger_web_security_academy
+    auth_state: mixed
+    role_hints: [anonymous, user]
+    entry_signals:
+      - multipart or parser-specific routes present
+      - XML or serialized input accepted
+    transition_targets:
+      - authenticated_surface
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: file_upload_workflow_phase2
+        title: OWASP Cheat Sheet Series
+        source_key: owasp_cheat_sheet_series
+        source_url: https://cheatsheetseries.owasp.org/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - payload_archetypes
+          - exploit_preconditions
+  - key: password_reset_workflow
+    name: Password reset workflow
+    description: >
+      Reset or recovery flow state for token, sequencing, and anti-automation
+      testing.
+    state_type: business_workflow
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    auth_state: mixed
+    role_hints: [anonymous, user]
+    entry_signals:
+      - reset token issuance observed
+      - password recovery routes identified
+    transition_targets:
+      - authenticated_surface
+      - role_transition_state
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: password_reset_workflow_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - attack_preconditions
+          - testing_methodology

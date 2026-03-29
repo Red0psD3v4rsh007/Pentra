@@ -6,16 +6,29 @@ import { Eye, EyeOff, Loader2, ArrowRight } from "lucide-react"
 interface LoginFormProps {
   onSubmit: (email: string, password: string) => Promise<void>
   isLoading?: boolean
+  submitLabel?: string
+  disabled?: boolean
+  helperText?: string | null
 }
 
-export function LoginForm({ onSubmit, isLoading = false }: LoginFormProps) {
+export function LoginForm({
+  onSubmit,
+  isLoading = false,
+  submitLabel = "Sign in",
+  disabled = false,
+  helperText = null,
+}: LoginFormProps) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [focused, setFocused] = useState<string | null>(null)
+  const isFormDisabled = isLoading || disabled
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isFormDisabled) {
+      return
+    }
     await onSubmit(email, password)
   }
 
@@ -41,7 +54,7 @@ export function LoginForm({ onSubmit, isLoading = false }: LoginFormProps) {
             onBlur={() => setFocused(null)}
             placeholder="you@company.com"
             required
-            disabled={isLoading}
+            disabled={isFormDisabled}
             className="h-12 w-full bg-background/50 border border-border/50 rounded-lg px-4 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:bg-background/80 focus:ring-2 focus:ring-primary/10 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
@@ -76,13 +89,13 @@ export function LoginForm({ onSubmit, isLoading = false }: LoginFormProps) {
             onBlur={() => setFocused(null)}
             placeholder="Enter your password"
             required
-            disabled={isLoading}
+            disabled={isFormDisabled}
             className="h-12 w-full bg-background/50 border border-border/50 rounded-lg px-4 pr-12 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:bg-background/80 focus:ring-2 focus:ring-primary/10 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            disabled={isLoading}
+            disabled={isFormDisabled}
             className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors duration-200 disabled:opacity-50"
             aria-label={showPassword ? "Hide password" : "Show password"}
           >
@@ -95,7 +108,7 @@ export function LoginForm({ onSubmit, isLoading = false }: LoginFormProps) {
       {/* Submit Button */}
       <button
         type="submit"
-        disabled={isLoading}
+        disabled={isFormDisabled}
         className="group relative h-12 w-full mt-2 bg-primary text-primary-foreground font-medium text-sm rounded-lg overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-primary/25 disabled:opacity-80 disabled:cursor-not-allowed"
       >
         {/* Shimmer effect on hover */}
@@ -109,12 +122,14 @@ export function LoginForm({ onSubmit, isLoading = false }: LoginFormProps) {
             </>
           ) : (
             <>
-              <span>Sign in</span>
+              <span>{submitLabel}</span>
               <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform duration-200" />
             </>
           )}
         </span>
       </button>
+
+      {helperText ? <p className="text-xs leading-relaxed text-muted-foreground">{helperText}</p> : null}
     </form>
   )
 }

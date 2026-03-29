@@ -25,6 +25,26 @@ class FindingSourceType(str, Enum):
     ai_analysis = "ai_analysis"        # AI-generated / re-scored finding
 
 
+class FindingTruthState(str, Enum):
+    observed = "observed"
+    suspected = "suspected"
+    reproduced = "reproduced"
+    verified = "verified"
+    rejected = "rejected"
+    expired = "expired"
+
+
+class FindingTruthSummary(BaseModel):
+    state: FindingTruthState = FindingTruthState.observed
+    promoted: bool = False
+    provenance_complete: bool = False
+    replayable: bool = False
+    evidence_reference_count: int = 0
+    raw_evidence_present: bool = False
+    scan_job_bound: bool = False
+    notes: list[str] = Field(default_factory=list)
+
+
 class FindingResponse(BaseModel):
     id: UUID
     scan_id: UUID
@@ -48,6 +68,8 @@ class FindingResponse(BaseModel):
     verification_state: str | None = None
     verification_confidence: int | None = Field(default=None, ge=0, le=100)
     verified_at: datetime | None = None
+    truth_state: FindingTruthState = FindingTruthState.observed
+    truth_summary: FindingTruthSummary = Field(default_factory=FindingTruthSummary)
     is_false_positive: bool
     fp_probability: int | None = Field(default=None, ge=0, le=100)
     created_at: datetime

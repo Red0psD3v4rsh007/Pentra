@@ -9,14 +9,20 @@ from __future__ import annotations
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pentra_common.schemas import AssetCreate, AssetResponse, AssetUpdate, PaginatedResponse
+from pentra_common.schemas import (
+    AssetCreate,
+    AssetResponse,
+    AssetUpdate,
+    HistoricalFindingResponse,
+    PaginatedResponse,
+)
 
 from app.deps import CurrentUser, get_current_user, get_db_session, require_roles
 from app.observability.audit import log_audit_event
-from app.services import asset_service, project_service
+from app.services import asset_service, historical_finding_service, project_service
 
 logger = logging.getLogger(__name__)
 
@@ -175,9 +181,48 @@ async def update_asset(
     return _to_response(asset)
 
 
+@router.get(
+    "/assets/{asset_id}/historical-findings",
+    response_model=PaginatedResponse[HistoricalFindingResponse],
+    summary="List cross-scan historical findings for an asset",
+)
+async def list_historical_findings(
+    asset_id: uuid.UUID,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status_filter: str = Query(default="all", pattern="^(all|active|resolved)$"),
+    occurrence_limit: int = Query(default=3, ge=1, le=10),
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> PaginatedResponse[HistoricalFindingResponse]:
+    payload = await historical_finding_service.list_historical_findings(
+        asset_id=asset_id,
+        tenant_id=user.tenant_id,
+        session=session,
+        page=page,
+        page_size=page_size,
+        status=status_filter,
+        occurrence_limit=occurrence_limit,
+    )
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Asset not found",
+        )
+    items, total = payload
+    return PaginatedResponse(
+        items=[HistoricalFindingResponse.model_validate(item) for item in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
 @router.delete(
     "/assets/{asset_id}",
+    response_model=None,
     status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
     summary="Delete an asset",
 )
 async def delete_asset(

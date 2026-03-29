@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import sys
+import uuid
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 
@@ -106,6 +108,87 @@ def test_verification_state_prefers_explicit_classification():
     assert _verification_state_for_finding(finding) == "verified"
 
 
+def test_finding_truth_summary_promotes_only_verified_replayable_proof():
+    from app.models.finding import Finding
+
+    finding = Finding(
+        scan_job_id="33333333-3333-3333-3333-333333333333",
+        source_type="exploit_verify",
+        tool_source="sqlmap_verify",
+        evidence={
+            "target": "example.com",
+            "endpoint": "https://example.com/api/v1/login",
+            "storage_ref": "artifacts/tenant/scan/node/sqlmap_verify.json",
+            "request": "POST /api/v1/login",
+            "response": "500 stack trace",
+            "references": [
+                {
+                    "id": "proof:response",
+                    "evidence_type": "response",
+                    "storage_ref": "artifacts/tenant/scan/node/sqlmap_verify.json#response",
+                }
+            ],
+            "classification": {
+                "verification_state": "verified",
+            },
+            "metadata": {
+                "verification_context": {
+                    "request_url": "https://example.com/api/v1/login",
+                    "http_method": "POST",
+                }
+            },
+        },
+    )
+
+    assert finding.truth_state == "verified"
+    assert finding.truth_summary["promoted"] is True
+    assert finding.truth_summary["provenance_complete"] is True
+    assert finding.truth_summary["replayable"] is True
+
+
+def test_finding_truth_state_reproduced_when_replayability_is_missing():
+    from app.models.finding import Finding
+
+    finding = Finding(
+        scan_job_id="33333333-3333-3333-3333-333333333333",
+        source_type="exploit_verify",
+        tool_source="custom_poc",
+        evidence={
+            "target": "example.com",
+            "endpoint": "https://example.com/admin",
+            "request": "GET /admin",
+            "classification": {
+                "verification_state": "verified",
+            },
+        },
+    )
+
+    assert finding.truth_state == "reproduced"
+    assert finding.truth_summary["promoted"] is False
+    assert finding.truth_summary["replayable"] is False
+
+
+def test_finding_truth_state_rejects_false_positive_records():
+    from app.models.finding import Finding
+
+    finding = Finding(
+        source_type="scanner",
+        tool_source="nuclei",
+        is_false_positive=True,
+        evidence={
+            "target": "example.com",
+            "request": "GET /",
+            "classification": {
+                "verification_state": "verified",
+            },
+        },
+    )
+
+    assert finding.truth_state == "rejected"
+    assert finding.truth_summary["promoted"] is False
+    assert any("false positive" in note.lower() for note in finding.truth_summary["notes"])
+
+
 def test_build_executive_summary_includes_verified_and_suspected_counts():
     from app.services.scan_service import _build_executive_summary
 
@@ -144,9 +227,123 @@ def test_finding_model_exposes_normalized_vulnerability_type():
             "confidence": 85,
             "tool_source": "custom_poc",
             "vulnerability_type": finding.vulnerability_type,
+            "truth_state": "suspected",
+            "truth_summary": {
+                "state": "suspected",
+                "promoted": False,
+                "provenance_complete": False,
+                "replayable": False,
+                "evidence_reference_count": 0,
+                "raw_evidence_present": False,
+                "scan_job_bound": False,
+                "notes": [],
+            },
             "is_false_positive": False,
             "created_at": "2026-03-15T12:00:00+00:00",
         }
     )
 
     assert payload.vulnerability_type == "auth_bypass"
+
+
+def test_build_user_facing_findings_merges_verified_proof_into_original_context():
+    from app.services.scan_service import _build_user_facing_findings, _finding_target
+    from app.models.finding import Finding
+
+    scan_id = uuid.uuid4()
+    detected = Finding(
+        id=uuid.uuid4(),
+        scan_id=scan_id,
+        source_type="scanner",
+        title="Error: Unexpected path: /api",
+        severity="high",
+        confidence=84,
+        tool_source="web_interact",
+        fingerprint="fp-detected",
+        created_at=datetime(2026, 3, 24, 7, 55, tzinfo=timezone.utc),
+        evidence={
+            "endpoint": "http://127.0.0.1:3001/api",
+            "request": "GET /api",
+            "response": "HTTP/1.1 500",
+            "classification": {
+                "route_group": "/api",
+                "vulnerability_type": "stack_trace_exposure",
+                "verification_state": "detected",
+            },
+            "metadata": {
+                "replayable": True,
+                "verification_context": {
+                    "endpoint": "http://127.0.0.1:3001/api",
+                    "route_group": "/api",
+                }
+            },
+        },
+    )
+    verified = Finding(
+        id=uuid.uuid4(),
+        scan_id=scan_id,
+        source_type="exploit_verify",
+        title="Verified stack trace exposure",
+        severity="high",
+        confidence=94,
+        tool_source="custom_poc",
+        fingerprint="fp-verified",
+        created_at=datetime(2026, 3, 24, 7, 56, tzinfo=timezone.utc),
+        evidence={
+            "classification": {
+                "route_group": "/api",
+                "vulnerability_type": "stack_trace_exposure",
+                "verification_state": "verified",
+            },
+            "metadata": {
+                "verified_at": "2026-03-24T07:56:06+00:00",
+            },
+        },
+    )
+
+    findings = _build_user_facing_findings([detected, verified], include_rejected=True)
+
+    assert len(findings) == 1
+    merged = findings[0]
+    assert merged.title == "Verified stack trace exposure"
+    assert merged.tool_source == "custom_poc"
+    assert merged.verification_state == "verified"
+    assert merged.truth_state == "verified"
+    assert _finding_target(merged) == "http://127.0.0.1:3001/api"
+    assert merged.evidence["metadata"]["duplicate_count"] == 2
+
+
+def test_build_user_facing_findings_excludes_rejected_false_data_by_default():
+    from app.services.scan_service import _build_user_facing_findings
+    from app.models.finding import Finding
+
+    finding = Finding(
+        id=uuid.uuid4(),
+        scan_id=uuid.uuid4(),
+        source_type="scanner",
+        title="Sensitive API data exposure",
+        severity="critical",
+        confidence=90,
+        tool_source="web_interact",
+        fingerprint="fp-rejected",
+        created_at=datetime(2026, 3, 24, 7, 56, tzinfo=timezone.utc),
+        evidence={
+            "endpoint": "http://127.0.0.1:3001/api/Users",
+            "classification": {
+                "route_group": "/api/users",
+                "vulnerability_type": "sensitive_data_exposure",
+                "verification_state": "detected",
+                "truth_state": "rejected",
+            },
+            "metadata": {
+                "last_verification_outcome": "failed",
+            },
+        },
+    )
+
+    visible = _build_user_facing_findings([finding])
+    assert visible == []
+
+    suppressed = _build_user_facing_findings([finding], include_rejected=True)
+    assert len(suppressed) == 1
+    assert suppressed[0].truth_state == "rejected"

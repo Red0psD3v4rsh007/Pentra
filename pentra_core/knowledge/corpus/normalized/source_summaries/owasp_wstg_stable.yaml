@@ -1,0 +1,73 @@
+key: owasp_wstg_stable
+title: OWASP WSTG stable normalized source summary
+source_key: owasp_wstg_stable
+document_type: source_summary
+generated_at: "2026-03-24T12:00:00+05:30"
+summary: >
+  OWASP WSTG stable gives Pentra the official web-testing section scaffold for
+  information gathering, auth, session management, input validation, business
+  logic, and client-side testing.
+facts:
+  - fact_key: owasp_wstg_stable_section_index
+    title: WSTG stable web testing sections
+    fact_type: testing_section_index
+    summary: >
+      These are the major testing section groups Pentra should translate into
+      methodology units, planner actions, and verification preconditions.
+    tags:
+      - testing_methodology
+      - section_index
+    data:
+      sections:
+        - Information Gathering
+        - Configuration and Deployment Management Testing
+        - Identity Management Testing
+        - Authentication Testing
+        - Authorization Testing
+        - Session Management Testing
+        - Input Validation Testing
+        - Error Handling
+        - Weak Cryptography
+        - Business Logic Testing
+        - Client-side Testing
+    citations:
+      - fact_key: owasp_wstg_stable_section_index
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - attack_preconditions
+          - verification_guidance
+  - fact_key: owasp_wstg_stable_phase1_priority_map
+    title: WSTG sections with immediate Pentra relevance
+    fact_type: methodology_priority_map
+    summary: >
+      For Juice Shop and similar benchmark targets, Pentra should prioritize
+      client-side testing, business-logic testing, input validation, auth, and
+      authorization sections early.
+    tags:
+      - phase1_priority
+      - juice_shop_relevance
+    data:
+      highest_priority_sections:
+        - Client-side Testing
+        - Business Logic Testing
+        - Input Validation Testing
+        - Authentication Testing
+        - Authorization Testing
+        - Session Management Testing
+    citations:
+      - fact_key: owasp_wstg_stable_phase1_priority_map
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - verification_guidance

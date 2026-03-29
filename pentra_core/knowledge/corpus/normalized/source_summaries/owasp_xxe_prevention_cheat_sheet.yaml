@@ -1,0 +1,41 @@
+key: owasp_xxe_prevention_cheat_sheet
+title: OWASP XML External Entity Prevention Cheat Sheet normalized source summary
+source_key: owasp_xxe_prevention_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's XXE guidance gives Pentra the parser configuration constraints that
+  matter for XML-heavy targets: DTD and external-entity behavior must be
+  treated as explicit parser properties, not assumptions.
+facts:
+  - fact_key: owasp_xxe_parser_hardening_controls
+    title: XXE parser-hardening controls
+    fact_type: xml_parser_summary
+    summary: >
+      XML parsers should disable dangerous DTD and entity-resolution features
+      and isolate XML handling from untrusted network and filesystem access.
+    tags:
+      - xxe
+      - xml
+      - parser
+    data:
+      high_signal_xxe_controls:
+        - disable_external_entities
+        - disable_dtd_processing
+        - harden_xml_parsers_by_library
+        - isolate_parser_runtime
+      replay_implications:
+        - Preserve parser type and document format in route assessments.
+        - Require parser-specific evidence before promotion.
+    citations:
+      - fact_key: owasp_xxe_parser_hardening_controls
+        title: OWASP XML External Entity Prevention Cheat Sheet
+        source_key: owasp_xxe_prevention_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - xxe_guidance
+          - parser_hardening_patterns
+          - xml_payload_constraints

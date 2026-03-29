@@ -55,6 +55,38 @@ def test_retry_manager_should_retry():
     assert mgr.should_retry(retry_count=1, max_retries=2, error_code="CONNECTION_ERROR") is True
 
 
+def test_retry_manager_does_not_retry_dalfox_timeouts():
+    """Dalfox timeouts are high-cost and should fail fast instead of recycling."""
+    from app.engine.retry_manager import RetryManager
+
+    mgr = RetryManager()
+    assert (
+        mgr.should_retry(
+            retry_count=0,
+            max_retries=2,
+            error_code="TIMEOUT",
+            tool_name="dalfox",
+        )
+        is False
+    )
+
+
+def test_retry_manager_does_not_retry_cors_scanner_exit_1():
+    """Template/config failures in the CORS scanner should fail fast."""
+    from app.engine.retry_manager import RetryManager
+
+    mgr = RetryManager()
+    assert (
+        mgr.should_retry(
+            retry_count=0,
+            max_retries=2,
+            error_code="EXIT_1",
+            tool_name="cors_scanner",
+        )
+        is False
+    )
+
+
 def test_retry_manager_backoff():
     """Exponential backoff calculation."""
     from app.engine.retry_manager import RetryManager
@@ -138,6 +170,9 @@ def test_external_web_api_full_profile_toolchain():
     assert "ffuf" in tool_names
     assert "nuclei" in tool_names
     assert "sqlmap" in tool_names
+    assert "dalfox" in tool_names
+    assert "graphql_cop" in tool_names
+    assert "cors_scanner" in tool_names
     assert "ai_triage" in tool_names
     assert "report_gen" in tool_names
     assert tool_names.index("httpx_probe") < tool_names.index("nuclei")
@@ -148,6 +183,80 @@ def test_external_web_api_full_profile_toolchain():
     assert "amass" not in tool_names
     assert "nmap_discovery" not in tool_names
     assert "nmap_svc" not in tool_names
+    assert "jwt_tool" not in tool_names
+    assert "header_audit_tool" not in tool_names
+
+
+def test_safe_live_tools_include_sast_pipeline_tools():
+    from pentra_common.profiles import _SAFE_LIVE_TOOLS
+
+    for tool_name in [
+        "git_clone",
+        "semgrep",
+        "trufflehog",
+        "dependency_audit",
+        "api_spec_parser",
+    ]:
+        assert tool_name in _SAFE_LIVE_TOOLS
+
+
+def test_enforce_safe_scan_config_accepts_sast_allowed_live_tools():
+    from pentra_common.profiles import enforce_safe_scan_config
+
+    config = {
+        "scope": {
+            "target": "http://127.0.0.1:8088",
+            "allowed_hosts": ["127.0.0.1"],
+            "allowed_domains": [],
+            "allowed_cidrs": [],
+            "max_subdomains": 5,
+            "max_endpoints": 10,
+            "max_depth": 1,
+        },
+        "execution": {
+            "mode": "controlled_live_local",
+            "target_policy": "local_only",
+            "allowed_live_tools": [
+                "scope_check",
+                "git_clone",
+                "semgrep",
+                "trufflehog",
+                "dependency_audit",
+                "api_spec_parser",
+            ],
+        },
+        "rate_limits": {
+            "http_requests_per_minute": 30,
+            "ffuf_requests_per_minute": 10,
+            "nuclei_requests_per_minute": 10,
+            "sqlmap_threads": 1,
+            "zap_minutes": 1,
+        },
+        "verification_policy": {
+            "max_dynamic_nodes_per_scan": 1,
+            "max_verifications_per_type": 1,
+        },
+        "stateful_testing": {
+            "max_pages": 1,
+            "max_replays": 1,
+        },
+    }
+
+    normalized = enforce_safe_scan_config(
+        scan_type="full",
+        asset_type="web_app",
+        asset_target="http://127.0.0.1:8088",
+        config=config,
+    )
+
+    assert normalized["execution"]["allowed_live_tools"] == [
+        "scope_check",
+        "git_clone",
+        "semgrep",
+        "trufflehog",
+        "dependency_audit",
+        "api_spec_parser",
+    ]
 
 
 def test_orchestrator_retries_scan_lock_for_job_events():
@@ -245,6 +354,7 @@ def test_job_dispatcher_sql_has_required_columns():
 
     # These columns are NOT NULL without server_default in the scan_jobs schema
     assert "priority" in source, "INSERT must include 'priority' column"
+    assert "retry_count" in source, "INSERT must preserve 'retry_count' across retries"
     assert "max_retries" in source, "INSERT must include 'max_retries' column"
     assert "timeout_seconds" in source, "INSERT must include 'timeout_seconds' column"
 
@@ -282,6 +392,50 @@ def test_job_dispatcher_merges_scan_and_node_config():
     assert merged["verification_context"]["request_url"].endswith("/api/v1/auth/login")
 
 
+def test_dag_builder_applies_selected_check_tool_exclusions():
+    from app.engine.dag_builder import ToolSpec, _apply_tool_exclusions
+
+    tools = [
+        ToolSpec("httpx_probe", "web", phase=1),
+        ToolSpec("dalfox", "web", phase=3),
+        ToolSpec("cors_scanner", "web", phase=3),
+    ]
+
+    filtered = _apply_tool_exclusions(
+        tools,
+        {"selected_checks": {"exclude_tools": ["dalfox", "cors_scanner"]}},
+    )
+
+    assert [tool.name for tool in filtered] == ["httpx_probe"]
+
+
+def test_external_web_profile_honors_selected_check_tool_exclusions():
+    from pentra_common.profiles import prepare_scan_config
+    from app.engine.dag_builder import _select_tools
+
+    config = prepare_scan_config(
+        scan_type="full",
+        asset_type="web_app",
+        asset_target="http://127.0.0.1:3001",
+        config={
+            "profile_id": "external_web_api_v1",
+            "selected_checks": {
+                "exclude_tools": ["dalfox", "cors_scanner"],
+                "http_probe_paths": ["/", "/rest/products/search?q=test"],
+                "content_paths": ["rest/products/search?q=test"],
+            },
+        },
+    )
+
+    tools = _select_tools("full", "web_app", config)
+    tool_names = [tool.name for tool in tools]
+
+    assert "dalfox" not in tool_names
+    assert "cors_scanner" not in tool_names
+    assert "nuclei" in tool_names
+    assert "sqlmap" in tool_names
+
+
 def test_dag_builder_node_config_includes_toolspec():
     """Verify DAGBuilder serializes ToolSpec data into node config."""
     import inspect
@@ -291,6 +445,15 @@ def test_dag_builder_node_config_includes_toolspec():
     assert "max_retries" in source
     assert "timeout_seconds" in source
     assert "json.dumps" in source
+
+
+def test_dag_builder_edge_inserts_are_idempotent():
+    """Dependency edges should tolerate duplicate logical keys without crashing the DAG build."""
+    import inspect
+    from app.engine.dag_builder import DAGBuilder
+
+    source = inspect.getsource(DAGBuilder.build_dag)
+    assert "ON CONFLICT (source_node_id, target_node_id, data_key) DO NOTHING" in source
 
 
 # ── Test 6: Dependency edge wiring ───────────────────────────────────

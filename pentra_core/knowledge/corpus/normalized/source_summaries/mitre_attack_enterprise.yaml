@@ -1,0 +1,77 @@
+key: mitre_attack_enterprise
+title: MITRE ATT&CK Enterprise normalized source summary
+source_key: mitre_attack_enterprise
+document_type: source_summary
+generated_at: "2026-03-24T12:00:00+05:30"
+summary: >
+  MITRE ATT&CK provides the high-level tactic and technique taxonomy Pentra can
+  reuse for planner framing and capability-family organization, especially for
+  reconnaissance and discovery scaffolding.
+facts:
+  - fact_key: mitre_attack_enterprise_tactic_index
+    title: MITRE ATT&CK enterprise tactic scaffold
+    fact_type: tactic_index
+    summary: >
+      The enterprise matrix exposes a top-level tactic flow that Pentra can map
+      to planning pressure and evidence-gap handling.
+    tags:
+      - attack_taxonomy
+      - tactic_index
+    data:
+      tactics:
+        - Reconnaissance
+        - Resource Development
+        - Initial Access
+        - Execution
+        - Persistence
+        - Privilege Escalation
+        - Defense Evasion
+        - Credential Access
+        - Discovery
+        - Lateral Movement
+        - Collection
+        - Command and Control
+        - Exfiltration
+        - Impact
+    citations:
+      - fact_key: mitre_attack_enterprise_tactic_index
+        title: MITRE ATT&CK Enterprise Matrix
+        source_key: mitre_attack_enterprise
+        source_url: https://attack.mitre.org/matrices/enterprise/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - attack_taxonomy
+          - planner_action_taxonomy
+  - fact_key: mitre_attack_enterprise_web_relevant_seeds
+    title: Web-relevant MITRE technique seeds
+    fact_type: technique_seed_list
+    summary: >
+      MITRE ATT&CK includes web-relevant recon and access techniques that help
+      frame Pentra planning without serving as direct exploit proof.
+    tags:
+      - capability_family_taxonomy
+      - web_relevance
+    data:
+      techniques:
+        - Active Scanning
+        - Scanning IP Blocks
+        - Vulnerability Scanning
+        - Wordlist Scanning
+        - Exploit Public-Facing Application
+        - Valid Accounts
+      planner_note: >
+        Use these as planner and capability-family seeds, not as product-level
+        proof categories for findings.
+    citations:
+      - fact_key: mitre_attack_enterprise_web_relevant_seeds
+        title: MITRE ATT&CK Enterprise Matrix
+        source_key: mitre_attack_enterprise
+        source_url: https://attack.mitre.org/matrices/enterprise/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - attack_taxonomy
+          - capability_family_taxonomy

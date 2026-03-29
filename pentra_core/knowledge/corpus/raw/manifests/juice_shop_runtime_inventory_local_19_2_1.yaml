@@ -1,0 +1,41 @@
+key: juice_shop_runtime_inventory_local_19_2_1_phase1
+phase: 1
+source_key: juice_shop_runtime_inventory_local_19_2_1
+title: Local Juice Shop runtime inventory acquisition manifest
+acquisition_scope: >
+  Normalize the live local Juice Shop runtime challenge inventory into
+  benchmark-truth facts, category counts, and difficulty counts for the pinned
+  benchmark target.
+parser_key: runtime_inventory_summary
+normalization_units:
+  - benchmark_truth_summary
+  - challenge_category_summary
+  - difficulty_distribution_summary
+target_outputs:
+  - normalized/source_summaries/juice_shop_runtime_inventory_local_19_2_1.yaml
+focus_areas:
+  - benchmark_truth
+  - challenge_inventory
+  - target_version_truth
+  - category_distribution
+  - difficulty_distribution
+benchmark_target_keys:
+  - juice_shop_local
+usage_notes: >
+  This runtime source overrides stale historical challenge counts for the
+  local benchmark lane.
+citations:
+  - fact_key: juice_shop_runtime_inventory_local_source
+    title: Local Juice Shop Runtime Inventory
+    source_key: juice_shop_runtime_inventory_local_19_2_1
+    source_url: http://127.0.0.1:3001/api/Challenges
+    trust_tier: runtime_truth
+    retrieved_at: "2026-03-24T12:00:00+05:30"
+    extraction_mode: runtime_api
+    authority_for:
+      - benchmark_truth
+      - challenge_inventory
+      - target_version_truth
+    target_key: juice_shop_local
+    target_version: "19.2.1"
+    artifact_path: .local/pentra/phase9/juice_shop_challenge_inventory_latest.json

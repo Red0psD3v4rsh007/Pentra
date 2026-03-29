@@ -1,0 +1,42 @@
+key: owasp_input_validation_cheat_sheet
+title: OWASP Input Validation Cheat Sheet normalized source summary
+source_key: owasp_input_validation_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's input-validation guidance gives Pentra the cross-pack boundary rules
+  for allowlist validation, canonicalization, and structured input handling.
+facts:
+  - fact_key: owasp_input_validation_primary_strategies
+    title: Input-validation primary strategies
+    fact_type: validation_strategy_summary
+    summary: >
+      Validation should prefer allowlists, type-aware parsing, and early
+      canonicalization so route and parser assessments can distinguish malformed
+      input handling from true control-flow weakness.
+    tags:
+      - validation
+      - allowlists
+      - parsers
+    data:
+      high_signal_validation_controls:
+        - allowlist_validation
+        - canonicalization_before_validation
+        - type_and_length_constraints
+        - structured_parser_validation
+        - file_and_upload_boundary_checks
+      replay_implications:
+        - Preserve normalized parameter shape, not just raw strings, in replay context.
+        - Treat parser-boundary evidence separately from access-control evidence.
+    citations:
+      - fact_key: owasp_input_validation_primary_strategies
+        title: OWASP Input Validation Cheat Sheet
+        source_key: owasp_input_validation_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - input_validation_guidance
+          - allowlist_strategy_guidance
+          - upload_validation_guidance

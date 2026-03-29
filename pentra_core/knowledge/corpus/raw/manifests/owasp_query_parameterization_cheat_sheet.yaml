@@ -1,0 +1,33 @@
+key: owasp_query_parameterization_cheat_sheet_phase1
+phase: 1
+source_key: owasp_query_parameterization_cheat_sheet
+title: OWASP Query Parameterization Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official bind-variable and prepared-statement guidance that can help
+  Pentra reason about query-shape safety boundaries across SQL-backed targets.
+parser_key: manual_structured_summary
+normalization_units:
+  - query_parameterization_patterns
+  - bind_variable_constraints
+target_outputs:
+  - normalized/source_summaries/owasp_query_parameterization_cheat_sheet.yaml
+focus_areas:
+  - prepared_statements
+  - bind_variables
+  - query_shape_stability
+  - language_agnostic_parameterization
+usage_notes: >
+  Normalize language-neutral parameterization rules and the resulting replay
+  implications for dynamic queries and operator-bearing inputs.
+citations:
+  - fact_key: owasp_query_parameterization_cheat_sheet_source
+    title: OWASP Query Parameterization Cheat Sheet
+    source_key: owasp_query_parameterization_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-26T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - query_parameterization_guidance
+      - bind_variable_guidance
+      - replayable_query_shape_constraints

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #131313; color: #e5e2e1; }
+        .font-headline { font-family: 'Space Grotesk', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .glass-panel { backdrop-filter: blur(20px); background: rgba(28, 27, 27, 0.7); }
+        .shimmer-border { position: relative; }
+        .shimmer-border::after {
+            content: ""; position: absolute; inset: 0; padding: 1px;
+            background: linear-gradient(135deg, rgba(255,82,92,0.4) 0%, rgba(255,179,178,0.1) 50%, rgba(255,82,92,0.4) 100%);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none;
+        }
+        .cyber-pulse { animation: pulse-red 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse-red { 0%, 100% { opacity: 1; filter: drop-shadow(0 0 2px #ff525c); } 50% { opacity: .7; filter: drop-shadow(0 0 8px #ff525c); } }
+        .geometric-shard { clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); background: linear-gradient(180deg, rgba(255,82,92,0.05) 0%, transparent 100%); }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "inverse-primary": "#bf002a",
+              "tertiary": "#ffb2bd",
+              "secondary-fixed-dim": "#c8c6c5",
+              "on-surface": "#e5e2e1",
+              "outline-variant": "#5f3e3e",
+              "on-secondary-container": "#b7b5b4",
+              "primary-fixed-dim": "#ffb3b2",
+              "outline": "#af8786",
+              "on-tertiary-fixed-variant": "#900036",
+              "surface": "#131313",
+              "secondary": "#c8c6c5",
+              "on-tertiary": "#670024",
+              "surface-variant": "#353534",
+              "error": "#ffb4ab",
+              "inverse-surface": "#e5e2e1",
+              "background": "#131313",
+              "primary-container": "#ff525c",
+              "on-tertiary-fixed": "#400013",
+              "on-error": "#690005",
+              "tertiary-container": "#ff4e7a",
+              "surface-container-high": "#2a2a2a",
+              "secondary-fixed": "#e5e2e1",
+              "on-secondary": "#313030",
+              "on-primary-fixed-variant": "#92001e",
+              "error-container": "#93000a",
+              "on-background": "#e5e2e1",
+              "primary": "#ffb3b2",
+              "inverse-on-surface": "#313030",
+              "surface-tint": "#ffb3b2",
+              "primary-fixed": "#ffdad8",
+              "on-secondary-fixed-variant": "#474746",
+              "on-error-container": "#ffdad6",
+              "surface-container-lowest": "#0e0e0e",
+              "secondary-container": "#474746",
+              "on-primary-container": "#5b000f",
+              "tertiary-fixed": "#ffd9dd",
+              "tertiary-fixed-dim": "#ffb2bd",
+              "on-tertiary-container": "#5a001e",
+              "surface-container-highest": "#353534",
+              "surface-bright": "#3a3939",
+              "surface-dim": "#131313",
+              "surface-container-low": "#1c1b1b",
+              "on-secondary-fixed": "#1c1b1b",
+              "on-primary": "#680012",
+              "surface-container": "#201f1f",
+              "on-surface-variant": "#e9bcba",
+              "on-primary-fixed": "#410008"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Space Grotesk"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+</head>
+<body class="bg-background text-on-surface selection:bg-primary-container selection:text-on-primary-container">
+<!-- Ambient Geometric Shards -->
+<div class="fixed inset-0 pointer-events-none overflow-hidden z-0">
+<div class="geometric-shard absolute top-[-10%] left-[-5%] w-[40rem] h-[40rem] rotate-12 opacity-20"></div>
+<div class="geometric-shard absolute bottom-[-20%] right-[-10%] w-[50rem] h-[50rem] -rotate-45 opacity-10"></div>
+</div>
+<!-- SideNavBar (Shared Component Anchor) -->
+<aside class="h-screen w-64 fixed left-0 top-0 flex flex-col bg-[#131313] dark:bg-[#131313] bg-[#1C1B1B] shadow-[inset_-1px_0_0_0_rgba(255,179,178,0.05)] shadow-2xl shadow-black z-50">
+<div class="flex flex-col h-full py-8 px-4">
+<div class="mb-10 px-4">
+<span class="text-2xl font-bold text-[#FFB3B2] tracking-tighter block">PENTRA</span>
+<span class="font-['Space_Grotesk'] uppercase tracking-widest text-xs text-[#E9BCBA]/40">OPERATOR-01</span>
+</div>
+<nav class="flex-1 space-y-2">
+<a class="flex items-center px-4 py-3 bg-[#2A2A2A] text-[#FFB3B2] border-l-4 border-[#FF525C] font-['Space_Grotesk'] uppercase tracking-widest text-xs transition-all duration-300" href="#">
+<span class="material-symbols-outlined mr-3">radar</span>
+                    Scans
+                </a>
+<a class="flex items-center px-4 py-3 text-[#E9BCBA]/60 hover:text-[#FFB3B2] hover:bg-[#1C1B1B] font-['Space_Grotesk'] uppercase tracking-widest text-xs transition-all duration-300" href="#">
+<span class="material-symbols-outlined mr-3">inventory_2</span>
+                    Assets
+                </a>
+<a class="flex items-center px-4 py-3 text-[#E9BCBA]/60 hover:text-[#FFB3B2] hover:bg-[#1C1B1B] font-['Space_Grotesk'] uppercase tracking-widest text-xs transition-all duration-300" href="#">
+<span class="material-symbols-outlined mr-3">description</span>
+                    Reports
+                </a>
+<a class="flex items-center px-4 py-3 text-[#E9BCBA]/60 hover:text-[#FFB3B2] hover:bg-[#1C1B1B] font-['Space_Grotesk'] uppercase tracking-widest text-xs transition-all duration-300" href="#">
+<span class="material-symbols-outlined mr-3">settings</span>
+                    Settings
+                </a>
+</nav>
+<button class="mt-auto mx-4 py-4 bg-primary-container text-on-primary-container font-headline font-bold text-xs tracking-widest uppercase hover:brightness-110 active:scale-95 transition-all">
+                INITIATE SCAN
+            </button>
+</div>
+</aside>
+<!-- TopNavBar (Shared Component Anchor) -->
+<header class="fixed top-0 right-0 left-64 h-16 z-40 bg-[#131313]/80 backdrop-blur-xl dark:bg-[#131313]/80 bg-[#1C1B1B]/50 shadow-lg shadow-black/40 flex items-center justify-between px-8 w-full border-b border-primary-container/10">
+<div class="flex items-center gap-4">
+<span class="hidden md:block text-xl font-black text-[#FFB3B2] font-headline">PENTRA</span>
+<div class="h-4 w-px bg-outline-variant/30"></div>
+<span class="text-xs font-mono text-primary uppercase tracking-[0.3em]">BREACH_WIZARD_v4.2</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative">
+<input class="bg-surface-container-lowest border-none text-[10px] font-mono tracking-widest w-64 focus:ring-1 focus:ring-primary-container/30 h-8" placeholder="QUERY_SYSTEM..." type="text"/>
+<span class="material-symbols-outlined absolute right-2 top-1.5 text-xs text-on-surface-variant/50">search</span>
+</div>
+<div class="flex items-center gap-4 text-on-surface-variant/70">
+<span class="material-symbols-outlined cursor-pointer hover:text-primary transition-colors">sensors</span>
+<span class="material-symbols-outlined cursor-pointer hover:text-primary transition-colors">notifications</span>
+<span class="material-symbols-outlined cursor-pointer hover:text-primary transition-colors">terminal</span>
+</div>
+<div class="w-8 h-8 bg-surface-container-high rounded-full border border-primary-container/20 overflow-hidden">
+<img alt="Operator" data-alt="User avatar for pentra operator" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCxe0nCUeTtRIvrMIkgiUDgUg2_jFhpY7wVzoHvLY37vJgEz1D9aMEtJPTljAgXsdRvKxCLvvGctj4h1V3LUyYrZ9afBYQgke1I8acxa3LKm1ChbBTCO_VofJLIO_lfkjFMMSa6SIZfLFkBfXBUaamF8LM2BIrvb-zMDt_fH0lDUCPXxPXcIUBAOBwFf3xw-NjAi1ivq4c7xhSpjn8LomvHkhzrK5BULhKGEXXaUW3zJk5Dr4uDs58pAzZtr_njO4c8GJzJSu0X5Tjs"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="pl-64 pt-16 pb-8 min-h-screen relative z-10">
+<div class="max-w-6xl mx-auto px-12 py-12">
+<!-- Progress Stepper -->
+<div class="mb-16">
+<div class="flex justify-between items-center relative">
+<div class="absolute top-1/2 left-0 w-full h-px bg-outline-variant/20 -z-10"></div>
+<!-- Step 1 Active -->
+<div class="flex flex-col items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-headline font-bold cyber-pulse shadow-[0_0_15px_rgba(255,82,92,0.4)]">01</div>
+<span class="font-headline text-[10px] tracking-[0.2em] text-primary uppercase font-bold">TARGET_SCOPE</span>
+</div>
+<!-- Step 2 -->
+<div class="flex flex-col items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-surface-container-high border border-outline-variant/30 text-on-surface-variant/40 flex items-center justify-center font-headline font-bold">02</div>
+<span class="font-headline text-[10px] tracking-[0.2em] text-on-surface-variant/40 uppercase">METHODOLOGY</span>
+</div>
+<!-- Step 3 -->
+<div class="flex flex-col items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-surface-container-high border border-outline-variant/30 text-on-surface-variant/40 flex items-center justify-center font-headline font-bold">03</div>
+<span class="font-headline text-[10px] tracking-[0.2em] text-on-surface-variant/40 uppercase">EXECUTION</span>
+</div>
+<!-- Step 4 -->
+<div class="flex flex-col items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-surface-container-high border border-outline-variant/30 text-on-surface-variant/40 flex items-center justify-center font-headline font-bold">04</div>
+<span class="font-headline text-[10px] tracking-[0.2em] text-on-surface-variant/40 uppercase">REVIEW</span>
+</div>
+</div>
+</div>
+<!-- Content Area: Step 1 TARGET_SCOPE -->
+<div class="grid grid-cols-12 gap-8">
+<!-- Left Panel: Scope Selection -->
+<div class="col-span-8 space-y-6">
+<div class="flex justify-between items-end mb-4">
+<div>
+<h1 class="font-headline text-3xl font-bold tracking-tight text-primary">SELECT_TARGETS</h1>
+<p class="text-on-surface-variant/60 font-mono text-[10px] mt-1 uppercase">Define the primary intrusion surface for the breach operation.</p>
+</div>
+<button class="px-4 py-2 border border-primary/20 hover:bg-primary-container/10 transition-colors text-[10px] font-mono text-primary flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">add</span> ADD_MANUAL_ENTRY
+                        </button>
+</div>
+<!-- Data Grid with Spotlight Hover Effects -->
+<div class="space-y-1">
+<!-- Header -->
+<div class="grid grid-cols-12 px-6 py-3 bg-surface-container-low text-[10px] font-headline uppercase tracking-widest text-on-surface-variant/40 border-b border-outline-variant/10">
+<div class="col-span-1"><span class="material-symbols-outlined text-sm">check_box_outline_blank</span></div>
+<div class="col-span-4">Asset Identification</div>
+<div class="col-span-3">Type / Environment</div>
+<div class="col-span-2">Security Tier</div>
+<div class="col-span-2 text-right">Last Scan</div>
+</div>
+<!-- Rows -->
+<div class="grid grid-cols-12 px-6 py-5 bg-surface-container items-center hover:bg-surface-container-high border border-transparent hover:border-primary-container/30 transition-all cursor-pointer group">
+<div class="col-span-1"><span class="material-symbols-outlined text-primary-container">check_box</span></div>
+<div class="col-span-4">
+<span class="font-mono text-xs font-bold block">api-gateway.internal.node</span>
+<span class="text-[10px] text-on-surface-variant/40">10.0.4.152</span>
+</div>
+<div class="col-span-3">
+<span class="px-2 py-0.5 bg-surface-container-highest text-[9px] font-mono text-on-surface-variant rounded">INFRASTRUCTURE</span>
+</div>
+<div class="col-span-2 flex gap-1">
+<div class="w-1 h-3 bg-primary-container"></div>
+<div class="w-1 h-3 bg-primary-container"></div>
+<div class="w-1 h-3 bg-primary-container/20"></div>
+</div>
+<div class="col-span-2 text-right font-mono text-[10px] text-on-surface-variant/50">24_HRS_AGO</div>
+</div>
+<div class="grid grid-cols-12 px-6 py-5 bg-surface-container-low items-center hover:bg-surface-container-high border border-transparent hover:border-primary-container/30 transition-all cursor-pointer group">
+<div class="col-span-1"><span class="material-symbols-outlined text-on-surface-variant/20">check_box_outline_blank</span></div>
+<div class="col-span-4">
+<span class="font-mono text-xs font-bold block">prod-db-vault-01</span>
+<span class="text-[10px] text-on-surface-variant/40">10.0.8.22</span>
+</div>
+<div class="col-span-3">
+<span class="px-2 py-0.5 bg-surface-container-highest text-[9px] font-mono text-on-surface-variant rounded">SENSITIVE_STORAGE</span>
+</div>
+<div class="col-span-2 flex gap-1">
+<div class="w-1 h-3 bg-primary-container"></div>
+<div class="w-1 h-3 bg-primary-container"></div>
+<div class="w-1 h-3 bg-primary-container"></div>
+</div>
+<div class="col-span-2 text-right font-mono text-[10px] text-on-surface-variant/50">NEVER</div>
+</div>
+<div class="grid grid-cols-12 px-6 py-5 bg-surface-container items-center hover:bg-surface-container-high border border-transparent hover:border-primary-container/30 transition-all cursor-pointer group">
+<div class="col-span-1"><span class="material-symbols-outlined text-primary-container">check_box</span></div>
+<div class="col-span-4">
+<span class="font-mono text-xs font-bold block">frontend-main-app</span>
+<span class="text-[10px] text-on-surface-variant/40">app.pentra.io</span>
+</div>
+<div class="col-span-3">
+<span class="px-2 py-0.5 bg-surface-container-highest text-[9px] font-mono text-on-surface-variant rounded">WEB_APPLICATION</span>
+</div>
+<div class="col-span-2 flex gap-1">
+<div class="w-1 h-3 bg-primary-container"></div>
+<div class="w-1 h-3 bg-primary-container/20"></div>
+<div class="w-1 h-3 bg-primary-container/20"></div>
+</div>
+<div class="col-span-2 text-right font-mono text-[10px] text-on-surface-variant/50">12_DAYS_AGO</div>
+</div>
+</div>
+</div>
+<!-- Right Panel: Methodology Quick-Select (Visualizing Step 2 Preview) -->
+<div class="col-span-4 space-y-6">
+<div class="glass-panel p-6 border-l-2 border-primary-container/50 shimmer-border">
+<div class="flex items-center gap-2 mb-6">
+<span class="material-symbols-outlined text-primary-container animate-pulse">settings_input_antenna</span>
+<span class="font-headline font-bold text-xs tracking-widest uppercase">METHODOLOGY_PREVIEW</span>
+</div>
+<div class="space-y-4">
+<div class="p-4 bg-surface-container-lowest border border-outline-variant/10 hover:border-primary-container/40 transition-all cursor-pointer group">
+<div class="flex justify-between items-start mb-2">
+<span class="font-headline font-bold text-sm">STEALTH</span>
+<span class="material-symbols-outlined text-primary text-sm">security</span>
+</div>
+<p class="text-[10px] text-on-surface-variant/50 mb-3 leading-relaxed">Low-frequency probing, evasive packet fragmentation. Minimizes IDS triggers.</p>
+<div class="h-1 bg-surface-container-highest w-full overflow-hidden">
+<div class="h-full bg-primary-container w-1/3"></div>
+</div>
+<div class="flex justify-between mt-2 font-mono text-[8px] uppercase tracking-tighter text-on-surface-variant/30">
+<span>Detection: Low</span>
+<span>Speed: 0.4x</span>
+</div>
+</div>
+<div class="p-4 bg-surface-container-high border border-primary-container/60 relative overflow-hidden group">
+<div class="absolute inset-0 bg-primary-container/5 pointer-events-none"></div>
+<div class="flex justify-between items-start mb-2">
+<span class="font-headline font-bold text-sm text-primary">AGGRESSIVE</span>
+<span class="material-symbols-outlined text-primary text-sm cyber-pulse">bolt</span>
+</div>
+<p class="text-[10px] text-on-surface-variant/70 mb-3 leading-relaxed">High-concurrency fuzzing, brute-force vectors enabled. Maximum surface coverage.</p>
+<div class="h-1 bg-surface-container-highest w-full overflow-hidden">
+<div class="h-full bg-primary-container w-full"></div>
+</div>
+<div class="flex justify-between mt-2 font-mono text-[8px] uppercase tracking-tighter text-primary/50">
+<span>Detection: High</span>
+<span>Speed: 2.0x</span>
+</div>
+</div>
+</div>
+<div class="mt-8 pt-6 border-t border-outline-variant/10">
+<div class="flex justify-between items-center text-[10px] font-mono mb-4">
+<span class="text-on-surface-variant/40">EST_EXECUTION_TIME:</span>
+<span class="text-primary">14h 22m</span>
+</div>
+<div class="flex justify-between items-center text-[10px] font-mono mb-6">
+<span class="text-on-surface-variant/40">THREAT_COEFFICIENT:</span>
+<span class="text-primary">8.4/10</span>
+</div>
+<button class="w-full py-4 bg-primary-container text-on-primary-container font-headline font-bold text-xs tracking-[0.2em] uppercase hover:shadow-[0_0_20px_rgba(255,82,92,0.3)] transition-all flex items-center justify-center gap-3">
+                                PROCEED_TO_EXECUTION <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Terminal Style Feed -->
+<div class="bg-black/40 rounded p-4 font-mono text-[9px] text-primary/60 h-40 overflow-hidden relative">
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent pointer-events-none"></div>
+<div class="space-y-1">
+<div>[SYSTEM] INITIALIZING BREACH_WIZARD...</div>
+<div>[INFO] FETCHING ASSET LIST FROM INVENTORY_v2</div>
+<div>[WARN] DB_VAULT_01 IS UNREACHABLE VIA LAYER_4</div>
+<div class="text-on-surface-variant/40">[LOG] OPERATOR-01 AUTHENTICATED [AES-256]</div>
+<div>[INFO] SELECTING ASSET: api-gateway.internal.node</div>
+<div class="flex gap-1">
+<span class="animate-pulse">_</span>
+<span class="text-white/20">AWAITING_INPUT...</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Execution Profiles Modal / Step 3 Holographic UI (Example Overlay) -->
+<div class="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="surface-container-low border border-outline-variant/10 p-6 flex flex-col gap-4">
+<span class="text-[10px] font-mono text-primary/40 uppercase">Intensity_Tuning</span>
+<div class="relative h-2 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="absolute left-0 top-0 h-full w-3/4 bg-primary-container shadow-[0_0_10px_#ff525c]"></div>
+</div>
+<div class="flex justify-between font-mono text-[9px] text-on-surface-variant/40">
+<span>MIN_LOAD</span>
+<span>OVERCLOCK</span>
+</div>
+</div>
+<div class="surface-container-low border border-outline-variant/10 p-6 flex items-center justify-between">
+<div>
+<span class="text-[10px] font-mono text-primary/40 uppercase block mb-1">Schedule_Queue</span>
+<span class="font-headline font-bold text-sm tracking-wide">IMMEDIATE_START</span>
+</div>
+<div class="w-12 h-6 bg-primary-container rounded-full relative p-1 flex items-center cursor-pointer">
+<div class="w-4 h-4 bg-on-primary-container rounded-full ml-auto"></div>
+</div>
+</div>
+<div class="surface-container-low border border-outline-variant/10 p-6 flex items-center justify-between">
+<div>
+<span class="text-[10px] font-mono text-primary/40 uppercase block mb-1">Holographic_Relay</span>
+<span class="font-headline font-bold text-sm tracking-wide">ACTIVE_MONITORING</span>
+</div>
+<span class="material-symbols-outlined text-primary cyber-pulse">visibility</span>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer (Shared Component Anchor) -->
+<footer class="fixed bottom-0 right-0 left-64 h-8 flex items-center bg-[#0E0E0E] dark:bg-[#0E0E0E] border-t border-[#FF525C]/10 z-40 px-8 w-full">
+<div class="flex justify-between items-center w-full">
+<span class="font-['Inter'] text-[10px] tracking-widest uppercase opacity-40">© 2024 PENTRA OFFENSIVE. ENCRYPTION: AES-256 ACTIVE.</span>
+<div class="flex gap-6">
+<a class="font-['Inter'] text-[10px] tracking-widest uppercase opacity-40 hover:text-[#FF525C] transition-colors" href="#">System Logs</a>
+<a class="font-['Inter'] text-[10px] tracking-widest uppercase opacity-40 hover:text-[#FF525C] transition-colors" href="#">API Status</a>
+<a class="font-['Inter'] text-[10px] tracking-widest uppercase opacity-40 hover:text-[#FF525C] transition-colors" href="#">Privacy</a>
+</div>
+</div>
+</footer>
+</body></html>

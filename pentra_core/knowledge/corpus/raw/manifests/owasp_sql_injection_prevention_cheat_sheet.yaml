@@ -1,0 +1,34 @@
+key: owasp_sql_injection_prevention_cheat_sheet_phase1
+phase: 1
+source_key: owasp_sql_injection_prevention_cheat_sheet
+title: OWASP SQL Injection Prevention Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official SQL injection prevention and query-construction guidance that
+  can constrain Pentra's injection candidate generation and replay logic on
+  real web applications.
+parser_key: manual_structured_summary
+normalization_units:
+  - sql_injection_prevention_controls
+  - dynamic_query_allowlist_guidance
+target_outputs:
+  - normalized/source_summaries/owasp_sql_injection_prevention_cheat_sheet.yaml
+focus_areas:
+  - parameterized_queries
+  - stored_procedures
+  - dynamic_query_construction
+  - allowlist_validation
+usage_notes: >
+  Store the prevention guidance as structured constraints that shape candidate
+  generation and replay safety, not as a verbatim copy of the cheat sheet.
+citations:
+  - fact_key: owasp_sql_injection_prevention_cheat_sheet_source
+    title: OWASP SQL Injection Prevention Cheat Sheet
+    source_key: owasp_sql_injection_prevention_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-26T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - sql_injection_prevention_guidance
+      - parameterization_guidance
+      - dynamic_query_allowlist_guidance

@@ -72,11 +72,11 @@ class PhaseController:
 
     async def evaluate_and_advance(
         self, dag_id: uuid.UUID, current_phase: int
-    ) -> tuple[str, list[ReadyNode]]:
+    ) -> tuple[str, list[ReadyNode], bool]:
         """Evaluate the current phase and advance if complete.
 
         Returns:
-            (dag_status, ready_nodes) where dag_status is one of:
+            (dag_status, ready_nodes, phase_transitioned) where dag_status is one of:
             'executing' — more work to do (ready_nodes may be non-empty)
             'completed' — all phases done
             'failed' — unrecoverable phase failure
@@ -88,7 +88,7 @@ class PhaseController:
         if phase_status == "running":
             # Phase still has active nodes — check for more ready nodes
             ready = await self._resolver.resolve_ready_nodes(dag_id)
-            return "executing", ready
+            return "executing", ready, False
 
         # Phase is done — mark it
         # now = datetime.now(timezone.utc).isoformat()
@@ -108,47 +108,78 @@ class PhaseController:
             """), {"did": str(dag_id)})
             await self._session.flush()
             logger.error("Phase %d FAILED for DAG %s", current_phase, dag_id)
-            return "failed", []
+            return "failed", [], False
 
-        # Phase completed or partial_success — try to advance
+        # Phase completed or partial_success — try to advance. Empty phases can
+        # exist legitimately (for example exploit_verify or exploration before
+        # dynamic follow-ups are materialized), so advance through them until we
+        # hit runnable work or exhaust the DAG.
         logger.info(
             "Phase %d %s for DAG %s — advancing",
             current_phase, phase_status, dag_id,
         )
 
-        # Find next phase
-        result = await self._session.execute(text("""
-            SELECT id, phase_number FROM scan_phases
-            WHERE dag_id = :did AND phase_number > :pn
-            ORDER BY phase_number ASC
-            LIMIT 1
-        """), {"did": str(dag_id), "pn": current_phase})
+        phase_pointer = current_phase
+        phase_transitioned = False
 
-        next_phase = result.mappings().first()
-        if next_phase is None:
-            # No more phases — DAG is complete
+        while True:
+            result = await self._session.execute(text("""
+                SELECT id, phase_number FROM scan_phases
+                WHERE dag_id = :did AND phase_number > :pn
+                ORDER BY phase_number ASC
+                LIMIT 1
+            """), {"did": str(dag_id), "pn": phase_pointer})
+
+            next_phase = result.mappings().first()
+            if next_phase is None:
+                await self._session.execute(text("""
+                    UPDATE scan_dags SET status = 'completed' WHERE id = :did
+                """), {"did": str(dag_id)})
+                await self._session.flush()
+                logger.info("DAG %s COMPLETED (all phases done)", dag_id)
+                return "completed", [], phase_transitioned
+
+            next_id = next_phase["id"]
+            next_num = int(next_phase["phase_number"])
+
             await self._session.execute(text("""
-                UPDATE scan_dags SET status = 'completed' WHERE id = :did
-            """), {"did": str(dag_id)})
+                UPDATE scan_phases SET status = 'running', started_at = :now
+                WHERE id = :pid
+            """), {"pid": str(next_id), "now": now})
+
+            await self._session.execute(text("""
+                UPDATE scan_dags SET current_phase = :pn WHERE id = :did
+            """), {"did": str(dag_id), "pn": next_num})
+
             await self._session.flush()
-            logger.info("DAG %s COMPLETED (all phases done)", dag_id)
-            return "completed", []
+            phase_transitioned = True
+            logger.info("Advanced to phase %d for DAG %s", next_num, dag_id)
 
-        # Activate next phase
-        next_id = next_phase["id"]
-        next_num = next_phase["phase_number"]
+            ready = await self._resolver.resolve_ready_nodes(dag_id)
+            next_phase_status = await self._resolver.check_phase_complete(dag_id, next_num)
+            if next_phase_status == "running":
+                return "executing", ready, phase_transitioned
 
-        await self._session.execute(text("""
-            UPDATE scan_phases SET status = 'running', started_at = :now
-            WHERE id = :pid
-        """), {"pid": str(next_id), "now": now})
+            await self._session.execute(text("""
+                UPDATE scan_phases SET status = :st, completed_at = :now
+                WHERE dag_id = :did AND phase_number = :pn
+            """), {
+                "st": next_phase_status,
+                "did": str(dag_id),
+                "pn": next_num,
+                "now": now,
+            })
 
-        await self._session.execute(text("""
-            UPDATE scan_dags SET current_phase = :pn WHERE id = :did
-        """), {"did": str(dag_id), "pn": next_num})
+            if next_phase_status == "failed":
+                await self._session.execute(text("""
+                    UPDATE scan_dags SET status = 'failed' WHERE id = :did
+                """), {"did": str(dag_id)})
+                await self._session.flush()
+                logger.error("Phase %d FAILED for DAG %s", next_num, dag_id)
+                return "failed", [], phase_transitioned
 
-        await self._session.flush()
-
-        logger.info("Advanced to phase %d for DAG %s", next_num, dag_id)
-        ready = await self._resolver.resolve_ready_nodes(dag_id)
-        return "executing", ready
+            logger.info(
+                "Phase %d %s for DAG %s — auto-advancing empty/resolved phase",
+                next_num, next_phase_status, dag_id,
+            )
+            phase_pointer = next_num

@@ -1,7 +1,8 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
-import { AlertTriangle, ChevronRight, RefreshCw } from "lucide-react"
+import { AlertTriangle, ChevronRight, RefreshCw, StopCircle, X } from "lucide-react"
 
 import { Progress } from "@/components/ui/progress"
 import { Spinner } from "@/components/ui/spinner"
@@ -12,7 +13,7 @@ interface ScanHeaderProps {
     id: string
     name: string
     target: string
-    status: "running" | "completed" | "failed" | "queued"
+    status: "running" | "completed" | "failed" | "queued" | "cancelled"
     statusLabel: string
     duration: string
     progress: number
@@ -27,10 +28,20 @@ interface ScanHeaderProps {
     errorMessage?: string | null
   }
   isRefreshing?: boolean
+  isCancelling?: boolean
   onRefresh?: () => void
+  onCancel?: () => void
 }
 
-export function ScanHeader({ scan, isRefreshing = false, onRefresh }: ScanHeaderProps) {
+export function ScanHeader({
+  scan,
+  isRefreshing = false,
+  isCancelling = false,
+  onRefresh,
+  onCancel,
+}: ScanHeaderProps) {
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+
   const statusConfig = {
     running: {
       dotClass: "bg-primary animate-pulse",
@@ -52,9 +63,15 @@ export function ScanHeader({ scan, isRefreshing = false, onRefresh }: ScanHeader
       textClass: "text-muted-foreground",
       bgClass: "bg-muted",
     },
+    cancelled: {
+      dotClass: "bg-muted-foreground",
+      textClass: "text-muted-foreground",
+      bgClass: "bg-muted/50",
+    },
   } as const
 
   const status = statusConfig[scan.status]
+  const canCancel = (scan.status === "running" || scan.status === "queued") && onCancel
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur-md supports-[backdrop-filter]:bg-card/80">
@@ -99,6 +116,22 @@ export function ScanHeader({ scan, isRefreshing = false, onRefresh }: ScanHeader
                 {scan.statusLabel}
               </span>
             </div>
+
+            {canCancel ? (
+              <button
+                type="button"
+                onClick={() => setShowCancelConfirm(true)}
+                disabled={isCancelling}
+                className="flex h-10 items-center gap-2 rounded-lg border border-critical/30 bg-critical/10 px-3 text-sm font-medium text-critical transition-all hover:bg-critical/20 hover:border-critical/50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isCancelling ? (
+                  <Spinner className="h-4 w-4" />
+                ) : (
+                  <StopCircle className="h-4 w-4" />
+                )}
+                Stop
+              </button>
+            ) : null}
 
             <button
               type="button"
@@ -163,6 +196,63 @@ export function ScanHeader({ scan, isRefreshing = false, onRefresh }: ScanHeader
           </div>
         ) : null}
       </div>
+
+      {/* Cancel Confirmation Dialog */}
+      {showCancelConfirm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-critical/10">
+                  <StopCircle className="h-5 w-5 text-critical" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">Stop this scan?</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    This will cancel all running and queued jobs.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCancelConfirm(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-elevated hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-5 rounded-lg border border-border bg-muted/50 p-3 text-sm text-muted-foreground">
+              <p>
+                <strong className="text-foreground">{scan.name}</strong> targeting{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs">{scan.target}</code>
+              </p>
+              <p className="mt-1">Progress: {scan.progress}%</p>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCancelConfirm(false)}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-elevated"
+              >
+                Keep Running
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCancelConfirm(false)
+                  onCancel?.()
+                }}
+                disabled={isCancelling}
+                className="rounded-lg bg-critical px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-critical/90 disabled:opacity-60"
+              >
+                {isCancelling ? "Stopping..." : "Stop Scan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </header>
   )
 }

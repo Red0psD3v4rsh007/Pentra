@@ -1,0 +1,694 @@
+version: 1
+program: phase10_public_source_first
+phase: 2
+generated_at: "2026-03-24T15:00:00+05:30"
+families:
+  - key: xss
+    name: Cross-site scripting
+    description: >
+      Client-side execution flaws where attacker-controlled data reaches a
+      browser sink and executes.
+    aliases: ["XSS", "Cross-site scripting"]
+    category_labels: ["XSS"]
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_wstg_stable
+      - juice_shop_runtime_inventory_local_19_2_1
+    attack_primitive_keys:
+      - reflected_xss_route_probe
+      - dom_xss_browser_probe
+      - stored_xss_workflow_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - client_search_reflection_state
+      - authenticated_surface
+    role_model_keys:
+      - generic_web_roles
+      - juice_shop_local_roles
+    proof_contract_keys:
+      - browser_execution_xss
+      - stored_execution_xss
+    planner_action_keys:
+      - map_client_side_sinks
+      - stage_route_specific_xss_payloads
+      - replay_stored_xss_workflow
+    benchmark_target_keys:
+      - juice_shop_local
+      - repo_parser_upload_demo
+    tags:
+      - browser_first
+      - client_side
+    citations:
+      - fact_key: xss_family_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - web_attack_taxonomy
+          - exploit_paths
+          - proof_patterns
+  - key: injection
+    name: Injection
+    description: >
+      Server-side query or interpreter manipulation through attacker-controlled
+      input.
+    aliases: ["Injection", "Interpreter abuse"]
+    category_labels: ["Injection"]
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_wstg_stable
+      - juice_shop_runtime_inventory_local_19_2_1
+    attack_primitive_keys:
+      - sql_injection_parameter_diff
+      - nosql_and_graphql_injection_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - authenticated_surface
+    role_model_keys:
+      - generic_web_roles
+      - juice_shop_local_roles
+    proof_contract_keys:
+      - injection_replay_contract
+    planner_action_keys:
+      - verify_suspected_injection
+    benchmark_target_keys:
+      - juice_shop_local
+      - repo_parser_upload_demo
+    tags:
+      - server_side
+      - parameter_driven
+    citations:
+      - fact_key: injection_family_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - attack_preconditions
+  - key: input_validation
+    name: Improper input validation
+    description: >
+      Weak validation paths that permit unsafe transformation, parsing, or
+      unexpected control of server and client behavior.
+    aliases: ["Improper Input Validation"]
+    category_labels: ["Improper Input Validation"]
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+      - juice_shop_runtime_inventory_local_19_2_1
+    attack_primitive_keys:
+      - sql_injection_parameter_diff
+      - nosql_and_graphql_injection_probe
+      - redirect_target_control_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - authenticated_surface
+    role_model_keys:
+      - generic_web_roles
+    proof_contract_keys:
+      - injection_replay_contract
+      - redirect_control_contract
+    planner_action_keys:
+      - verify_suspected_injection
+      - validate_redirect_targets
+    benchmark_target_keys:
+      - juice_shop_local
+    tags:
+      - validation
+      - parser_inputs
+    citations:
+      - fact_key: input_validation_family_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - attack_preconditions
+  - key: broken_access_control
+    name: Broken access control
+    description: >
+      Authorization failures where routes, objects, or workflows are reachable
+      beyond the intended privilege boundary.
+    aliases: ["Broken Access Control", "Authorization flaws", "IDOR"]
+    category_labels: ["Broken Access Control"]
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+      - juice_shop_runtime_inventory_local_19_2_1
+    attack_primitive_keys:
+      - idor_role_diff_probe
+      - privileged_api_surface_diff
+    workflow_state_keys:
+      - authenticated_surface
+      - privileged_surface
+      - role_transition_state
+    role_model_keys:
+      - generic_web_roles
+      - juice_shop_local_roles
+    proof_contract_keys:
+      - role_differential_access_contract
+      - sensitive_data_exposure_replay
+    planner_action_keys:
+      - compare_role_access
+      - enumerate_privileged_api_surface
+    benchmark_target_keys:
+      - juice_shop_local
+    tags:
+      - role_differential
+      - authorization
+    citations:
+      - fact_key: broken_access_control_family_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - web_attack_taxonomy
+          - challenge_family_mapping
+  - key: broken_authentication
+    name: Broken authentication
+    description: >
+      Login, session, token, and account-state weaknesses that permit identity
+      abuse or unexpected privilege.
+    aliases: ["Broken Authentication"]
+    category_labels: ["Broken Authentication"]
+    source_summary_keys:
+      - owasp_wstg_stable
+      - owasp_cheat_sheet_series
+      - juice_shop_runtime_inventory_local_19_2_1
+    attack_primitive_keys:
+      - session_and_token_abuse_probe
+      - login_and_reset_flow_mutation_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - authenticated_surface
+      - password_reset_workflow
+    role_model_keys:
+      - generic_web_roles
+      - juice_shop_local_roles
+    proof_contract_keys:
+      - role_differential_access_contract
+      - weak_crypto_material_contract
+    planner_action_keys:
+      - pressure_auth_tokens_and_login_flows
+    benchmark_target_keys:
+      - juice_shop_local
+    tags:
+      - auth
+      - sessions
+    citations:
+      - fact_key: broken_authentication_family_phase2
+        title: OWASP Cheat Sheet Series
+        source_key: owasp_cheat_sheet_series
+        source_url: https://cheatsheetseries.owasp.org/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_preconditions
+          - implementation_guidance
+  - key: broken_anti_automation
+    name: Broken anti-automation
+    description: >
+      Missing or weak rate limits, challenge checks, and anti-abuse controls
+      that enable scripted account or workflow abuse.
+    aliases: ["Broken Anti Automation", "Rate-limit weaknesses"]
+    category_labels: ["Broken Anti Automation"]
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_wstg_stable
+      - juice_shop_runtime_inventory_local_19_2_1
+    attack_primitive_keys:
+      - anti_automation_limit_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - authenticated_surface
+    role_model_keys:
+      - generic_web_roles
+    proof_contract_keys:
+      - role_differential_access_contract
+    planner_action_keys:
+      - probe_rate_limits_and_anti_automation
+    benchmark_target_keys:
+      - juice_shop_local
+    tags:
+      - automation
+      - account_abuse
+    citations:
+      - fact_key: broken_anti_automation_family_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - challenge_family_mapping
+          - proof_patterns
+  - key: sensitive_data_exposure
+    name: Sensitive data exposure
+    description: >
+      Unnecessary exposure of secrets, configuration, personal data, or
+      privileged responses.
+    aliases: ["Sensitive Data Exposure", "Data exposure"]
+    category_labels: ["Sensitive Data Exposure"]
+    source_summary_keys:
+      - juice_shop_official_project
+      - owasp_wstg_stable
+      - juice_shop_runtime_inventory_local_19_2_1
+    attack_primitive_keys:
+      - secret_and_config_exposure_probe
+      - privileged_api_surface_diff
+    workflow_state_keys:
+      - anonymous_surface
+      - privileged_surface
+      - admin_api_surface_state
+    role_model_keys:
+      - generic_web_roles
+      - juice_shop_local_roles
+    proof_contract_keys:
+      - sensitive_data_exposure_replay
+    planner_action_keys:
+      - inspect_config_and_secret_exposure
+      - enumerate_privileged_api_surface
+    benchmark_target_keys:
+      - juice_shop_local
+    tags:
+      - disclosure
+      - secrets
+    citations:
+      - fact_key: sensitive_data_exposure_family_phase2
+        title: OWASP Juice Shop Project Page
+        source_key: juice_shop_official_project
+        source_url: https://owasp.org/www-project-juice-shop/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - challenge_family_mapping
+          - benchmark_target_identity
+  - key: observability_failures
+    name: Observability failures
+    description: >
+      Debug, stack-trace, log, or diagnostic exposure that leaks internal
+      implementation details or sensitive data.
+    aliases: ["Observability Failures", "Debug exposure", "Stack traces"]
+    category_labels: ["Observability Failures"]
+    source_summary_keys:
+      - juice_shop_runtime_inventory_local_19_2_1
+      - owasp_wstg_stable
+    attack_primitive_keys:
+      - stack_trace_and_log_disclosure_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - authenticated_surface
+    role_model_keys:
+      - generic_web_roles
+    proof_contract_keys:
+      - stack_trace_disclosure_contract
+    planner_action_keys:
+      - inspect_error_and_log_disclosure
+    benchmark_target_keys:
+      - juice_shop_local
+    tags:
+      - diagnostics
+      - error_handling
+    citations:
+      - fact_key: observability_failures_family_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_guidance
+          - testing_methodology
+  - key: cryptographic_issues
+    name: Cryptographic issues
+    description: >
+      Weak secret handling, token material, or cryptographic decisions that
+      reduce integrity or confidentiality.
+    aliases: ["Cryptographic Issues"]
+    category_labels: ["Cryptographic Issues"]
+    source_summary_keys:
+      - owasp_asvs
+      - owasp_cheat_sheet_series
+      - juice_shop_runtime_inventory_local_19_2_1
+    attack_primitive_keys:
+      - weak_crypto_material_inspection
+      - session_and_token_abuse_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - authenticated_surface
+    role_model_keys:
+      - generic_web_roles
+    proof_contract_keys:
+      - weak_crypto_material_contract
+    planner_action_keys:
+      - pressure_auth_tokens_and_login_flows
+    benchmark_target_keys:
+      - juice_shop_local
+    tags:
+      - crypto
+      - tokens
+    citations:
+      - fact_key: cryptographic_issues_family_phase2
+        title: OWASP Application Security Verification Standard
+        source_key: owasp_asvs
+        source_url: https://owasp.org/www-project-application-security-verification-standard/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_requirements
+          - control_taxonomy
+  - key: insecure_deserialization
+    name: Insecure deserialization
+    description: >
+      Unsafe object or parser flows where attacker-controlled serialized input
+      triggers unsafe behavior.
+    aliases: ["Insecure Deserialization"]
+    category_labels: ["Insecure Deserialization"]
+    source_summary_keys:
+      - owasp_cheat_sheet_series
+      - portswigger_web_security_academy
+      - juice_shop_runtime_inventory_local_19_2_1
+    attack_primitive_keys:
+      - deserialization_replay_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - authenticated_surface
+    role_model_keys:
+      - generic_web_roles
+    proof_contract_keys:
+      - deserialization_replay_contract
+    planner_action_keys:
+      - probe_parser_boundaries
+    benchmark_target_keys:
+      - juice_shop_local
+    tags:
+      - parser_abuse
+      - serialization
+    citations:
+      - fact_key: insecure_deserialization_family_phase2
+        title: OWASP Cheat Sheet Series
+        source_key: owasp_cheat_sheet_series
+        source_url: https://cheatsheetseries.owasp.org/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_preconditions
+          - payload_archetypes
+  - key: xxe
+    name: XML external entity abuse
+    description: >
+      XML parser abuse where untrusted documents can trigger entity expansion or
+      external fetch behavior.
+    aliases: ["XXE", "XML External Entity"]
+    category_labels: ["XXE"]
+    source_summary_keys:
+      - owasp_cheat_sheet_series
+      - portswigger_web_security_academy
+      - juice_shop_runtime_inventory_local_19_2_1
+    attack_primitive_keys:
+      - xxe_parser_endpoint_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - file_upload_workflow
+    role_model_keys:
+      - generic_web_roles
+    proof_contract_keys:
+      - xxe_parser_contract
+    planner_action_keys:
+      - probe_parser_boundaries
+    benchmark_target_keys:
+      - juice_shop_local
+    tags:
+      - parser
+      - xml
+    citations:
+      - fact_key: xxe_family_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - web_attack_taxonomy
+          - exploit_paths
+  - key: security_misconfiguration
+    name: Security misconfiguration
+    description: >
+      Unsafe defaults, exposed admin surfaces, and overly permissive
+      deployment or feature flags that widen the attack surface.
+    aliases: ["Security Misconfiguration"]
+    category_labels: ["Security Misconfiguration"]
+    source_summary_keys:
+      - owasp_wstg_stable
+      - owasp_cheat_sheet_series
+      - juice_shop_runtime_inventory_local_19_2_1
+    attack_primitive_keys:
+      - misconfiguration_surface_probe
+      - secret_and_config_exposure_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - privileged_surface
+      - admin_api_surface_state
+    role_model_keys:
+      - generic_web_roles
+      - juice_shop_local_roles
+    proof_contract_keys:
+      - misconfiguration_surface_contract
+      - sensitive_data_exposure_replay
+    planner_action_keys:
+      - inspect_config_and_secret_exposure
+      - enumerate_privileged_api_surface
+    benchmark_target_keys:
+      - juice_shop_local
+    tags:
+      - deployment
+      - admin_surface
+    citations:
+      - fact_key: security_misconfiguration_family_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - attack_preconditions
+  - key: unvalidated_redirects
+    name: Unvalidated redirects
+    description: >
+      User-controlled redirect targets that can alter navigation or trust
+      decisions.
+    aliases: ["Unvalidated Redirects"]
+    category_labels: ["Unvalidated Redirects"]
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_wstg_stable
+      - juice_shop_runtime_inventory_local_19_2_1
+    attack_primitive_keys:
+      - redirect_target_control_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - authenticated_surface
+    role_model_keys:
+      - generic_web_roles
+    proof_contract_keys:
+      - redirect_control_contract
+    planner_action_keys:
+      - validate_redirect_targets
+    benchmark_target_keys:
+      - juice_shop_local
+    tags:
+      - redirects
+      - navigation
+    citations:
+      - fact_key: unvalidated_redirects_family_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - verification_guidance
+  - key: vulnerable_components
+    name: Vulnerable components
+    description: >
+      Attack surface created by outdated dependencies, exposed version clues, or
+      unsupported client and server assets.
+    aliases: ["Vulnerable Components"]
+    category_labels: ["Vulnerable Components"]
+    source_summary_keys:
+      - juice_shop_runtime_inventory_local_19_2_1
+      - owasp_asvs
+      - portswigger_web_security_academy
+    attack_primitive_keys:
+      - component_and_asset_fingerprint_probe
+    workflow_state_keys:
+      - anonymous_surface
+    role_model_keys:
+      - generic_web_roles
+    proof_contract_keys:
+      - component_truth_contract
+    planner_action_keys:
+      - fingerprint_components_and_hidden_assets
+    benchmark_target_keys:
+      - juice_shop_local
+    tags:
+      - versions
+      - dependencies
+    citations:
+      - fact_key: vulnerable_components_family_phase2
+        title: OWASP Application Security Verification Standard
+        source_key: owasp_asvs
+        source_url: https://owasp.org/www-project-application-security-verification-standard/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - control_taxonomy
+          - verification_requirements
+  - key: security_through_obscurity
+    name: Security through obscurity
+    description: >
+      Hidden routes, weak naming secrecy, and guessable controls that create
+      discoverable attack surface rather than actual protection.
+    aliases: ["Security through Obscurity"]
+    category_labels: ["Security through Obscurity"]
+    source_summary_keys:
+      - juice_shop_official_guide
+      - juice_shop_runtime_inventory_local_19_2_1
+    attack_primitive_keys:
+      - component_and_asset_fingerprint_probe
+      - hidden_route_and_asset_enumeration_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - admin_api_surface_state
+    role_model_keys:
+      - generic_web_roles
+    proof_contract_keys:
+      - component_truth_contract
+      - misconfiguration_surface_contract
+    planner_action_keys:
+      - fingerprint_components_and_hidden_assets
+      - enumerate_privileged_api_surface
+    benchmark_target_keys:
+      - juice_shop_local
+    tags:
+      - hidden_routes
+      - discoverability
+    citations:
+      - fact_key: security_through_obscurity_family_phase2
+        title: OWASP Juice Shop Official Guide
+        source_key: juice_shop_official_guide
+        source_url: https://help.owasp-juice.shop/part1/challenges.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - challenge_family_mapping
+          - feature_to_challenge_hints
+  - key: miscellaneous
+    name: Miscellaneous challenge family
+    description: >
+      Challenge set that usually requires workflow reasoning, state mutation, or
+      product-specific business-logic understanding.
+    aliases: ["Miscellaneous"]
+    category_labels: ["Miscellaneous"]
+    source_summary_keys:
+      - juice_shop_official_guide
+      - portswigger_web_security_academy
+      - juice_shop_runtime_inventory_local_19_2_1
+    attack_primitive_keys:
+      - business_workflow_mutation_probe
+    workflow_state_keys:
+      - authenticated_surface
+      - basket_checkout_workflow
+      - account_management_workflow
+    role_model_keys:
+      - generic_web_roles
+      - juice_shop_local_roles
+    proof_contract_keys:
+      - sensitive_data_exposure_replay
+      - role_differential_access_contract
+    planner_action_keys:
+      - mutate_business_workflows
+    benchmark_target_keys:
+      - juice_shop_local
+    tags:
+      - business_logic
+      - workflow
+    citations:
+      - fact_key: miscellaneous_family_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - challenge_family_mapping
+          - exploit_paths
+  - key: business_logic_abuse
+    name: Business logic abuse
+    description: >
+      Cross-cutting workflow abuse family used to model challenge solving that
+      depends on state mutation rather than a single vulnerable parameter.
+    aliases: ["Business logic vulnerabilities", "Workflow abuse"]
+    category_labels: []
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    attack_primitive_keys:
+      - business_workflow_mutation_probe
+      - stored_xss_workflow_probe
+      - login_and_reset_flow_mutation_probe
+    workflow_state_keys:
+      - role_transition_state
+      - basket_checkout_workflow
+      - account_management_workflow
+    role_model_keys:
+      - generic_web_roles
+      - juice_shop_local_roles
+    proof_contract_keys:
+      - role_differential_access_contract
+      - stored_execution_xss
+    planner_action_keys:
+      - mutate_business_workflows
+      - pressure_auth_tokens_and_login_flows
+    benchmark_target_keys:
+      - juice_shop_local
+    tags:
+      - cross_cutting
+      - workflow
+    citations:
+      - fact_key: business_logic_abuse_family_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - attack_preconditions

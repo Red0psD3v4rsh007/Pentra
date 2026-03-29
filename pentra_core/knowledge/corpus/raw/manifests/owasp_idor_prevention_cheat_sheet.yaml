@@ -1,0 +1,31 @@
+key: owasp_idor_prevention_cheat_sheet_phase1
+phase: 1
+source_key: owasp_idor_prevention_cheat_sheet
+title: OWASP Insecure Direct Object Reference Prevention Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official object-reference validation guidance for IDOR, object-level
+  authorization, and replayable ownership checks.
+parser_key: manual_structured_summary
+normalization_units:
+  - idor_prevention_summary
+target_outputs:
+  - normalized/source_summaries/owasp_idor_prevention_cheat_sheet.yaml
+focus_areas:
+  - object_reference_validation
+  - user_scoped_queries
+  - opaque_reference_design
+usage_notes: >
+  Preserve object-access control constraints and user-scoped lookup guidance.
+  Proof remains differential runtime behavior, not documentation alone.
+citations:
+  - fact_key: owasp_idor_prevention_cheat_sheet_source
+    title: OWASP Insecure Direct Object Reference Prevention Cheat Sheet
+    source_key: owasp_idor_prevention_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-27T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - idor_guidance
+      - object_reference_validation
+      - access_control_replay_guidance

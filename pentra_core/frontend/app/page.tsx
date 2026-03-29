@@ -1,22 +1,92 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { LoginForm } from "@/components/login-form"
 import { SSOButtons } from "@/components/sso-buttons"
 import { CyberGrid } from "@/components/cyber-grid"
+import { Spinner } from "@/components/ui/spinner"
+import { StatusBadge } from "@/components/ui/status-badge"
+import {
+  getAuthRuntime,
+  getCurrentUser,
+  getGoogleLoginUrl,
+  isDevAuthBypassEnabled,
+  type ApiAuthRuntime,
+} from "@/lib/scans-store"
 import { Shield, Zap, Lock, ArrowRight } from "lucide-react"
 
 export default function LoginPage() {
   const router = useRouter()
-  const [isAuthenticating, setIsAuthenticating] = useState(false)
+  const [isBootstrapping, setIsBootstrapping] = useState(true)
+  const [authRuntime, setAuthRuntime] = useState<ApiAuthRuntime | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function bootstrap() {
+      try {
+        const [runtimeResult, userResult] = await Promise.allSettled([
+          getAuthRuntime(),
+          getCurrentUser(),
+        ])
+
+        if (cancelled) {
+          return
+        }
+
+        if (runtimeResult.status === "fulfilled") {
+          setAuthRuntime(runtimeResult.value)
+        }
+
+        if (userResult.status === "fulfilled") {
+          router.replace("/dashboard")
+          return
+        }
+      } finally {
+        if (!cancelled) {
+          setIsBootstrapping(false)
+        }
+      }
+    }
+
+    void bootstrap()
+
+    return () => {
+      cancelled = true
+    }
+  }, [router])
+
+  const authGuidance = useMemo(() => {
+    if (authRuntime?.dev_auth_bypass_enabled || isDevAuthBypassEnabled()) {
+      return {
+        title: "Development Auth Bypass Detected",
+        description:
+          "This local deployment accepts the configured development operator identity. If a session is active, Pentra will route you straight into command.",
+        status: "configured_and_healthy",
+      }
+    }
+
+    if (authRuntime?.google_oauth_configured) {
+      return {
+        title: "Google OAuth Available",
+        description:
+          "Use Google to establish a real browser session. Email/password sign-in is not configured in this deployment.",
+        status: "configured_and_healthy",
+      }
+    }
+
+    return {
+      title: "Interactive Login Not Configured",
+      description:
+        "This deployment does not currently expose a browser login method. Enable Google OAuth or development auth bypass before using the web console.",
+      status: "configured_but_fallback",
+    }
+  }, [authRuntime])
 
   const handleLogin = async (email: string, password: string) => {
-    setIsAuthenticating(true)
-    // Simulate authentication delay
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    // Redirect to dashboard on success
-    router.push("/dashboard")
+    void email
+    void password
   }
 
   return (
@@ -108,18 +178,53 @@ export default function LoginPage() {
           {/* Form Header */}
           <div className="mb-8">
             <h2 className="text-2xl font-semibold text-foreground tracking-tight">
-              Welcome back
+              {isBootstrapping ? "Restoring session" : "Access command"}
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Sign in to your account to continue
+              {isBootstrapping
+                ? "Checking runtime auth state before opening the workspace"
+                : "Use a real runtime-backed sign-in path to continue"}
             </p>
           </div>
 
-          {/* Login Form */}
-          <LoginForm onSubmit={handleLogin} isLoading={isAuthenticating} />
+          <div className="mb-6 rounded-xl border border-border/60 bg-background/40 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-foreground">{authGuidance.title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  {authGuidance.description}
+                </p>
+              </div>
+              <StatusBadge status={authGuidance.status} label={authGuidance.status.replaceAll("_", " ")} />
+            </div>
+          </div>
 
-          {/* SSO Buttons */}
-          <SSOButtons disabled={isAuthenticating} />
+          {isBootstrapping ? (
+            <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-xl border border-border/50 bg-background/40">
+              <Spinner className="size-5 text-primary" />
+              <p className="text-sm font-medium text-foreground">Checking authentication runtime</p>
+              <p className="text-xs text-muted-foreground">
+                Verifying current session, provider availability, and development bypass state.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Login Form */}
+              <LoginForm
+                onSubmit={handleLogin}
+                submitLabel="Password Sign-In Unavailable"
+                disabled
+                helperText="Direct email/password login is not backed by the current Pentra API. Use Google OAuth when configured, or rely on the development auth bypass in local environments."
+              />
+
+              {/* SSO Buttons */}
+              <SSOButtons
+                disabled={false}
+                googleAvailable={Boolean(authRuntime?.google_oauth_configured)}
+                googleHref={authRuntime?.google_oauth_configured ? getGoogleLoginUrl() : null}
+              />
+            </>
+          )}
 
           {/* Footer */}
           <div className="mt-10 pt-6 border-t border-border/50">

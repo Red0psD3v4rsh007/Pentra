@@ -23,6 +23,7 @@ import {
   formatExecutionProvenance,
   formatExecutionReason,
   type ApiFinding,
+  type ApiFindingTruthSummary,
   type ApiScanAiReasoning,
 } from "@/lib/scans-store"
 import { cn } from "@/lib/utils"
@@ -76,6 +77,42 @@ const verificationStyles: Record<
   detected: { bg: "bg-muted", text: "text-muted-foreground" },
   suspected: { bg: "bg-medium/15", text: "text-medium" },
   verified: { bg: "bg-low/15", text: "text-low" },
+}
+
+const truthStyles: Record<
+  ApiFinding["truth_state"],
+  { bg: string; text: string; description: string }
+> = {
+  observed: {
+    bg: "bg-muted",
+    text: "text-muted-foreground",
+    description: "Observed by a tool but not yet promoted as trusted proof.",
+  },
+  suspected: {
+    bg: "bg-medium/15",
+    text: "text-medium",
+    description: "Requires verification or stronger provenance before promotion.",
+  },
+  reproduced: {
+    bg: "bg-primary/10",
+    text: "text-primary",
+    description: "Reproduced, but replayable proof is still incomplete.",
+  },
+  verified: {
+    bg: "bg-low/15",
+    text: "text-low",
+    description: "Replayable and provenance-complete trusted proof.",
+  },
+  rejected: {
+    bg: "bg-critical/10",
+    text: "text-critical",
+    description: "Explicitly rejected from trusted output.",
+  },
+  expired: {
+    bg: "bg-amber-100",
+    text: "text-amber-800",
+    description: "Evidence or proof state has expired and must be refreshed.",
+  },
 }
 
 export function FindingsTab({ findings, advisory }: FindingsTabProps) {
@@ -208,7 +245,7 @@ export function FindingsTab({ findings, advisory }: FindingsTabProps) {
               <th className="w-10 px-4 py-3">#</th>
               <th className="px-4 py-3">Title</th>
               <th className="w-24 px-4 py-3">Severity</th>
-              <th className="w-28 px-4 py-3">State</th>
+              <th className="w-36 px-4 py-3">Truth</th>
               <th className="w-20 px-4 py-3">CVSS</th>
               <th className="w-24 px-4 py-3">Confidence</th>
               <th className="w-32 px-4 py-3">Source</th>
@@ -249,19 +286,36 @@ export function FindingsTab({ findings, advisory }: FindingsTabProps) {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {finding.verification_state ? (
+                      <div className="space-y-1">
                         <span
+                          title={truthStyles[finding.truth_state].description}
                           className={cn(
-                            "rounded-md px-2 py-1 text-xs font-medium capitalize",
-                            verificationStyles[finding.verification_state].bg,
-                            verificationStyles[finding.verification_state].text
+                            "inline-flex rounded-md px-2 py-1 text-xs font-medium capitalize",
+                            truthStyles[finding.truth_state].bg,
+                            truthStyles[finding.truth_state].text
                           )}
                         >
-                          {finding.verification_state}
+                          {finding.truth_state}
                         </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">unknown</span>
-                      )}
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                          <span>{finding.truth_summary.promoted ? "trusted" : "held"}</span>
+                          <span className="h-1 w-1 rounded-full bg-border" />
+                          <span>{finding.truth_summary.evidence_reference_count} refs</span>
+                          {finding.verification_state ? (
+                            <>
+                              <span className="h-1 w-1 rounded-full bg-border" />
+                              <span
+                                className={cn(
+                                  "capitalize",
+                                  verificationStyles[finding.verification_state].text
+                                )}
+                              >
+                                verify {finding.verification_state}
+                              </span>
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3 font-mono text-sm text-foreground">
                       {finding.cvss_score ?? "-"}
@@ -279,6 +333,7 @@ export function FindingsTab({ findings, advisory }: FindingsTabProps) {
                             finding.execution_provenance === "live" && "bg-low/10 text-low",
                             finding.execution_provenance === "simulated" && "bg-amber-100 text-amber-800",
                             finding.execution_provenance === "blocked" && "bg-critical/10 text-critical",
+                            finding.execution_provenance === "derived" && "bg-primary/10 text-primary",
                             finding.execution_provenance === "inferred" && "bg-primary/10 text-primary"
                           )}
                         >
@@ -343,6 +398,30 @@ export function FindingsTab({ findings, advisory }: FindingsTabProps) {
                             <div className="space-y-3">
                               <DetailBlock label="Metadata">
                                 <div className="space-y-1">
+                                  <p>Truth state: {finding.truth_state}</p>
+                                  <p>
+                                    Trusted output: {finding.truth_summary.promoted ? "Yes" : "No"}
+                                  </p>
+                                  <p>
+                                    Provenance complete:{" "}
+                                    {finding.truth_summary.provenance_complete ? "Yes" : "No"}
+                                  </p>
+                                  <p>
+                                    Replayable proof:{" "}
+                                    {finding.truth_summary.replayable ? "Yes" : "No"}
+                                  </p>
+                                  <p>
+                                    Evidence references:{" "}
+                                    {finding.truth_summary.evidence_reference_count}
+                                  </p>
+                                  <p>
+                                    Raw evidence present:{" "}
+                                    {finding.truth_summary.raw_evidence_present ? "Yes" : "No"}
+                                  </p>
+                                  <p>
+                                    Scan job bound:{" "}
+                                    {finding.truth_summary.scan_job_bound ? "Yes" : "No"}
+                                  </p>
                                   <p>CVE: {finding.cve_id ?? "Not assigned"}</p>
                                   <p>
                                     False positive: {finding.is_false_positive ? "Yes" : "No"}
@@ -377,6 +456,10 @@ export function FindingsTab({ findings, advisory }: FindingsTabProps) {
                                       : "Not verified"}
                                   </p>
                                 </div>
+                              </DetailBlock>
+
+                              <DetailBlock label="Truth Notes">
+                                <TruthNotes summary={finding.truth_summary} />
                               </DetailBlock>
 
                               <DetailBlock label="Evidence">
@@ -418,5 +501,19 @@ function DetailBlock({
       </p>
       <div className="text-sm leading-relaxed text-foreground">{children}</div>
     </div>
+  )
+}
+
+function TruthNotes({ summary }: { summary: ApiFindingTruthSummary }) {
+  if (summary.notes.length === 0) {
+    return <p>No additional truth warnings are attached to this finding.</p>
+  }
+
+  return (
+    <ul className="space-y-1">
+      {summary.notes.map((note) => (
+        <li key={note}>- {note}</li>
+      ))}
+    </ul>
   )
 }

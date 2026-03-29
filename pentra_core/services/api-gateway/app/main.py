@@ -8,12 +8,13 @@ Startup sequence:
   1. Structured logging initialised
   2. Database engine validated (ready probe)
   3. Redis event publisher connected
-  4. Middleware stack applied (CORS → Auth → Rate Limit)
+  4. Middleware stack applied (CORS → Request Context → Auth → Rate Limit)
   5. Routers mounted under /api/v1
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -22,7 +23,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from pentra_common.config.settings import get_settings
-from pentra_common.db.session import async_engine
+from pentra_common.db.session import async_engine, async_session_factory
 from pentra_common.events.publisher import EventPublisher
 from pentra_common.events.stream_publisher import StreamPublisher
 from pentra_common.observability.logging import setup_logging
@@ -31,6 +32,7 @@ from app.middleware.cors import configure_cors
 from app.middleware.request_context import RequestContextMiddleware
 from app.middleware.auth import AuthMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.services.scheduled_scan_launcher import ScheduledScanLauncher
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -66,9 +68,20 @@ async def lifespan(app: FastAPI):
     app.state.stream_publisher = stream_publisher
     logger.info("Redis stream publisher connected (Streams)")
 
+    scheduled_launcher = ScheduledScanLauncher(
+        async_session_factory,
+        stream_publisher,
+    )
+    scheduled_launcher_task = asyncio.create_task(scheduled_launcher.start())
+    app.state.scheduled_scan_launcher = scheduled_launcher
+    app.state.scheduled_scan_launcher_task = scheduled_launcher_task
+
     yield
 
     # ── Shutdown ─────────────────────────────────────────────────
+    scheduled_launcher.stop()
+    scheduled_launcher_task.cancel()
+    await asyncio.gather(scheduled_launcher_task, return_exceptions=True)
     await stream_publisher.disconnect()
     await event_publisher.disconnect()
     await async_engine.dispose()
@@ -90,18 +103,13 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # ── Middleware (order matters: applied bottom-to-top) ─────────
-    # 1. CORS — outermost, handles preflight
-    configure_cors(app)
-
-    # 2. Request context — request id + lightweight tracing
-    app.add_middleware(RequestContextMiddleware)
-
-    # 3. Auth — extracts JWT, populates request.state.user
-    app.add_middleware(AuthMiddleware)
-
-    # 4. Rate limit — per-tenant, uses request.state.user.tenant_id
+    # ── Middleware (later additions wrap earlier ones) ────────────
+    # Add from innermost to outermost so runtime order is:
+    # CORS → RequestContext → Auth → RateLimit → route
     app.add_middleware(RateLimitMiddleware)
+    app.add_middleware(AuthMiddleware)
+    app.add_middleware(RequestContextMiddleware)
+    configure_cors(app)
 
     # ── Exception handlers ───────────────────────────────────────
     app.add_exception_handler(
@@ -116,9 +124,13 @@ def create_app() -> FastAPI:
         tenants,
         projects,
         assets,
+        asset_groups,
         scans,
         intelligence,
         scan_profiles,
+        tool_catalog,
+        terminal,
+        ws_scans,
     )
 
     app.include_router(health.router)
@@ -126,9 +138,13 @@ def create_app() -> FastAPI:
     app.include_router(tenants.router, prefix=f"{settings.api_v1_prefix}/tenants")
     app.include_router(projects.router, prefix=f"{settings.api_v1_prefix}/projects")
     app.include_router(assets.router, prefix=settings.api_v1_prefix)
+    app.include_router(asset_groups.router, prefix=settings.api_v1_prefix)
     app.include_router(scans.router, prefix=f"{settings.api_v1_prefix}/scans")
     app.include_router(scan_profiles.router, prefix=f"{settings.api_v1_prefix}/scan-profiles")
     app.include_router(intelligence.router, prefix=f"{settings.api_v1_prefix}/intelligence")
+    app.include_router(tool_catalog.router, prefix=f"{settings.api_v1_prefix}/tools")
+    app.include_router(terminal.router, prefix=f"{settings.api_v1_prefix}/terminal")
+    app.include_router(ws_scans.router, prefix="/ws")
 
     return app
 

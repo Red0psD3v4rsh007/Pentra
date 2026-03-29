@@ -8,6 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from pentra_common.execution_truth import ToolPolicyState
+
 
 class ScanJobStatus(str, Enum):
     queued = "queued"
@@ -24,18 +26,28 @@ class ScanJobStatus(str, Enum):
 class ScanJobResponse(BaseModel):
     id: UUID
     scan_id: UUID
+    node_id: UUID | None = None
     phase: int  # 0–6
     tool: str
     status: ScanJobStatus
     priority: str
     worker_id: str | None = None
+    output_ref: str | None = None
+    scheduled_at: datetime | None = None
+    claimed_at: datetime | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
     error_message: str | None = None
     retry_count: int
+    queue_delay_seconds: float | None = None
+    claim_to_start_seconds: float | None = None
+    execution_duration_seconds: float | None = None
+    end_to_end_seconds: float | None = None
     execution_mode: str | None = None
     execution_provenance: str | None = None
     execution_reason: str | None = None
+    execution_class: str | None = None
+    policy_state: ToolPolicyState | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

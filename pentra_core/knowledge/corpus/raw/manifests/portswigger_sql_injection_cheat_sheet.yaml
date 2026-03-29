@@ -1,0 +1,33 @@
+key: portswigger_sql_injection_cheat_sheet_phase1
+phase: 1
+source_key: portswigger_sql_injection_cheat_sheet
+title: PortSwigger SQL Injection Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture the official DB-flavor syntax reference and replay-friendly SQLi
+  mutation patterns that can be normalized into curated injection archetypes.
+parser_key: manual_structured_summary
+normalization_units:
+  - db_flavor_syntax_matrix
+  - replayable_mutation_patterns
+target_outputs:
+  - normalized/source_summaries/portswigger_sql_injection_cheat_sheet.yaml
+focus_areas:
+  - db_flavor_differences
+  - comments_and_truncation
+  - union_syntax
+  - boolean_and_error_probing
+usage_notes: >
+  Keep only compact DB-flavor and mutation metadata that Pentra can reason
+  about. Do not mirror the full cheat sheet into the repo.
+citations:
+  - fact_key: portswigger_sql_injection_cheat_sheet_source
+    title: PortSwigger SQL Injection Cheat Sheet
+    source_key: portswigger_sql_injection_cheat_sheet
+    source_url: https://portswigger.net/web-security/sql-injection/cheat-sheet
+    trust_tier: official_public
+    retrieved_at: "2026-03-26T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - injection_payload_archetypes
+      - db_flavor_syntax_guidance
+      - replayable_injection_patterns

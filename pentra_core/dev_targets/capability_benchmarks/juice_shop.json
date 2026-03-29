@@ -1,0 +1,242 @@
+{
+  "key": "juice_shop_local",
+  "enabled": true,
+  "asset_name": "Phase 9 Juice Shop",
+  "asset_type": "web_app",
+  "target": "http://127.0.0.1:3001",
+  "healthcheck_url": "http://127.0.0.1:3001/",
+  "launch_mode": "docker_script",
+  "launch_recipe": {
+    "script": "pentra_core/scripts/local/run_phase9_benchmark_targets.sh",
+    "args": [
+      "ensure",
+      "juice_shop_local"
+    ]
+  },
+  "ground_truth_source": "pentra_core/dev_targets/capability_benchmarks/juice_shop.json",
+  "notes": "Pinned OWASP Juice Shop benchmark target. Expectations are a narrow benchmark subset aligned to Pentra's current safe-live web profile, not the app's full version-pinned challenge inventory.",
+  "benchmark_inventory": {
+    "captured_on": "2026-03-24",
+    "image": "bkimminich/juice-shop@sha256:9d65de715135ec9ba7667335d02cf9c1b70f6cbe2ff1d454d1d1d3c22744c336",
+    "app_version": "19.2.1",
+    "inventory_endpoint": "/api/Challenges",
+    "challenge_count": 111,
+    "category_counts": {
+      "Sensitive Data Exposure": 16,
+      "Improper Input Validation": 12,
+      "Broken Access Control": 11,
+      "Injection": 11,
+      "XSS": 9,
+      "Vulnerable Components": 9,
+      "Broken Authentication": 9,
+      "Miscellaneous": 7,
+      "Cryptographic Issues": 5,
+      "Observability Failures": 4,
+      "Broken Anti Automation": 4,
+      "Security Misconfiguration": 4,
+      "Security through Obscurity": 3,
+      "Insecure Deserialization": 3,
+      "Unvalidated Redirects": 2,
+      "XXE": 2
+    },
+    "official_sources": [
+      "https://help.owasp-juice.shop/part1/challenges.html",
+      "https://github.com/juice-shop/juice-shop/releases"
+    ]
+  },
+  "expectations": {
+    "expected_vulnerability_types": [
+      "sensitive_data_exposure",
+      "xss"
+    ],
+    "expected_verified_types": [],
+    "minimum_detected_recall": 0.5,
+    "minimum_verified_recall": 0.0,
+    "minimum_verified_share": 0.0
+  },
+  "scan_plans": [
+    {
+      "key": "juice_shop_full",
+      "label": "Juice Shop / full",
+      "scan_type": "full",
+      "config_template": "stateful_full",
+      "timeout_seconds": 600,
+      "config_overrides": {
+        "selected_checks": {
+          "exclude_tools": [
+            "dalfox",
+            "cors_scanner"
+          ],
+          "dalfox": {
+            "max_targets": 1,
+            "include_urls": [
+              "/rest/products/search?q=test"
+            ]
+          },
+          "http_probe_paths": [
+            "/",
+            "/api",
+            "/graphql",
+            "/api/Users",
+            "/api/Challenges",
+            "/rest/user/login",
+            "/rest/user/whoami",
+            "/rest/user/authentication-details/",
+            "/rest/order-history",
+            "/rest/admin",
+            "/rest/admin/application-configuration",
+            "/rest/products/search",
+            "/rest/products/search?q=test"
+          ],
+          "content_paths": [
+            "api",
+            "graphql",
+            "api/Users",
+            "api/Challenges",
+            "rest/products/search",
+            "rest/products/search?q=test",
+            "rest/user/login",
+            "rest/user/whoami",
+            "rest/user/authentication-details/",
+            "rest/order-history",
+            "rest/admin",
+            "rest/admin/application-configuration",
+            ".well-known/security.txt"
+          ],
+          "authenticated_crawling": true,
+          "workflow_replay": true,
+          "stateful_testing": true
+        },
+        "stateful_testing": {
+          "seed_paths": [
+            "/",
+            "/login",
+            "/register",
+            "/api/Users",
+            "/api/Challenges",
+            "/rest/products/search?q=test",
+            "/rest/user/login",
+            "/rest/user/whoami",
+            "/rest/user/authentication-details/",
+            "/rest/order-history",
+            "/rest/admin",
+            "/rest/admin/application-configuration",
+            "/rest/user/whoami"
+          ],
+          "crawl_max_depth": 2,
+          "max_pages": 40,
+          "max_replays": 4,
+          "max_script_assets": 8,
+          "probes": {
+            "role_switch": true,
+            "parameter_tampering": false,
+            "rate_limit": false
+          },
+          "admin_paths": [
+            "/rest/admin",
+            "/rest/admin/application-configuration"
+          ],
+          "xss": {
+            "enabled": true,
+            "max_candidates": 8,
+            "max_vectors_per_route": 4,
+            "verify_candidate_limit": 6,
+            "route_hints": [
+              "/#/search",
+              "/#/contact",
+              "/#/login"
+            ],
+            "seed_paths": [
+              "/#/search?q=pentra-seed",
+              "/#/search?q=juice",
+              "/#/login?redirect=%2Fsearch"
+            ],
+            "workflow_seeds": [
+              {
+                "page_url": "/#/contact",
+                "route_group": "/#/contact",
+                "action_url": "/api/Feedbacks/",
+                "method": "POST",
+                "field_names": [
+                  "comment"
+                ],
+                "hidden_fields": {
+                  "rating": "5"
+                },
+                "render_url": "/#/about",
+                "safe_replay": true,
+                "sink_markers": [
+                  "innerHTML"
+                ],
+                "source_markers": [
+                  "persistent_form_field"
+                ]
+              }
+            ]
+          },
+          "auth": {
+            "login_page_path": "/login",
+            "login_api_path": "/rest/user/login",
+            "login_request_format": "json",
+            "username_field": "email",
+            "password_field": "password",
+            "token_json_path": "authentication.token",
+            "whoami_path": "/rest/user/whoami",
+            "post_login_path": "/rest/user/whoami",
+            "credentials": [
+              {
+                "label": "juice-shop-admin",
+                "username": "admin@juice-sh.op",
+                "password": "admin123",
+                "role": "admin"
+              },
+              {
+                "label": "juice-shop-customer",
+                "username": "pentra.customer@juice-sh.op",
+                "password": "Pentra123!",
+                "role": "customer",
+                "bootstrap": {
+                  "mode": "juice_shop_register",
+                  "security_question_id": 1,
+                  "security_answer": "pentra-bootstrap"
+                }
+              }
+            ]
+          }
+        },
+        "verification_policy": {
+          "allowed_vulnerability_types": [
+            "sql_injection",
+            "idor",
+            "sensitive_data_exposure",
+            "stack_trace_exposure",
+            "xss"
+          ],
+          "max_dynamic_nodes_per_scan": 8,
+          "blocked_vulnerability_types": [
+            "rce",
+            "command_injection",
+            "auth_bypass",
+            "default_credentials",
+            "ssrf",
+            "lfi"
+          ],
+          "max_verifications_per_type": 3,
+          "proof_requirements": {
+            "sensitive_data_exposure": [
+              "public_config_response",
+              "sensitive_field_marker"
+            ],
+            "xss": [
+              "browser_execution"
+            ]
+          },
+          "request_budget": {
+            "sqlmap_verify": 60,
+            "custom_poc": 12
+          }
+        }
+      }
+    }
+  ]
+}

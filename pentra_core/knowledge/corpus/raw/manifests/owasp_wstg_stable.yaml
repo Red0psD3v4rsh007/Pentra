@@ -1,0 +1,38 @@
+key: owasp_wstg_stable_phase1
+phase: 1
+source_key: owasp_wstg_stable
+title: OWASP WSTG stable acquisition manifest
+acquisition_scope: >
+  Capture the stable OWASP web testing section structure and the core testing
+  families that Pentra should convert into planner-facing methodology units.
+parser_key: manual_structured_summary
+normalization_units:
+  - testing_section_index
+  - attack_precondition_summary
+  - verification_guidance_summary
+target_outputs:
+  - normalized/source_summaries/owasp_wstg_stable.yaml
+focus_areas:
+  - information_gathering
+  - authentication_testing
+  - authorization_testing
+  - session_management_testing
+  - input_validation_testing
+  - testing_for_weak_cryptography
+  - business_logic_testing
+  - client_side_testing
+usage_notes: >
+  Treat WSTG as official testing methodology guidance and a source of
+  preconditions, not as runtime proof.
+citations:
+  - fact_key: owasp_wstg_stable_source
+    title: OWASP Web Security Testing Guide Stable
+    source_key: owasp_wstg_stable
+    source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+    trust_tier: official_public
+    retrieved_at: "2026-03-24T12:00:00+05:30"
+    extraction_mode: browse
+    authority_for:
+      - testing_methodology
+      - attack_preconditions
+      - verification_guidance

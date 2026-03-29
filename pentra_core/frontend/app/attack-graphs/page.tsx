@@ -14,8 +14,7 @@ import {
   XCircle,
 } from "lucide-react"
 
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { TopBar } from "@/components/dashboard/top-bar"
+import { CommandLayout } from "@/components/layout/command-layout"
 import { Spinner } from "@/components/ui/spinner"
 import {
   extractVerificationCounts,
@@ -146,11 +145,8 @@ export default function AttackGraphsPage() {
   }, [filteredItems])
 
   return (
-    <div className="min-h-screen bg-background">
-      <DashboardSidebar />
+    <CommandLayout title="Attack Graphs">
 
-      <div className="pl-60 transition-all duration-200">
-        <TopBar title="Attack Graphs" />
 
         <main className="p-6">
           <div className="mb-8">
@@ -325,7 +321,6 @@ export default function AttackGraphsPage() {
             This page now shows real graph metadata and removes the old synthetic preview graph.
           </div>
         </main>
-      </div>
-    </div>
+    </CommandLayout>
   )
 }

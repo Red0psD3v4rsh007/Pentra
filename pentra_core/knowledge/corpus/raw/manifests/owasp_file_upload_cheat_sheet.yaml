@@ -1,0 +1,31 @@
+key: owasp_file_upload_cheat_sheet_phase1
+phase: 1
+source_key: owasp_file_upload_cheat_sheet
+title: OWASP File Upload Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official file-upload validation guidance that shapes parser-boundary
+  discovery, content handling, and bounded upload replay.
+parser_key: manual_structured_summary
+normalization_units:
+  - file_upload_boundary_summary
+target_outputs:
+  - normalized/source_summaries/owasp_file_upload_cheat_sheet.yaml
+focus_areas:
+  - extension_allowlists
+  - content_type_validation
+  - storage_isolation
+usage_notes: >
+  Preserve upload defense-in-depth constraints and parser-boundary signals.
+  Do not store offensive file variants in the corpus.
+citations:
+  - fact_key: owasp_file_upload_cheat_sheet_source
+    title: OWASP File Upload Cheat Sheet
+    source_key: owasp_file_upload_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-27T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - file_upload_guidance
+      - parser_boundary_guidance
+      - upload_validation_patterns

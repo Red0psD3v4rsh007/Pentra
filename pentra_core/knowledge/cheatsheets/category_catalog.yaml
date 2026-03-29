@@ -1,0 +1,1278 @@
+version: 1
+program: phase10_public_source_first
+phase: 2
+generated_at: 2026-03-24T00:00:00Z
+categories:
+  - key: browser_xss
+    title: Browser XSS
+    description: >
+      Source registry for reflected, DOM, and stored XSS reasoning in
+      browser-first capability packs. This category focuses on context-aware
+      payload archetypes, DOM sink modeling, browser compatibility, and
+      execution-proof policy.
+    ontology_family_keys:
+      - xss
+      - input_validation
+    phase3_pack_keys:
+      - p3a_browser_xss
+    target_profile_keys:
+      - spa_rest_api
+      - traditional_server_rendered
+      - workflow_heavy_commerce
+    focus_areas:
+      - dom_sink_discovery
+      - browser_execution_proof
+      - route_specific_payload_generation
+      - stored_xss_replay
+    selection_policy:
+      - Prefer authoritative official sources for context modeling and browser proof rules.
+      - Generate payload instances from archetypes and route context instead of storing giant raw lists.
+      - Treat community payload lists as supplemental variant breadth only.
+    benchmark_target_keys:
+      - juice_shop_local
+      - dvwa_local
+    entries:
+      - key: portswigger_xss_vectors
+        source_key: portswigger_xss_cheat_sheet
+        title: PortSwigger XSS Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Curated XSS payload archetypes, browser compatibility hints, and
+          context-sensitive vectoring for browser-backed proof.
+        applicable_contexts:
+          - html_reflection
+          - js_string_breakout
+          - event_handler_execution
+          - browser_compatibility_reasoning
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - traditional_server_rendered
+        payload_inclusion_mode: curated_archetypes
+        selection_tags:
+          - xss
+          - browser
+          - payload_archetypes
+        usage_notes: >
+          Normalize to payload archetypes and compatibility metadata; do not
+          mirror the raw cheat sheet into the repo.
+        citations:
+          - fact_key: portswigger_xss_cheat_sheet_registry
+            title: PortSwigger XSS Cheat Sheet
+            source_key: portswigger_xss_cheat_sheet
+            source_url: https://portswigger.net/web-security/cross-site-scripting/cheat-sheet
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - xss_payload_archetypes
+              - browser_execution_patterns
+              - payload_context_metadata
+      - key: owasp_xss_context_model
+        source_key: owasp_xss_prevention_cheat_sheet
+        title: OWASP Cross Site Scripting Prevention Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Context taxonomy for HTML, attribute, JavaScript, URL, and CSS sinks
+          so Pentra chooses the right payload family and proof expectations.
+        applicable_contexts:
+          - html_context
+          - attribute_context
+          - javascript_context
+          - url_context
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - traditional_server_rendered
+          - workflow_heavy_commerce
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - xss
+          - context_model
+          - sink_taxonomy
+        citations:
+          - fact_key: owasp_xss_prevention_registry
+            title: OWASP Cross Site Scripting Prevention Cheat Sheet
+            source_key: owasp_xss_prevention_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - xss_context_taxonomy
+              - sanitization_guidance
+              - sink_context_modeling
+      - key: owasp_dom_xss_sink_model
+        source_key: owasp_dom_xss_prevention_cheat_sheet
+        title: OWASP DOM based XSS Prevention Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          DOM-specific sink and source modeling for SPA-heavy applications and
+          client-side route families.
+        applicable_contexts:
+          - dom_sources
+          - dom_sinks
+          - client_side_route_flows
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - workflow_heavy_commerce
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - xss
+          - dom_xss
+          - spa
+        citations:
+          - fact_key: owasp_dom_xss_registry
+            title: OWASP DOM based XSS Prevention Cheat Sheet
+            source_key: owasp_dom_xss_prevention_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - dom_sink_guidance
+              - client_side_context_modeling
+              - browser_xss_reasoning
+      - key: patt_xss_variant_breadth
+        source_key: payloads_all_the_things
+        title: PayloadsAllTheThings
+        trust_role: supplemental
+        purpose: >
+          Supplemental breadth for alternate payload variants and filter-bypass
+          ideas after authoritative archetypes are normalized.
+        applicable_contexts:
+          - payload_variant_enrichment
+          - filter_evasion_research
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - traditional_server_rendered
+        payload_inclusion_mode: supplemental_variants
+        selection_tags:
+          - xss
+          - supplemental
+          - community_breadth
+        usage_notes: >
+          Use selectively and keep resulting payloads behind browser-execution
+          proof requirements.
+        citations:
+          - fact_key: payloads_all_the_things_registry
+            title: PayloadsAllTheThings
+            source_key: payloads_all_the_things
+            source_url: https://github.com/swisskyrepo/PayloadsAllTheThings
+            trust_tier: community_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - breadth_payload_reference
+              - payload_variant_enrichment
+    citations:
+      - fact_key: browser_xss_category
+        title: Browser XSS cheat-sheet category
+        source_key: portswigger_xss_cheat_sheet
+        source_url: https://portswigger.net/web-security/cross-site-scripting/cheat-sheet
+        trust_tier: official_public
+        retrieved_at: 2026-03-24T00:00:00Z
+        extraction_mode: browse
+        authority_for:
+          - xss_payload_archetypes
+          - browser_execution_patterns
+      - fact_key: browser_xss_context_category
+        title: Browser XSS context modeling
+        source_key: owasp_dom_xss_prevention_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: 2026-03-24T00:00:00Z
+        extraction_mode: browse
+        authority_for:
+          - dom_sink_guidance
+          - browser_xss_reasoning
+
+  - key: authentication_and_sessions
+    title: Authentication and Sessions
+    description: >
+      Structured sources for stateful authentication flows, session lifecycle
+      handling, and anti-automation-aware auth reasoning.
+    ontology_family_keys:
+      - broken_authentication
+      - broken_anti_automation
+      - cryptographic_issues
+    phase3_pack_keys:
+      - p3a_multi_role_stateful_auth
+      - p3a_disclosure_misconfig_crypto
+    target_profile_keys:
+      - spa_rest_api
+      - auth_heavy_admin_portal
+      - workflow_heavy_commerce
+    focus_areas:
+      - session_bootstrap
+      - role_transition
+      - credential_handling
+      - token_lifecycle
+    selection_policy:
+      - Prefer official session and authentication guidance for runtime modeling.
+      - Use these sources to shape role models and workflow states, not to assert proof.
+    benchmark_target_keys:
+      - juice_shop_local
+      - webgoat_local
+    entries:
+      - key: owasp_authentication_methodology
+        source_key: owasp_authentication_cheat_sheet
+        title: OWASP Authentication Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Baseline methodology for account login, recovery, MFA-adjacent flow
+          assumptions, and anti-automation-aware auth testing.
+        applicable_contexts:
+          - login_flow
+          - password_reset
+          - anti_automation_signals
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - auth_heavy_admin_portal
+          - workflow_heavy_commerce
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - auth
+          - anti_automation
+          - workflow
+        citations:
+          - fact_key: owasp_authentication_registry
+            title: OWASP Authentication Cheat Sheet
+            source_key: owasp_authentication_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - authentication_workflow_guidance
+              - anti_automation_guidance
+              - password_and_recovery_guidance
+      - key: owasp_session_management_methodology
+        source_key: owasp_session_management_cheat_sheet
+        title: OWASP Session Management Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Session bootstrap, token handling, replay assumptions, and stateful
+          runtime constraints for authenticated capability packs.
+        applicable_contexts:
+          - cookie_bootstrap
+          - token_rotation
+          - session_replay
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - auth_heavy_admin_portal
+          - workflow_heavy_commerce
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - sessions
+          - stateful_testing
+          - tokens
+        citations:
+          - fact_key: owasp_session_management_registry
+            title: OWASP Session Management Cheat Sheet
+            source_key: owasp_session_management_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - session_bootstrap_guidance
+              - token_lifecycle_guidance
+              - session_replay_constraints
+      - key: owasp_password_storage_reference
+        source_key: owasp_password_storage_cheat_sheet
+        title: OWASP Password Storage Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Reference for identifying weak password-storage patterns and
+          credential-handling issues without turning password artifacts into
+          raw exploit truth.
+        applicable_contexts:
+          - password_storage
+          - credential_reuse
+          - hashing_assessment
+        applicable_target_profile_keys:
+          - auth_heavy_admin_portal
+          - workflow_heavy_commerce
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - passwords
+          - hashing
+          - credential_handling
+        citations:
+          - fact_key: owasp_password_storage_registry
+            title: OWASP Password Storage Cheat Sheet
+            source_key: owasp_password_storage_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - password_storage_guidance
+              - credential_handling_guidance
+              - hash_and_pepper_guidance
+    citations:
+      - fact_key: authentication_sessions_category
+        title: Authentication and sessions cheat-sheet category
+        source_key: owasp_authentication_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: 2026-03-24T00:00:00Z
+        extraction_mode: browse
+        authority_for:
+          - authentication_workflow_guidance
+          - anti_automation_guidance
+
+  - key: authorization_and_access_control
+    title: Authorization and Access Control
+    description: >
+      Sources for object-level access validation, role-differential testing,
+      and workflow-aware authorization reasoning.
+    ontology_family_keys:
+      - broken_access_control
+      - business_logic_abuse
+      - input_validation
+    phase3_pack_keys:
+      - p3a_multi_role_stateful_auth
+      - p3a_access_control_workflow_abuse
+    target_profile_keys:
+      - spa_rest_api
+      - auth_heavy_admin_portal
+      - workflow_heavy_commerce
+    focus_areas:
+      - role_differential_testing
+      - object_reference_validation
+      - workflow_authorization
+    selection_policy:
+      - Drive route comparison and state transition abuse from official access-control guidance.
+      - Keep object-level proof tied to replayable authorization differences.
+    benchmark_target_keys:
+      - juice_shop_local
+      - webgoat_local
+    entries:
+      - key: owasp_authorization_methodology
+        source_key: owasp_authorization_cheat_sheet
+        title: OWASP Authorization Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Core methodology for route-level and object-level authorization
+          reasoning, including role and attribute checks.
+        applicable_contexts:
+          - route_authorization
+          - role_differential_access
+          - attribute_based_access
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - auth_heavy_admin_portal
+          - workflow_heavy_commerce
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - authorization
+          - access_control
+          - roles
+        citations:
+          - fact_key: owasp_authorization_registry
+            title: OWASP Authorization Cheat Sheet
+            source_key: owasp_authorization_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - authorization_guidance
+              - object_access_validation_guidance
+              - role_and_attribute_modeling
+      - key: owasp_idor_methodology
+        source_key: owasp_idor_prevention_cheat_sheet
+        title: OWASP Insecure Direct Object Reference Prevention Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Object-reference handling guidance for IDOR and object-level access
+          replay paths.
+        applicable_contexts:
+          - idor
+          - direct_object_reference
+          - object_replay
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - auth_heavy_admin_portal
+          - workflow_heavy_commerce
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - idor
+          - object_access
+          - replay
+        citations:
+          - fact_key: owasp_idor_registry
+            title: OWASP Insecure Direct Object Reference Prevention Cheat Sheet
+            source_key: owasp_idor_prevention_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - idor_guidance
+              - object_reference_validation
+              - access_control_replay_guidance
+      - key: owasp_rest_api_authorization
+        source_key: owasp_rest_security_cheat_sheet
+        title: OWASP REST Security Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          API-focused authorization, stateless token assumptions, and route
+          abuse guidance for REST-heavy targets.
+        applicable_contexts:
+          - api_authorization
+          - rest_token_validation
+          - stateless_session_assumptions
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - auth_heavy_admin_portal
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - rest_api
+          - authorization
+          - tokens
+        citations:
+          - fact_key: owasp_rest_security_registry
+            title: OWASP REST Security Cheat Sheet
+            source_key: owasp_rest_security_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - rest_api_guidance
+              - stateless_auth_constraints
+              - api_authorization_guidance
+    citations:
+      - fact_key: authorization_access_control_category
+        title: Authorization and access-control cheat-sheet category
+        source_key: owasp_authorization_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: 2026-03-24T00:00:00Z
+        extraction_mode: browse
+        authority_for:
+          - authorization_guidance
+          - object_access_validation_guidance
+
+  - key: injection_and_query_abuse
+    title: Injection and Query Abuse
+    description: >
+      Sources for structured injection reasoning, especially SQL-flavor query
+      abuse and safe local replay patterns.
+    ontology_family_keys:
+      - injection
+      - input_validation
+    phase3_pack_keys:
+      - p3a_injection
+    target_profile_keys:
+      - spa_rest_api
+      - traditional_server_rendered
+      - graphql_heavy_application
+    focus_areas:
+      - sqli_archetypes
+      - db_flavor_reasoning
+      - input_mutation
+    selection_policy:
+      - Use official syntax, methodology, and parameterization sources first, then selectively widen variants.
+      - Keep replayable proof separate from heuristic tool output.
+    benchmark_target_keys:
+      - dvwa_local
+      - webgoat_local
+    entries:
+      - key: portswigger_sqli_archetypes
+        source_key: portswigger_sql_injection_cheat_sheet
+        title: PortSwigger SQL Injection Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          SQL injection syntax and database-flavor reference for query mutation
+          and replayable local verification.
+        applicable_contexts:
+          - union_based_sqli
+          - error_based_sqli
+          - blind_sqli
+          - db_flavor_detection
+        applicable_target_profile_keys:
+          - traditional_server_rendered
+          - spa_rest_api
+          - graphql_heavy_application
+        payload_inclusion_mode: curated_archetypes
+        selection_tags:
+          - sqli
+          - query_abuse
+          - db_flavors
+        citations:
+          - fact_key: portswigger_sql_injection_registry
+            title: PortSwigger SQL Injection Cheat Sheet
+            source_key: portswigger_sql_injection_cheat_sheet
+            source_url: https://portswigger.net/web-security/sql-injection/cheat-sheet
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - injection_payload_archetypes
+              - db_flavor_syntax_guidance
+              - replayable_injection_patterns
+      - key: owasp_wstg_injection_methodology
+        source_key: owasp_wstg_stable
+        title: OWASP WSTG SQL Injection Testing
+        trust_role: authoritative
+        purpose: >
+          Injection testing methodology for stable request-shape replay,
+          DB-specific testing branches, and adjacent NoSQL or ORM coverage.
+        applicable_contexts:
+          - sql_injection
+          - nosql_injection
+          - orm_injection
+          - replay_methodology
+        applicable_target_profile_keys:
+          - traditional_server_rendered
+          - spa_rest_api
+          - graphql_heavy_application
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - methodology
+          - sqli
+          - replay
+        citations:
+          - fact_key: owasp_wstg_sql_injection_registry
+            title: OWASP WSTG Testing for SQL Injection
+            source_key: owasp_wstg_stable
+            source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05-Testing_for_SQL_Injection
+            trust_tier: official_public
+            retrieved_at: 2026-03-26T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - testing_methodology
+              - verification_guidance
+              - attack_preconditions
+      - key: owasp_sqli_prevention_guidance
+        source_key: owasp_sql_injection_prevention_cheat_sheet
+        title: OWASP SQL Injection Prevention Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Defensive query-construction guidance that helps Pentra distinguish
+          value-bound parameters from dynamic identifier or query-shape abuse.
+        applicable_contexts:
+          - parameterized_queries
+          - dynamic_identifiers
+          - allowlist_validation
+        applicable_target_profile_keys:
+          - traditional_server_rendered
+          - spa_rest_api
+          - graphql_heavy_application
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - sqli
+          - parameterization
+          - allowlists
+        citations:
+          - fact_key: owasp_sql_injection_prevention_registry
+            title: OWASP SQL Injection Prevention Cheat Sheet
+            source_key: owasp_sql_injection_prevention_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-26T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - sql_injection_prevention_guidance
+              - parameterization_guidance
+              - dynamic_query_allowlist_guidance
+      - key: owasp_query_parameterization_guidance
+        source_key: owasp_query_parameterization_cheat_sheet
+        title: OWASP Query Parameterization Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Bind-variable guidance for stable query-shape reasoning and replayable
+          parameter-differential candidate generation.
+        applicable_contexts:
+          - prepared_statements
+          - bind_variables
+          - query_shape_stability
+        applicable_target_profile_keys:
+          - traditional_server_rendered
+          - spa_rest_api
+          - graphql_heavy_application
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - parameterization
+          - bind_variables
+          - query_shape
+        citations:
+          - fact_key: owasp_query_parameterization_registry
+            title: OWASP Query Parameterization Cheat Sheet
+            source_key: owasp_query_parameterization_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-26T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - query_parameterization_guidance
+              - bind_variable_guidance
+              - replayable_query_shape_constraints
+      - key: owasp_input_validation_methodology
+        source_key: owasp_input_validation_cheat_sheet
+        title: OWASP Input Validation Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Input mutation constraints and allowlist reasoning that help Pentra
+          focus injection candidates on meaningful validation boundaries.
+        applicable_contexts:
+          - input_mutation
+          - allowlist_bypass
+          - parser_boundary_hints
+        applicable_target_profile_keys:
+          - traditional_server_rendered
+          - spa_rest_api
+          - graphql_heavy_application
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - validation
+          - mutation
+          - input_boundaries
+        citations:
+          - fact_key: owasp_input_validation_registry
+            title: OWASP Input Validation Cheat Sheet
+            source_key: owasp_input_validation_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - input_validation_guidance
+              - allowlist_strategy_guidance
+              - upload_validation_guidance
+      - key: patt_injection_variant_breadth
+        source_key: payloads_all_the_things
+        title: PayloadsAllTheThings
+        trust_role: supplemental
+        purpose: >
+          Supplemental injection payload breadth for alternative encodings and
+          edge-case mutation once official archetypes are in place.
+        applicable_contexts:
+          - payload_variant_enrichment
+          - edge_case_mutation
+        applicable_target_profile_keys:
+          - traditional_server_rendered
+          - spa_rest_api
+          - graphql_heavy_application
+        payload_inclusion_mode: supplemental_variants
+        selection_tags:
+          - injection
+          - supplemental
+          - community_breadth
+        citations:
+          - fact_key: patt_injection_registry
+            title: PayloadsAllTheThings
+            source_key: payloads_all_the_things
+            source_url: https://github.com/swisskyrepo/PayloadsAllTheThings
+            trust_tier: community_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - breadth_payload_reference
+              - payload_variant_enrichment
+    citations:
+      - fact_key: injection_query_abuse_category
+        title: Injection and query-abuse cheat-sheet category
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05-Testing_for_SQL_Injection
+        trust_tier: official_public
+        retrieved_at: 2026-03-26T00:00:00Z
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - verification_guidance
+
+  - key: graphql_and_api_abuse
+    title: GraphQL and API Abuse
+    description: >
+      Sources for GraphQL-specific and REST-specific abuse patterns, including
+      batching, overfetching, broken object access, and stateless auth
+      assumptions.
+    ontology_family_keys:
+      - injection
+      - broken_access_control
+      - input_validation
+      - security_misconfiguration
+    phase3_pack_keys:
+      - p3a_injection
+      - p3a_access_control_workflow_abuse
+    target_profile_keys:
+      - spa_rest_api
+      - graphql_heavy_application
+      - auth_heavy_admin_portal
+    focus_areas:
+      - graphql_attack_surface
+      - api_authorization
+      - stateless_token_abuse
+    selection_policy:
+      - Use GraphQL and REST-specific guidance to shape target-profile bias and API proof contracts.
+      - Keep API discovery grounded in normalized routes and target model evidence.
+    benchmark_target_keys:
+      - juice_shop_local
+      - webgoat_local
+    entries:
+      - key: owasp_graphql_methodology
+        source_key: owasp_graphql_cheat_sheet
+        title: OWASP GraphQL Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          GraphQL endpoint discovery, batching-abuse reasoning, and schema
+          hardening gaps that map into Pentra primitives for GraphQL targets.
+        applicable_contexts:
+          - graphql_schema
+          - batching
+          - introspection
+          - api_abuse
+        applicable_target_profile_keys:
+          - graphql_heavy_application
+          - spa_rest_api
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - graphql
+          - api_abuse
+          - batching
+        citations:
+          - fact_key: owasp_graphql_registry
+            title: OWASP GraphQL Cheat Sheet
+            source_key: owasp_graphql_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - graphql_attack_guidance
+              - batching_attack_guidance
+              - api_abuse_patterns
+      - key: portswigger_graphql_methodology
+        source_key: portswigger_graphql_api_vulnerabilities
+        title: PortSwigger GraphQL API vulnerabilities
+        trust_role: authoritative
+        purpose: >
+          GraphQL endpoint discovery and bounded probe methodology for
+          introspection, suggestions, and batching support.
+        applicable_contexts:
+          - endpoint_discovery
+          - introspection
+          - suggestions
+          - batching
+        applicable_target_profile_keys:
+          - graphql_heavy_application
+          - spa_rest_api
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - graphql
+          - endpoint_discovery
+          - methodology
+        citations:
+          - fact_key: portswigger_graphql_registry
+            title: GraphQL API vulnerabilities
+            source_key: portswigger_graphql_api_vulnerabilities
+            source_url: https://portswigger.net/web-security/graphql
+            trust_tier: official_public
+            retrieved_at: 2026-03-26T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - graphql_endpoint_discovery
+              - graphql_attack_surface_guidance
+              - replayable_graphql_probe_patterns
+      - key: owasp_rest_security_methodology
+        source_key: owasp_rest_security_cheat_sheet
+        title: OWASP REST Security Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          REST-specific authorization, token, and stateless-session assumptions
+          for API-heavy targets.
+        applicable_contexts:
+          - rest_api
+          - bearer_token_use
+          - object_authorization
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - auth_heavy_admin_portal
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - rest_api
+          - stateless_auth
+          - authorization
+        citations:
+          - fact_key: owasp_rest_security_registry_api_category
+            title: OWASP REST Security Cheat Sheet
+            source_key: owasp_rest_security_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - rest_api_guidance
+              - stateless_auth_constraints
+              - api_authorization_guidance
+    citations:
+      - fact_key: graphql_api_abuse_category
+        title: GraphQL and API abuse cheat-sheet category
+        source_key: owasp_graphql_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: 2026-03-24T00:00:00Z
+        extraction_mode: browse
+        authority_for:
+          - graphql_attack_guidance
+          - api_abuse_patterns
+
+  - key: parser_file_and_upload
+    title: Parser, File, and Upload Abuse
+    description: >
+      Sources for parser-boundary reasoning, upload validation weaknesses,
+      deserialization hazards, and XML parser abuse.
+    ontology_family_keys:
+      - insecure_deserialization
+      - xxe
+      - input_validation
+      - security_misconfiguration
+    phase3_pack_keys:
+      - p3a_parser_file_abuse
+    target_profile_keys:
+      - upload_parser_heavy
+      - spa_rest_api
+      - traditional_server_rendered
+    focus_areas:
+      - upload_boundary_mutation
+      - parser_abuse
+      - xml_entities
+      - serialization_flows
+    selection_policy:
+      - Use official parser and upload guidance to model safe local proof boundaries.
+      - Keep parser abuse packs tightly coupled to verifier contracts and negative-evidence handling.
+    benchmark_target_keys:
+      - repo_parser_upload_demo
+    entries:
+      - key: owasp_file_upload_methodology
+        source_key: owasp_file_upload_cheat_sheet
+        title: OWASP File Upload Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Upload boundary guidance for file-type confusion, extension controls,
+          and parser-adjacent exploration.
+        applicable_contexts:
+          - upload_validation
+          - file_type_mutation
+          - parser_boundary
+        applicable_target_profile_keys:
+          - upload_parser_heavy
+          - traditional_server_rendered
+          - spa_rest_api
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - file_upload
+          - parser_boundary
+          - validation
+        citations:
+          - fact_key: owasp_file_upload_registry
+            title: OWASP File Upload Cheat Sheet
+            source_key: owasp_file_upload_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - file_upload_guidance
+              - parser_boundary_guidance
+              - upload_validation_patterns
+      - key: owasp_deserialization_methodology
+        source_key: owasp_deserialization_cheat_sheet
+        title: OWASP Deserialization Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Deserialization-oriented workflow reasoning and parser safety
+          boundaries for serialization-driven attack paths.
+        applicable_contexts:
+          - insecure_deserialization
+          - serialization_format_handling
+          - parser_workflows
+        applicable_target_profile_keys:
+          - upload_parser_heavy
+          - spa_rest_api
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - deserialization
+          - parser_abuse
+          - serialization
+        citations:
+          - fact_key: owasp_deserialization_registry
+            title: OWASP Deserialization Cheat Sheet
+            source_key: owasp_deserialization_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - deserialization_guidance
+              - serialization_payload_patterns
+              - parser_safety_constraints
+      - key: owasp_xxe_methodology
+        source_key: owasp_xxe_prevention_cheat_sheet
+        title: OWASP XML External Entity Prevention Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          XML parser behavior, entity handling constraints, and XXE-oriented
+          abuse conditions.
+        applicable_contexts:
+          - xxe
+          - xml_parser_configuration
+          - entity_resolution
+        applicable_target_profile_keys:
+          - upload_parser_heavy
+          - traditional_server_rendered
+          - spa_rest_api
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - xxe
+          - xml
+          - parser
+        citations:
+          - fact_key: owasp_xxe_registry
+            title: OWASP XML External Entity Prevention Cheat Sheet
+            source_key: owasp_xxe_prevention_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - xxe_guidance
+              - parser_hardening_patterns
+              - xml_payload_constraints
+    citations:
+      - fact_key: parser_file_upload_category
+        title: Parser, file, and upload cheat-sheet category
+        source_key: owasp_file_upload_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: 2026-03-24T00:00:00Z
+        extraction_mode: browse
+        authority_for:
+          - file_upload_guidance
+          - parser_boundary_guidance
+
+  - key: disclosure_misconfig_components
+    title: Disclosure, Misconfiguration, and Components
+    description: >
+      Sources for secret exposure, debug/log leakage, weak crypto storage
+      assumptions, and vulnerable component truth.
+    ontology_family_keys:
+      - sensitive_data_exposure
+      - observability_failures
+      - security_misconfiguration
+      - vulnerable_components
+      - security_through_obscurity
+      - cryptographic_issues
+    phase3_pack_keys:
+      - p3a_disclosure_misconfig_crypto
+    target_profile_keys:
+      - spa_rest_api
+      - traditional_server_rendered
+      - auth_heavy_admin_portal
+      - upload_parser_heavy
+    focus_areas:
+      - config_exposure
+      - debug_and_log_disclosure
+      - component_truth
+      - secret_handling
+      - headers_and_transport_misconfiguration
+      - weak_crypto_material
+    selection_policy:
+      - Keep disclosure categories grounded in replayable route or artifact proof.
+      - Use component and secret guidance to drive candidate generation, not to auto-promote findings.
+    benchmark_target_keys:
+      - repo_demo_api
+      - juice_shop_local
+      - dvwa_local
+      - webgoat_local
+    entries:
+      - key: owasp_secrets_management_methodology
+        source_key: owasp_secrets_management_cheat_sheet
+        title: OWASP Secrets Management Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Secret lifecycle and exposure handling guidance for config and
+          credential disclosure surfaces.
+        applicable_contexts:
+          - secret_exposure
+          - key_handling
+          - credential_artifacts
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - auth_heavy_admin_portal
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - secrets
+          - config_exposure
+          - credentials
+        citations:
+          - fact_key: owasp_secrets_management_registry
+            title: OWASP Secrets Management Cheat Sheet
+            source_key: owasp_secrets_management_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - secrets_exposure_guidance
+              - secret_lifecycle_guidance
+              - key_and_credential_handling_guidance
+      - key: owasp_logging_observability_methodology
+        source_key: owasp_logging_cheat_sheet
+        title: OWASP Logging Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Guidance for distinguishing useful observability signals from noisy
+          error disclosure and stack-trace exposure.
+        applicable_contexts:
+          - log_disclosure
+          - stack_trace_exposure
+          - observability_failures
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - traditional_server_rendered
+          - auth_heavy_admin_portal
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - logging
+          - observability
+          - stack_traces
+        citations:
+          - fact_key: owasp_logging_registry
+            title: OWASP Logging Cheat Sheet
+            source_key: owasp_logging_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - observability_failure_guidance
+              - error_and_event_logging_guidance
+              - security_signal_logging
+      - key: owasp_error_handling_methodology
+        source_key: owasp_wstg_error_handling
+        title: OWASP WSTG Error Handling Testing
+        trust_role: authoritative
+        purpose: >
+          Methodology for replaying verbose errors and stack traces without
+          confusing benign failures with internal disclosure.
+        applicable_contexts:
+          - error_disclosure
+          - stack_trace_exposure
+          - debug_surface
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - traditional_server_rendered
+          - auth_heavy_admin_portal
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - errors
+          - stack_traces
+          - debug
+        citations:
+          - fact_key: owasp_wstg_error_handling_registry
+            title: OWASP WSTG Error Handling Testing
+            source_key: owasp_wstg_error_handling
+            source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/08-Testing_for_Error_Handling/README
+            trust_tier: official_public
+            retrieved_at: 2026-03-27T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - verbose_error_testing_methodology
+              - stack_trace_testing_methodology
+              - error_disclosure_testing
+      - key: owasp_config_deployment_methodology
+        source_key: owasp_wstg_configuration_deployment_management
+        title: OWASP WSTG Configuration and Deployment Management Testing
+        trust_role: authoritative
+        purpose: >
+          Guidance for exposed configuration, hidden assets, backup files, and
+          deployment-specific surfaces that should not leak into production.
+        applicable_contexts:
+          - config_exposure
+          - hidden_assets
+          - deployment_leakage
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - traditional_server_rendered
+          - auth_heavy_admin_portal
+          - upload_parser_heavy
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - config
+          - deployment
+          - hidden_assets
+        citations:
+          - fact_key: owasp_wstg_configuration_deployment_registry
+            title: OWASP WSTG Configuration and Deployment Management Testing
+            source_key: owasp_wstg_configuration_deployment_management
+            source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/README
+            trust_tier: official_public
+            retrieved_at: 2026-03-27T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - deployment_misconfiguration_methodology
+              - hidden_asset_testing_methodology
+              - config_surface_testing_guidance
+      - key: owasp_http_headers_methodology
+        source_key: owasp_http_headers_cheat_sheet
+        title: OWASP HTTP Headers Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Header baseline guidance for browser-facing transport and response
+          hardening gaps that frequently accompany disclosure and deployment
+          mistakes.
+        applicable_contexts:
+          - header_misconfiguration
+          - transport_hardening
+          - cors_review
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - traditional_server_rendered
+          - auth_heavy_admin_portal
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - headers
+          - csp
+          - transport
+        citations:
+          - fact_key: owasp_http_headers_registry
+            title: OWASP HTTP Headers Cheat Sheet
+            source_key: owasp_http_headers_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-27T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - header_misconfiguration_guidance
+              - transport_header_guidance
+              - browser_security_header_baselines
+      - key: owasp_dependency_truth_methodology
+        source_key: owasp_vulnerable_dependency_management_cheat_sheet
+        title: OWASP Vulnerable Dependency Management Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Component and dependency truth guidance so Pentra can separate
+          inferred exposure from validated component reality.
+        applicable_contexts:
+          - vulnerable_components
+          - component_fingerprinting
+          - dependency_truth
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - traditional_server_rendered
+          - auth_heavy_admin_portal
+          - upload_parser_heavy
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - components
+          - dependency_truth
+          - fingerprinting
+        citations:
+          - fact_key: owasp_dependency_management_registry
+            title: OWASP Vulnerable Dependency Management Cheat Sheet
+            source_key: owasp_vulnerable_dependency_management_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/Vulnerable_Dependency_Management_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - vulnerable_component_guidance
+              - dependency_risk_handling
+              - component_truth_constraints
+      - key: owasp_crypto_storage_methodology
+        source_key: owasp_cryptographic_storage_cheat_sheet
+        title: OWASP Cryptographic Storage Cheat Sheet
+        trust_role: authoritative
+        purpose: >
+          Crypto-storage reasoning for token, key, and secret persistence issues
+          that appear as disclosure or weak-crypto findings.
+        applicable_contexts:
+          - cryptographic_storage
+          - key_persistence
+          - token_material
+        applicable_target_profile_keys:
+          - auth_heavy_admin_portal
+          - spa_rest_api
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - crypto
+          - tokens
+          - storage
+        citations:
+          - fact_key: owasp_crypto_storage_registry
+            title: OWASP Cryptographic Storage Cheat Sheet
+            source_key: owasp_cryptographic_storage_cheat_sheet
+            source_url: https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html
+            trust_tier: official_public
+            retrieved_at: 2026-03-24T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - crypto_storage_guidance
+              - encryption_design_guidance
+              - key_storage_guidance
+      - key: owasp_weak_cryptography_methodology
+        source_key: owasp_wstg_weak_cryptography
+        title: OWASP WSTG Weak Cryptography Testing
+        trust_role: authoritative
+        purpose: >
+          Methodology for reviewing weak algorithms, transport encryption
+          posture, and exposed crypto material before elevating crypto claims.
+        applicable_contexts:
+          - weak_crypto_material
+          - token_material
+          - transport_encryption
+        applicable_target_profile_keys:
+          - spa_rest_api
+          - auth_heavy_admin_portal
+        payload_inclusion_mode: metadata_only
+        selection_tags:
+          - crypto
+          - encryption
+          - transport
+        citations:
+          - fact_key: owasp_wstg_weak_cryptography_registry
+            title: OWASP WSTG Weak Cryptography Testing
+            source_key: owasp_wstg_weak_cryptography
+            source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/09-Testing_for_Weak_Cryptography/README
+            trust_tier: official_public
+            retrieved_at: 2026-03-27T00:00:00Z
+            extraction_mode: browse
+            authority_for:
+              - weak_cryptography_testing_methodology
+              - transport_encryption_testing
+              - crypto_material_review
+    citations:
+      - fact_key: disclosure_misconfig_components_category
+        title: Disclosure, misconfiguration, and components cheat-sheet category
+        source_key: owasp_secrets_management_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: 2026-03-24T00:00:00Z
+        extraction_mode: browse
+        authority_for:
+          - secrets_exposure_guidance
+      - fact_key: disclosure_misconfig_components_error_methodology
+        title: OWASP WSTG Error Handling Testing
+        source_key: owasp_wstg_error_handling
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/08-Testing_for_Error_Handling/README
+        trust_tier: official_public
+        retrieved_at: 2026-03-27T00:00:00Z
+        extraction_mode: browse
+        authority_for:
+          - verbose_error_testing_methodology
+          - stack_trace_testing_methodology
+      - fact_key: disclosure_misconfig_components_headers_methodology
+        title: OWASP HTTP Headers Cheat Sheet
+        source_key: owasp_http_headers_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: 2026-03-27T00:00:00Z
+        extraction_mode: browse
+        authority_for:
+          - header_misconfiguration_guidance
+          - browser_security_header_baselines
+          - secret_lifecycle_guidance

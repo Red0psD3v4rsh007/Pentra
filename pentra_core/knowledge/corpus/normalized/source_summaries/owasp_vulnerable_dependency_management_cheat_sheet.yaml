@@ -1,0 +1,43 @@
+key: owasp_vulnerable_dependency_management_cheat_sheet
+title: OWASP Vulnerable Dependency Management Cheat Sheet normalized source summary
+source_key: owasp_vulnerable_dependency_management_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's dependency-management guidance gives Pentra the component-truth model
+  for disclosure and misconfiguration packs: inventory, patch state, and
+  evidence-backed component identity should drive prioritization.
+facts:
+  - fact_key: owasp_dependency_management_response_paths
+    title: Dependency-management response paths
+    fact_type: component_truth_summary
+    summary: >
+      Vulnerable-component handling depends on trustworthy inventory, patch
+      state, upgrade path, and evidence that the component is actually present
+      and reachable in the assessed target.
+    tags:
+      - components
+      - dependencies
+      - disclosure
+    data:
+      high_signal_dependency_controls:
+        - asset_and_dependency_inventory
+        - patch_state_tracking
+        - upgrade_and_remediation_path
+        - component_truth_before_promotion
+        - sbom_or_equivalent_inventory_inputs
+      replay_implications:
+        - Separate fingerprint hints from component truth in findings.
+        - Require route or artifact evidence before high-confidence promotion.
+    citations:
+      - fact_key: owasp_dependency_management_response_paths
+        title: OWASP Vulnerable Dependency Management Cheat Sheet
+        source_key: owasp_vulnerable_dependency_management_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/Vulnerable_Dependency_Management_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - vulnerable_component_guidance
+          - dependency_risk_handling
+          - component_truth_constraints

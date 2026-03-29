@@ -24,6 +24,14 @@ _NON_RETRYABLE_ERRORS = frozenset({
     "INVALID_TARGET",
     "QUOTA_EXCEEDED",
     "LICENCE_EXPIRED",
+    "WATCHDOG_TIMEOUT",
+    "DEAD_LETTERED",
+    "UNKNOWN_TOOL",
+})
+
+_NON_RETRYABLE_TOOL_ERRORS = frozenset({
+    ("dalfox", "TIMEOUT"),
+    ("cors_scanner", "EXIT_1"),
 })
 
 # Base backoff in seconds (will be multiplied by 2^retry_count)
@@ -40,11 +48,22 @@ class RetryManager:
         retry_count: int,
         max_retries: int,
         error_code: str,
+        tool_name: str | None = None,
     ) -> bool:
         """Determine if a failed job should be retried.
 
         Returns True if retry is appropriate.
         """
+        normalized_tool = str(tool_name or "").strip().lower()
+        if (normalized_tool, error_code) in _NON_RETRYABLE_TOOL_ERRORS:
+            logger.info(
+                "Non-retryable tool failure: tool=%s error=%s (retry_count=%d)",
+                normalized_tool,
+                error_code,
+                retry_count,
+            )
+            return False
+
         if error_code in _NON_RETRYABLE_ERRORS:
             logger.info(
                 "Non-retryable error: %s (retry_count=%d)",

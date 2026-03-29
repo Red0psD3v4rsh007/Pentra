@@ -1,0 +1,43 @@
+id: cors_scanner
+name: cors_scanner
+image: projectdiscovery/nuclei:latest
+worker_family: web
+command:
+  - nuclei
+  - -u
+  - "{target}"
+  - -tags
+  - cors
+  - -disable-update-check
+  - -silent
+  - -jsonl
+  - -o
+  - "{output_dir}/cors.json"
+description: |
+  Dedicated CORS misconfiguration scanner using custom nuclei templates.
+  Tests for origin reflection, null origin acceptance, subdomain wildcard,
+  and credential-inclusive CORS policies.
+
+capabilities:
+  - Origin reflection detection
+  - Null origin acceptance
+  - Subdomain wildcard CORS
+  - Credential exposure via CORS
+  - Pre-flight bypass
+
+input_artifacts:
+  - endpoints
+
+output_artifact_type: vulnerabilities
+output_parser: json
+artifact_type: vulnerabilities
+
+resource_limits:
+  memory: "1g"
+  cpu: 1.0
+  timeout_seconds: 180
+default_timeout: 180
+
+attack_vectors:
+  - cors_misconfig
+  - sensitive_data_exposure

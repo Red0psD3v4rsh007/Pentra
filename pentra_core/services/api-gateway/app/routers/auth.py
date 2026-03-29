@@ -8,12 +8,14 @@ for business logic.
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pentra_common.config.settings import get_settings
 from pentra_common.schemas import TokenResponse, UserResponse
 
 from app.deps import CurrentUser, get_current_user, get_db_session
@@ -22,6 +24,7 @@ from app.services import auth_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["auth"])
+_FRONTEND_LOGIN_STATE = "frontend"
 
 
 # ── Request schemas (local to this router) ───────────────────────────
@@ -31,7 +34,51 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class AuthRuntimeResponse(BaseModel):
+    dev_auth_bypass_enabled: bool
+    google_oauth_configured: bool
+    auth_methods: list[str]
+
+
 # ── Endpoints ────────────────────────────────────────────────────────
+
+
+def _build_frontend_google_redirect_url(tokens: TokenResponse) -> str:
+    settings = get_settings()
+    base_url = settings.frontend_base_url.rstrip("/")
+    fragment = urlencode(
+        {
+            "access_token": tokens.access_token,
+            "refresh_token": tokens.refresh_token,
+            "token_type": tokens.token_type,
+            "expires_in": str(tokens.expires_in),
+        }
+    )
+    return f"{base_url}/auth/google/callback#{fragment}"
+
+
+@router.get(
+    "/runtime",
+    response_model=AuthRuntimeResponse,
+    summary="Get browser authentication runtime capabilities",
+)
+async def auth_runtime() -> AuthRuntimeResponse:
+    settings = get_settings()
+    google_oauth_configured = bool(
+        settings.google_client_id.strip() and settings.google_client_secret.strip()
+    )
+    auth_methods: list[str] = []
+    if settings.app_env == "development" and settings.dev_auth_bypass_enabled:
+        auth_methods.append("dev_bypass")
+    if google_oauth_configured:
+        auth_methods.append("google_oauth")
+
+    return AuthRuntimeResponse(
+        dev_auth_bypass_enabled=settings.app_env == "development"
+        and settings.dev_auth_bypass_enabled,
+        google_oauth_configured=google_oauth_configured,
+        auth_methods=auth_methods,
+    )
 
 
 @router.get(
@@ -39,9 +86,15 @@ class RefreshRequest(BaseModel):
     summary="Redirect to Google OAuth consent screen",
     status_code=status.HTTP_307_TEMPORARY_REDIRECT,
 )
-async def google_login():
+async def google_login(
+    mode: str | None = Query(
+        default=None,
+        description="Optional browser flow mode. Use 'frontend' to finish auth in the UI.",
+    ),
+):
     """Initiate the Google OAuth 2.0 authorisation-code flow."""
-    url = auth_service.get_google_auth_url()
+    state = _FRONTEND_LOGIN_STATE if mode == _FRONTEND_LOGIN_STATE else None
+    url = auth_service.get_google_auth_url(state=state)
     return RedirectResponse(url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
@@ -52,6 +105,7 @@ async def google_login():
 )
 async def google_callback(
     code: str = Query(..., description="OAuth authorisation code from Google"),
+    state: str | None = Query(default=None, description="Optional browser flow state"),
     session: AsyncSession = Depends(get_db_session),
 ) -> TokenResponse:
     """Exchange the Google authorisation code for Pentra JWT tokens.
@@ -69,12 +123,19 @@ async def google_callback(
             detail=f"OAuth authentication failed: {exc}",
         )
 
-    return TokenResponse(
+    token_response = TokenResponse(
         access_token=tokens.access_token,
         refresh_token=tokens.refresh_token,
         token_type="bearer",
         expires_in=tokens.expires_in,
     )
+    if state == _FRONTEND_LOGIN_STATE:
+        return RedirectResponse(
+            url=_build_frontend_google_redirect_url(token_response),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    return token_response
 
 
 @router.post(

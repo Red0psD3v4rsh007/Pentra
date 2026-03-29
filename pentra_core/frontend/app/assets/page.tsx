@@ -15,8 +15,7 @@ import {
 } from "lucide-react"
 
 import { AssetIntakeForm } from "@/components/assets/asset-intake-form"
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { TopBar } from "@/components/dashboard/top-bar"
+import { CommandLayout } from "@/components/layout/command-layout"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   Empty,
@@ -85,14 +84,9 @@ export default function AssetsPage() {
   ] as const
 
   return (
-    <div className="min-h-screen bg-background">
-      <DashboardSidebar />
-
-      <div className="pl-60 transition-all duration-200">
-        <TopBar title="Assets" />
-
-        <main className="space-y-6 p-6">
-          <section className="flex flex-col gap-4 rounded-3xl border border-border bg-card p-6 lg:flex-row lg:items-end lg:justify-between">
+    <CommandLayout title="Targets">
+        <main className="space-y-5 p-5">
+          <section className="flex flex-col gap-4 cyber-card p-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
               <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-primary">
                 Real Target Intake
@@ -320,7 +314,6 @@ export default function AssetsPage() {
             )}
           </section>
         </main>
-      </div>
-    </div>
+    </CommandLayout>
   )
 }

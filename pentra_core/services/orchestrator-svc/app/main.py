@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import (
 from app.events.scan_consumer import ScanConsumer
 from app.events.job_event_handler import JobEventHandler
 from app.services.orchestrator_service import OrchestratorService
+from app.engine.scan_watchdog import ScanWatchdog
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +81,7 @@ async def lifespan(app: FastAPI):
     scan_consumer = ScanConsumer(
         redis=_redis,
         consumer_name=CONSUMER_NAME,
-        handler=orch_svc.handle_scan_created,
+        handler=orch_svc.handle_scan_event,
     )
 
     # Start job event handler
@@ -92,9 +93,13 @@ async def lifespan(app: FastAPI):
     )
 
     # Launch as background tasks
+    # Start scan watchdog (detects stale scans/nodes)
+    watchdog = ScanWatchdog(_session_factory, _redis)
+
     _consumer_tasks.append(asyncio.create_task(scan_consumer.start()))
     _consumer_tasks.append(asyncio.create_task(job_handler.start()))
-    logger.info("Event consumers started (consumer=%s)", CONSUMER_NAME)
+    _consumer_tasks.append(asyncio.create_task(watchdog.start()))
+    logger.info("Event consumers + watchdog started (consumer=%s)", CONSUMER_NAME)
 
     yield
 
@@ -102,6 +107,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down orchestrator...")
     scan_consumer._running = False
     job_handler._running = False
+    watchdog.stop()
 
     for task in _consumer_tasks:
         task.cancel()

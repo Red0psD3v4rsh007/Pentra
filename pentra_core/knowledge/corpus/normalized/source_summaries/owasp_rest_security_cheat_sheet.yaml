@@ -1,0 +1,44 @@
+key: owasp_rest_security_cheat_sheet
+title: OWASP REST Security Cheat Sheet normalized source summary
+source_key: owasp_rest_security_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-26T00:00:00Z"
+summary: >
+  OWASP's REST security guidance gives Pentra the API-specific constraints that
+  matter for real targets: method discipline, content-type validation,
+  stateless token handling, and out-of-order workflow defense.
+facts:
+  - fact_key: owasp_rest_security_api_constraints
+    title: REST API security constraints
+    fact_type: api_constraint_summary
+    summary: >
+      REST endpoints should enforce allowed methods, validate request and
+      response content types, apply object-level access control, and treat JWT
+      or bearer tokens as authorization context rather than proof of access.
+    tags:
+      - rest_api
+      - content_type_validation
+      - authorization
+    data:
+      high_signal_rest_constraints:
+        - restrict_http_methods
+        - validate_request_content_types
+        - validate_response_content_types
+        - object_level_access_control
+        - stateless_token_validation
+        - prevent_out_of_order_api_execution
+      replay_implications:
+        - Preserve content-type and method deltas as part of the replay context.
+        - Separate authorization drift from parser or content-type drift.
+    citations:
+      - fact_key: owasp_rest_security_api_constraints
+        title: OWASP REST Security Cheat Sheet
+        source_key: owasp_rest_security_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-26T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - rest_api_guidance
+          - stateless_auth_constraints
+          - api_authorization_guidance

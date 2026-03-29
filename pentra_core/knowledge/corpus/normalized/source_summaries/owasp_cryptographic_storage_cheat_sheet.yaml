@@ -1,0 +1,43 @@
+key: owasp_cryptographic_storage_cheat_sheet
+title: OWASP Cryptographic Storage Cheat Sheet normalized source summary
+source_key: owasp_cryptographic_storage_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's cryptographic-storage guidance gives Pentra the design constraints
+  for crypto findings: key handling, algorithm choice, and data-at-rest
+  boundaries matter more than cipher-name spotting alone.
+facts:
+  - fact_key: owasp_crypto_storage_core_controls
+    title: Cryptographic-storage core controls
+    fact_type: crypto_storage_summary
+    summary: >
+      Cryptographic review should preserve which data needs protection, where
+      keys live, how algorithms are selected, and whether encryption context is
+      separated from ordinary application storage.
+    tags:
+      - crypto
+      - storage
+      - keys
+    data:
+      high_signal_crypto_controls:
+        - protect_sensitive_data_at_rest
+        - separate_key_storage_from_data_storage
+        - modern_algorithm_selection
+        - secure_random_generation
+        - lifecycle_for_keys_and_tokens
+      replay_implications:
+        - Treat crypto issues as artifact-backed findings, not route noise.
+        - Preserve key-storage and token-material context for planner ranking.
+    citations:
+      - fact_key: owasp_crypto_storage_core_controls
+        title: OWASP Cryptographic Storage Cheat Sheet
+        source_key: owasp_cryptographic_storage_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - crypto_storage_guidance
+          - encryption_design_guidance
+          - key_storage_guidance

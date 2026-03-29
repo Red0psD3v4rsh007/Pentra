@@ -11,8 +11,7 @@ import {
   XCircle,
 } from "lucide-react"
 
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { TopBar } from "@/components/dashboard/top-bar"
+import { CommandLayout } from "@/components/layout/command-layout"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   Empty,
@@ -26,7 +25,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { useScans } from "@/hooks/use-scans"
 import { cn } from "@/lib/utils"
 
-const statusConfig = {
+const statusConfig: Record<string, { icon: typeof RefreshCw; dotClass: string; textClass: string }> = {
   running: {
     icon: RefreshCw,
     dotClass: "bg-primary animate-pulse",
@@ -47,22 +46,38 @@ const statusConfig = {
     dotClass: "bg-muted-foreground",
     textClass: "text-muted-foreground",
   },
-} as const
+  pending: {
+    icon: Clock,
+    dotClass: "bg-muted-foreground animate-pulse",
+    textClass: "text-muted-foreground",
+  },
+  cancelled: {
+    icon: XCircle,
+    dotClass: "bg-medium",
+    textClass: "text-medium",
+  },
+  cancelling: {
+    icon: RefreshCw,
+    dotClass: "bg-medium animate-pulse",
+    textClass: "text-medium",
+  },
+}
+
+const defaultStatus = {
+  icon: Clock,
+  dotClass: "bg-muted-foreground",
+  textClass: "text-muted-foreground",
+}
 
 export default function ScansPage() {
   const { scans, isLoading, isRefreshing, error, refresh } = useScans()
 
   return (
-    <div className="min-h-screen bg-background">
-      <DashboardSidebar />
-
-      <div className="pl-60 transition-all duration-200">
-        <TopBar title="Scans" />
-
-        <main className="p-6">
-          <div className="mb-6 flex items-center justify-between">
+    <CommandLayout title="Attacks">
+        <main className="p-5">
+          <div className="mb-5 flex items-center justify-between">
             <div>
-              <h1 className="text-lg font-semibold text-foreground">All Scans</h1>
+              <h1 className="text-lg font-semibold text-foreground font-heading">All Attacks</h1>
               <p className="text-sm text-muted-foreground">
                 Live scan queue, status, progress, and findings from the Pentra API.
               </p>
@@ -152,7 +167,7 @@ export default function ScansPage() {
 
                 <tbody className="divide-y divide-border">
                   {scans.map((scan) => {
-                    const status = statusConfig[scan.status]
+                    const status = statusConfig[scan.status] ?? defaultStatus
                     const totalFindings =
                       scan.findings.critical +
                       scan.findings.high +
@@ -245,7 +260,6 @@ export default function ScansPage() {
             </div>
           )}
         </main>
-      </div>
-    </div>
+    </CommandLayout>
   )
 }

@@ -1,0 +1,15 @@
+name: semgrep
+worker_family: vuln
+image: returntocorp/semgrep:latest
+command:
+  - semgrep
+  - scan
+  - --config
+  - auto
+  - --json
+  - --output
+  - "{output_dir}/semgrep.json"
+  - "{input_dir}/repo"
+output_parser: json
+artifact_type: vulnerabilities
+default_timeout: 1800

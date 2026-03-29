@@ -1,4 +1,4 @@
-"""Scan consumer — reads scan.created events from Redis Streams.
+"""Scan consumer — reads durable scan events from Redis Streams.
 
 Runs as an async background task during the orchestrator's lifespan.
 Uses XREADGROUP with the ``orchestrator-cg`` consumer group for
@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from typing import Any, Callable, Awaitable
 
 import redis.asyncio as aioredis
@@ -20,6 +21,8 @@ STREAM_SCAN_EVENTS = "pentra:stream:scan_events"
 CG_ORCHESTRATOR = "orchestrator-cg"
 BLOCK_MS = 5000  # 5s block on XREADGROUP
 BATCH_SIZE = 10
+RECLAIM_BATCH_SIZE = int(os.getenv("ORCHESTRATOR_RECLAIM_BATCH_SIZE", "20"))
+RECLAIM_IDLE_MS = int(os.getenv("ORCHESTRATOR_RECLAIM_IDLE_MS", "5000"))
 
 
 class ScanConsumer:
@@ -50,6 +53,8 @@ class ScanConsumer:
 
         while self._running:
             try:
+                await self._reclaim_idle_messages()
+
                 messages = await self._redis.xreadgroup(
                     groupname=CG_ORCHESTRATOR,
                     consumername=self._consumer,
@@ -96,6 +101,39 @@ class ScanConsumer:
         except Exception:
             logger.exception("Failed to process message %s — will redeliver", msg_id)
             # Don't ACK — message will be redelivered on next XREADGROUP
+
+    async def _reclaim_idle_messages(self) -> int:
+        """Claim idle pending messages left behind by interrupted consumers."""
+        try:
+            result = await self._redis.xautoclaim(
+                STREAM_SCAN_EVENTS,
+                CG_ORCHESTRATOR,
+                self._consumer,
+                RECLAIM_IDLE_MS,
+                "0-0",
+                count=RECLAIM_BATCH_SIZE,
+            )
+        except aioredis.ResponseError as exc:
+            if "NOGROUP" in str(exc):
+                return 0
+            raise
+
+        entries: list[tuple[str, dict[str, str]]] = []
+        if isinstance(result, (list, tuple)) and len(result) >= 2:
+            raw_entries = result[1] or []
+            entries = list(raw_entries)
+
+        if not entries:
+            return 0
+
+        logger.info(
+            "Reclaimed %d idle scan event(s) on %s",
+            len(entries),
+            STREAM_SCAN_EVENTS,
+        )
+        for msg_id, fields in entries:
+            await self._process_message(msg_id, fields)
+        return len(entries)
 
     async def _ensure_consumer_group(self) -> None:
         """Create the consumer group if it doesn't exist."""

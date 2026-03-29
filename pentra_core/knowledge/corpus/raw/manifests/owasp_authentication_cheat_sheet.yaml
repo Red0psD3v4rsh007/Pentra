@@ -1,0 +1,31 @@
+key: owasp_authentication_cheat_sheet_phase1
+phase: 1
+source_key: owasp_authentication_cheat_sheet
+title: OWASP Authentication Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official authentication workflow guidance that shapes login,
+  reauthentication, MFA-adjacent flow handling, and anti-automation signals.
+parser_key: manual_structured_summary
+normalization_units:
+  - authentication_workflow_summary
+target_outputs:
+  - normalized/source_summaries/owasp_authentication_cheat_sheet.yaml
+focus_areas:
+  - login_workflows
+  - reauthentication
+  - throttling_and_lockout
+usage_notes: >
+  Preserve workflow boundaries and risk-event triggers. Do not turn generic
+  auth guidance into vulnerability truth by itself.
+citations:
+  - fact_key: owasp_authentication_cheat_sheet_source
+    title: OWASP Authentication Cheat Sheet
+    source_key: owasp_authentication_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-27T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - authentication_workflow_guidance
+      - anti_automation_guidance
+      - password_and_recovery_guidance

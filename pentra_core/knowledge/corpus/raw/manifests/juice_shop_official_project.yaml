@@ -1,0 +1,46 @@
+key: juice_shop_official_project_phase1
+phase: 1
+source_key: juice_shop_official_project
+title: OWASP Juice Shop project acquisition manifest
+acquisition_scope: >
+  Capture official Juice Shop project identity, training purpose, supported
+  challenge-family context, and release-truth anchors for the local benchmark
+  lane.
+parser_key: manual_structured_summary
+normalization_units:
+  - project_identity_summary
+  - benchmark_context_summary
+  - official_category_taxonomy_summary
+target_outputs:
+  - normalized/source_summaries/juice_shop_official_project.yaml
+focus_areas:
+  - benchmark_target_identity
+  - challenge_family_mapping
+  - official_training_context
+  - release_anchor
+usage_notes: >
+  Treat the official Juice Shop project and releases as public project truth
+  for target identity and version drift checks.
+citations:
+  - fact_key: juice_shop_official_project_source
+    title: OWASP Juice Shop Project Page
+    source_key: juice_shop_official_project
+    source_url: https://owasp.org/www-project-juice-shop/
+    trust_tier: official_public
+    retrieved_at: "2026-03-24T12:00:00+05:30"
+    extraction_mode: browse
+    authority_for:
+      - benchmark_target_identity
+      - project_scope
+      - official_training_context
+  - fact_key: juice_shop_github_releases_source
+    title: OWASP Juice Shop GitHub Releases
+    source_key: juice_shop_github_releases
+    source_url: https://github.com/juice-shop/juice-shop/releases
+    trust_tier: official_project
+    retrieved_at: "2026-03-24T12:00:00+05:30"
+    extraction_mode: browse
+    authority_for:
+      - source_version_truth
+      - release_drift_detection
+    source_version: "19.1.1"

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react"
 import {
   CheckCircle,
   Download,
+  FileCode2,
   FileJson,
   FileSpreadsheet,
   FileText,
@@ -13,8 +14,7 @@ import {
   Target,
 } from "lucide-react"
 
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { TopBar } from "@/components/dashboard/top-bar"
+import { CommandLayout } from "@/components/layout/command-layout"
 import { Spinner } from "@/components/ui/spinner"
 import {
   downloadScanReportExport,
@@ -47,6 +47,7 @@ const exportFormats: Array<{ id: "all" | ReportExportFormat; label: string; icon
   { id: "markdown", label: "MD", icon: FileText },
   { id: "json", label: "JSON", icon: FileJson },
   { id: "csv", label: "CSV", icon: FileSpreadsheet },
+  { id: "html", label: "HTML", icon: FileCode2 },
 ]
 
 export default function ReportsPage() {
@@ -112,11 +113,8 @@ export default function ReportsPage() {
   )
 
   return (
-    <div className="min-h-screen bg-background">
-      <DashboardSidebar />
+    <CommandLayout title="Reports">
 
-      <div className="pl-60 transition-all duration-200">
-        <TopBar title="Reports" />
 
         <main className="p-6">
           <div className="mb-6 flex items-center justify-between gap-4">
@@ -221,7 +219,7 @@ export default function ReportsPage() {
                   {filteredReports.map((report) => {
                     const generatedAt = report.completedAt || report.updatedAt
                     const preferredFormats: ReportExportFormat[] =
-                      formatFilter === "all" ? ["markdown", "json", "csv"] : [formatFilter]
+                      formatFilter === "all" ? ["markdown", "json", "csv", "html"] : [formatFilter]
 
                     return (
                       <tr key={report.id} className="group transition-colors hover:bg-elevated/50">
@@ -296,7 +294,6 @@ export default function ReportsPage() {
             )}
           </div>
         </main>
-      </div>
-    </div>
+    </CommandLayout>
   )
 }

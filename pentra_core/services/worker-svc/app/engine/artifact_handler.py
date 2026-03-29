@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import uuid
 import xml.etree.ElementTree as ET
@@ -13,12 +12,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from pentra_common.storage.artifacts import sha256_json
+from pentra_common.storage.artifacts import get_artifact_store_root, sha256_json
 
 logger = logging.getLogger(__name__)
 
 # Where normalized artifacts are stored (local fs or S3-compatible path)
-ARTIFACT_STORE = os.getenv("ARTIFACT_STORE_PATH", "/tmp/pentra/artifacts")
+ARTIFACT_STORE = get_artifact_store_root()
 ARTIFACT_SCHEMA_VERSION = "2026-03-14"
 
 _SEVERITY_ORDER = ("critical", "high", "medium", "low", "info")
@@ -48,6 +47,7 @@ def normalize_output(
     execution_mode: str = "controlled_live_local",
     execution_provenance: str = "live",
     execution_reason: str | None = None,
+    execution_class: str | None = None,
 ) -> dict[str, Any]:
     """Read raw tool output and normalize it into Pentra's canonical artifact."""
     raw_items = _parse_output(output_dir, output_parser)
@@ -102,6 +102,7 @@ def normalize_output(
         "mode": execution_mode,
         "provenance": execution_provenance,
         "reason": execution_reason,
+        "class": execution_class,
     }
 
     artifact = {
@@ -129,6 +130,7 @@ def normalize_output(
             "execution_mode": execution_mode,
             "execution_provenance": execution_provenance,
             "execution_reason": execution_reason,
+            "execution_class": execution_class,
         },
     }
 
@@ -164,6 +166,7 @@ def build_execution_status_artifact(
     execution_mode: str,
     execution_provenance: str,
     execution_reason: str | None = None,
+    execution_class: str | None = None,
 ) -> dict[str, Any]:
     """Create a canonical artifact for blocked or non-executed runtime outcomes."""
     summary = {
@@ -177,6 +180,7 @@ def build_execution_status_artifact(
             "mode": execution_mode,
             "provenance": execution_provenance,
             "reason": execution_reason,
+            "class": execution_class,
         },
     }
     artifact = {
@@ -204,6 +208,7 @@ def build_execution_status_artifact(
             "execution_mode": execution_mode,
             "execution_provenance": execution_provenance,
             "execution_reason": execution_reason,
+            "execution_class": execution_class,
         },
     }
     artifact["metadata"]["checksum"] = sha256_json(
@@ -293,6 +298,8 @@ def _execution_status_message(
     if execution_provenance == "blocked":
         if execution_reason == "not_supported":
             return f"{tool_name} is not supported in the selected live mode."
+        if execution_reason == "approval_required":
+            return f"{tool_name} requires explicit operator approval in the selected live mode."
         if execution_reason == "target_policy_blocked":
             return f"{tool_name} was blocked by the selected live target policy."
     if execution_provenance == "simulated":
@@ -467,6 +474,22 @@ def _canonicalize_stateful_endpoints(raw_items: list[dict[str, Any]]) -> list[di
                     "auth_state": str(page.get("auth_state") or "none"),
                     "discovered_from": page.get("source_url"),
                     "interaction_kind": "page",
+                    "content_type": str(page.get("content_type") or ""),
+                    "response_preview": str(page.get("response_preview") or ""),
+                    "description": page.get("description"),
+                    "severity": page.get("severity"),
+                    "confidence": page.get("confidence"),
+                    "tool_source": page.get("tool_source"),
+                    "vulnerability_type": page.get("vulnerability_type"),
+                    "request": page.get("request"),
+                    "response": page.get("response"),
+                    "payload": page.get("payload"),
+                    "exploit_result": page.get("exploit_result"),
+                    "exploitability": page.get("exploitability"),
+                    "exploitability_score": page.get("exploitability_score"),
+                    "verification_state": page.get("verification_state"),
+                    "verification_confidence": page.get("verification_confidence"),
+                    "references": page.get("references") or [],
                 }
                 endpoints[key] = _merge_stateful_endpoint_item(endpoints.get(key), item)
 
@@ -506,6 +529,313 @@ def _canonicalize_stateful_endpoints(raw_items: list[dict[str, Any]]) -> list[di
                 }
                 endpoints[key] = _merge_stateful_endpoint_item(endpoints.get(key), item)
 
+        xss_candidates = container.get("xss_candidates")
+        if isinstance(xss_candidates, list):
+            for candidate in xss_candidates:
+                request_url = str(
+                    candidate.get("request_url")
+                    or candidate.get("url")
+                    or candidate.get("endpoint")
+                    or candidate.get("target")
+                    or ""
+                ).strip()
+                if not request_url:
+                    continue
+                key = request_url.lower()
+                item = {
+                    "url": request_url,
+                    "host": _host_from_url(request_url),
+                    "scheme": "https" if request_url.startswith("https://") else "http",
+                    "path": _path_from_url(request_url),
+                    "status_code": int(candidate.get("status_code", 200) or 200),
+                    "content_length": 0,
+                    "words": 0,
+                    "title": str(candidate.get("title") or "Browser-backed XSS candidate"),
+                    "webserver": "",
+                    "primary_technology": "",
+                    "tech_stack": [],
+                    "surface": str(candidate.get("surface") or "web"),
+                    "is_api": False,
+                    "route_group": candidate.get("route_group") or _route_group(request_url),
+                    "entity_key": _entity_key("endpoint", request_url),
+                    "requires_auth": bool(candidate.get("requires_auth", False)),
+                    "session_label": str(candidate.get("session_label") or "unauthenticated"),
+                    "auth_state": str(candidate.get("auth_state") or "none"),
+                    "interaction_kind": "xss_candidate",
+                    "description": candidate.get("description"),
+                    "severity": candidate.get("severity"),
+                    "confidence": candidate.get("confidence"),
+                    "tool_source": candidate.get("tool_source"),
+                    "vulnerability_type": candidate.get("vulnerability_type"),
+                    "request": candidate.get("request"),
+                    "response": candidate.get("response"),
+                    "payload": candidate.get("payload"),
+                    "exploit_result": candidate.get("exploit_result"),
+                    "exploitability": candidate.get("exploitability"),
+                    "exploitability_score": candidate.get("exploitability_score"),
+                    "verification_state": candidate.get("verification_state"),
+                    "verification_confidence": candidate.get("verification_confidence"),
+                    "references": candidate.get("references") or [],
+                    "challenge_family": candidate.get("challenge_family"),
+                    "attack_primitive": candidate.get("attack_primitive"),
+                    "workflow_state": candidate.get("workflow_state"),
+                    "workflow_stage": candidate.get("workflow_stage"),
+                    "planner_action": candidate.get("planner_action"),
+                    "proof_contract": candidate.get("proof_contract"),
+                    "target_profile": candidate.get("target_profile"),
+                    "capability_pack": candidate.get("capability_pack"),
+                    "triggering_condition": candidate.get("triggering_condition"),
+                    "source_context": candidate.get("source"),
+                    "sink_context": candidate.get("sink"),
+                    "route_context": candidate.get("route_context"),
+                    "planner_hook": candidate.get("planner_hook"),
+                    "cheatsheet_entry_keys": candidate.get("cheatsheet_entry_keys") or [],
+                    "payload_archetype_key": candidate.get("payload_archetype_key"),
+                    "payload_selector": candidate.get("payload_selector"),
+                    "payload_plan": candidate.get("payload_plan"),
+                    "verification_context": candidate.get("verification_context"),
+                }
+                endpoints[key] = _merge_stateful_endpoint_item(endpoints.get(key), item)
+
+        auth_candidates = container.get("auth_candidates")
+        if isinstance(auth_candidates, list):
+            for candidate in auth_candidates:
+                request_url = str(
+                    candidate.get("request_url")
+                    or candidate.get("url")
+                    or candidate.get("endpoint")
+                    or candidate.get("target")
+                    or ""
+                ).strip()
+                if not request_url:
+                    continue
+                key = request_url.lower()
+                item = {
+                    "url": request_url,
+                    "host": _host_from_url(request_url),
+                    "scheme": "https" if request_url.startswith("https://") else "http",
+                    "path": _path_from_url(request_url),
+                    "status_code": int(candidate.get("status_code", 200) or 200),
+                    "content_length": 0,
+                    "words": 0,
+                    "title": str(candidate.get("title") or "Multi-role auth candidate"),
+                    "webserver": "",
+                    "primary_technology": "",
+                    "tech_stack": [],
+                    "surface": str(candidate.get("surface") or "web"),
+                    "is_api": False,
+                    "route_group": candidate.get("route_group") or _route_group(request_url),
+                    "entity_key": _entity_key("endpoint", request_url),
+                    "requires_auth": bool(candidate.get("requires_auth", False)),
+                    "session_label": str(candidate.get("session_label") or "unauthenticated"),
+                    "auth_state": str(candidate.get("auth_state") or "none"),
+                    "interaction_kind": "auth_candidate",
+                    "description": candidate.get("description"),
+                    "severity": candidate.get("severity"),
+                    "confidence": candidate.get("confidence"),
+                    "tool_source": candidate.get("tool_source"),
+                    "vulnerability_type": candidate.get("vulnerability_type"),
+                    "request": candidate.get("request"),
+                    "response": candidate.get("response"),
+                    "payload": candidate.get("payload"),
+                    "exploit_result": candidate.get("exploit_result"),
+                    "exploitability": candidate.get("exploitability"),
+                    "exploitability_score": candidate.get("exploitability_score"),
+                    "verification_state": candidate.get("verification_state"),
+                    "verification_confidence": candidate.get("verification_confidence"),
+                    "references": candidate.get("references") or [],
+                    "challenge_family": candidate.get("challenge_family"),
+                    "attack_primitive": candidate.get("attack_primitive"),
+                    "workflow_state": candidate.get("workflow_state"),
+                    "workflow_stage": candidate.get("workflow_stage"),
+                    "planner_action": candidate.get("planner_action"),
+                    "proof_contract": candidate.get("proof_contract"),
+                    "target_profile": candidate.get("target_profile"),
+                    "capability_pack": candidate.get("capability_pack"),
+                    "triggering_condition": candidate.get("triggering_condition"),
+                    "route_context": candidate.get("route_context"),
+                    "verification_context": candidate.get("verification_context"),
+                }
+                endpoints[key] = _merge_stateful_endpoint_item(endpoints.get(key), item)
+
+        access_candidates = container.get("access_control_candidates")
+        if isinstance(access_candidates, list):
+            for candidate in access_candidates:
+                request_url = str(
+                    candidate.get("request_url")
+                    or candidate.get("url")
+                    or candidate.get("endpoint")
+                    or candidate.get("target")
+                    or ""
+                ).strip()
+                if not request_url:
+                    continue
+                challenge_family = str(candidate.get("challenge_family") or "").strip().lower()
+                vulnerability_type = str(candidate.get("vulnerability_type") or "").strip().lower()
+                interaction_kind = (
+                    "workflow_abuse_candidate"
+                    if challenge_family == "business_logic_abuse" or vulnerability_type in {"workflow_bypass", "parameter_tampering"}
+                    else "access_control_candidate"
+                )
+                key = request_url.lower()
+                item = {
+                    "url": request_url,
+                    "host": _host_from_url(request_url),
+                    "scheme": "https" if request_url.startswith("https://") else "http",
+                    "path": _path_from_url(request_url),
+                    "status_code": int(candidate.get("status_code", 200) or 200),
+                    "content_length": 0,
+                    "words": 0,
+                    "title": str(candidate.get("title") or "Access-control candidate"),
+                    "webserver": "",
+                    "primary_technology": "",
+                    "tech_stack": [],
+                    "surface": str(candidate.get("surface") or "web"),
+                    "is_api": False,
+                    "route_group": candidate.get("route_group") or _route_group(request_url),
+                    "entity_key": _entity_key("endpoint", request_url),
+                    "requires_auth": bool(candidate.get("requires_auth", False)),
+                    "session_label": str(candidate.get("session_label") or "unauthenticated"),
+                    "auth_state": str(candidate.get("auth_state") or "none"),
+                    "interaction_kind": interaction_kind,
+                    "description": candidate.get("description"),
+                    "severity": candidate.get("severity"),
+                    "confidence": candidate.get("confidence"),
+                    "tool_source": candidate.get("tool_source"),
+                    "vulnerability_type": candidate.get("vulnerability_type"),
+                    "request": candidate.get("request"),
+                    "response": candidate.get("response"),
+                    "payload": candidate.get("payload"),
+                    "exploit_result": candidate.get("exploit_result"),
+                    "exploitability": candidate.get("exploitability"),
+                    "exploitability_score": candidate.get("exploitability_score"),
+                    "verification_state": candidate.get("verification_state"),
+                    "verification_confidence": candidate.get("verification_confidence"),
+                    "references": candidate.get("references") or [],
+                    "challenge_family": candidate.get("challenge_family"),
+                    "attack_primitive": candidate.get("attack_primitive"),
+                    "workflow_state": candidate.get("workflow_state"),
+                    "workflow_stage": candidate.get("workflow_stage"),
+                    "planner_action": candidate.get("planner_action"),
+                    "proof_contract": candidate.get("proof_contract"),
+                    "target_profile": candidate.get("target_profile"),
+                    "capability_pack": candidate.get("capability_pack"),
+                    "triggering_condition": candidate.get("triggering_condition"),
+                    "route_context": candidate.get("route_context"),
+                    "verification_context": candidate.get("verification_context"),
+                }
+                endpoints[key] = _merge_stateful_endpoint_item(endpoints.get(key), item)
+
+        injection_candidates = container.get("injection_candidates")
+        if isinstance(injection_candidates, list):
+            for candidate in injection_candidates:
+                request_url = str(
+                    candidate.get("request_url")
+                    or candidate.get("url")
+                    or candidate.get("endpoint")
+                    or candidate.get("target")
+                    or ""
+                ).strip()
+                if not request_url:
+                    continue
+                key = request_url.lower()
+                item = {
+                    "url": request_url,
+                    "host": _host_from_url(request_url),
+                    "scheme": "https" if request_url.startswith("https://") else "http",
+                    "path": _path_from_url(request_url),
+                    "status_code": int(candidate.get("status_code", 200) or 200),
+                    "content_length": 0,
+                    "words": 0,
+                    "title": str(candidate.get("title") or "Injection capability candidate"),
+                    "webserver": "",
+                    "primary_technology": "",
+                    "tech_stack": [],
+                    "surface": str(candidate.get("surface") or "web"),
+                    "is_api": str(candidate.get("surface") or "").strip().lower() == "api",
+                    "route_group": candidate.get("route_group") or _route_group(request_url),
+                    "entity_key": _entity_key("endpoint", request_url),
+                    "requires_auth": bool(candidate.get("requires_auth", False)),
+                    "session_label": str(candidate.get("session_label") or "unauthenticated"),
+                    "auth_state": str(candidate.get("auth_state") or "none"),
+                    "interaction_kind": "injection_candidate",
+                    "description": candidate.get("description"),
+                    "severity": candidate.get("severity"),
+                    "confidence": candidate.get("confidence"),
+                    "tool_source": candidate.get("tool_source"),
+                    "vulnerability_type": candidate.get("vulnerability_type"),
+                    "request": candidate.get("request"),
+                    "response": candidate.get("response"),
+                    "payload": candidate.get("payload"),
+                    "exploit_result": candidate.get("exploit_result"),
+                    "exploitability": candidate.get("exploitability"),
+                    "exploitability_score": candidate.get("exploitability_score"),
+                    "verification_state": candidate.get("verification_state"),
+                    "verification_confidence": candidate.get("verification_confidence"),
+                    "references": candidate.get("references") or [],
+                    "challenge_family": candidate.get("challenge_family"),
+                    "attack_primitive": candidate.get("attack_primitive"),
+                    "workflow_state": candidate.get("workflow_state"),
+                    "workflow_stage": candidate.get("workflow_stage"),
+                    "planner_action": candidate.get("planner_action"),
+                    "proof_contract": candidate.get("proof_contract"),
+                    "target_profile": candidate.get("target_profile"),
+                    "capability_pack": candidate.get("capability_pack"),
+                    "triggering_condition": candidate.get("triggering_condition"),
+                    "route_context": candidate.get("route_context"),
+                    "verification_context": candidate.get("verification_context"),
+                }
+                endpoints[key] = _merge_stateful_endpoint_item(endpoints.get(key), item)
+
+        probe_findings = container.get("probe_findings")
+        if isinstance(probe_findings, list):
+            for finding in probe_findings:
+                request_url = str(
+                    finding.get("endpoint")
+                    or finding.get("url")
+                    or finding.get("target")
+                    or ""
+                ).strip()
+                if not request_url:
+                    continue
+                key = request_url.lower()
+                item = {
+                    "url": request_url,
+                    "host": _host_from_url(request_url),
+                    "scheme": "https" if request_url.startswith("https://") else "http",
+                    "path": _path_from_url(request_url),
+                    "status_code": int(finding.get("status_code", 200) or 200),
+                    "content_length": 0,
+                    "words": 0,
+                    "title": str(finding.get("title") or "Stateful probe finding"),
+                    "webserver": "",
+                    "primary_technology": "",
+                    "tech_stack": [],
+                    "surface": str(finding.get("surface") or _classify_surface(request_url, finding)),
+                    "is_api": _classify_surface(request_url, finding) == "api",
+                    "route_group": finding.get("route_group") or _route_group(request_url),
+                    "entity_key": _entity_key("endpoint", request_url),
+                    "requires_auth": bool(finding.get("requires_auth", False)),
+                    "session_label": str(finding.get("session_label") or "unauthenticated"),
+                    "auth_state": str(finding.get("auth_state") or "none"),
+                    "interaction_kind": "probe_finding",
+                    "description": finding.get("description"),
+                    "severity": finding.get("severity"),
+                    "confidence": finding.get("confidence"),
+                    "tool_source": finding.get("tool_source"),
+                    "vulnerability_type": finding.get("vulnerability_type"),
+                    "request": finding.get("request"),
+                    "response": finding.get("response"),
+                    "payload": finding.get("payload"),
+                    "exploit_result": finding.get("exploit_result"),
+                    "exploitability": finding.get("exploitability"),
+                    "exploitability_score": finding.get("exploitability_score"),
+                    "verification_state": finding.get("verification_state"),
+                    "verification_confidence": finding.get("verification_confidence"),
+                    "references": finding.get("references") or [],
+                }
+                endpoints[key] = _merge_stateful_endpoint_item(endpoints.get(key), item)
+
     return _sort_items(list(endpoints.values()))
 
 
@@ -519,8 +849,7 @@ def _merge_stateful_endpoint_item(
         return merged
 
     merged = dict(existing)
-    if not merged.get("title") and item.get("title"):
-        merged["title"] = item["title"]
+    merged["title"] = _prefer_finding_title(merged, item)
     merged["status_code"] = max(int(merged.get("status_code", 0) or 0), int(item.get("status_code", 0) or 0))
     merged["content_length"] = max(
         int(merged.get("content_length", 0) or 0),
@@ -551,6 +880,46 @@ def _merge_stateful_endpoint_item(
                 *[str(value) for value in item.get("hidden_field_names", [])],
             }
         )
+    for key in (
+        "content_type",
+        "response_preview",
+        "description",
+        "severity",
+        "confidence",
+        "tool_source",
+        "vulnerability_type",
+        "request",
+        "response",
+        "payload",
+        "exploit_result",
+        "exploitability",
+        "exploitability_score",
+        "verification_state",
+        "verification_confidence",
+        "challenge_family",
+        "attack_primitive",
+        "workflow_state",
+        "workflow_stage",
+        "planner_action",
+        "proof_contract",
+        "target_profile",
+        "capability_pack",
+        "triggering_condition",
+        "source_context",
+        "sink_context",
+        "route_context",
+        "planner_hook",
+        "cheatsheet_entry_keys",
+        "payload_archetype_key",
+        "payload_selector",
+        "payload_plan",
+        "verification_context",
+    ):
+        merged[key] = _prefer_non_empty(merged.get(key), item.get(key))
+    merged["references"] = _merge_reference_values(
+        list(existing.get("references") or []),
+        list(item.get("references") or []),
+    )
     return merged
 
 
@@ -573,6 +942,7 @@ def _canonicalize_vulnerabilities(
             or item.get("info", {}).get("severity")
             or item.get("risk")
         )
+        request = item.get("request") or item.get("curl_verify")
         target = str(
             item.get("matched-at")
             or item.get("url")
@@ -580,6 +950,14 @@ def _canonicalize_vulnerabilities(
             or item.get("endpoint")
             or item.get("target")
             or item.get("host")
+            or _last_url(
+                str(
+                    request
+                    or item.get("curl_verify")
+                    or item.get("content")
+                    or ""
+                )
+            )
             or "unknown"
         )
         title = str(
@@ -592,6 +970,7 @@ def _canonicalize_vulnerabilities(
         )
         description = (
             item.get("description")
+            or item.get("impact")
             or item.get("desc")
             or item.get("info", {}).get("description")
             or ""
@@ -601,10 +980,9 @@ def _canonicalize_vulnerabilities(
             or item.get("solution")
             or item.get("info", {}).get("remediation")
         )
-        request = item.get("request")
         response = item.get("response")
         payload = item.get("payload")
-        exploit_result = item.get("exploit_result")
+        exploit_result = item.get("exploit_result") or item.get("impact")
         cve_values = _normalize_cve_values(item.get("cve") or item.get("cve_id") or item.get("info", {}).get("classification", {}).get("cve-id"))
         cvss_score = _normalize_cvss_score(
             item.get("cvss_score")
@@ -643,6 +1021,8 @@ def _canonicalize_vulnerabilities(
             "title": title,
             "severity": severity,
             "confidence": confidence,
+            "verification_state": item.get("verification_state"),
+            "verification_confidence": item.get("verification_confidence"),
             "target": target_host or target,
             "endpoint": target if "://" in target or target.startswith("/") else None,
             "description": description,
@@ -702,7 +1082,11 @@ def _canonicalize_sqlmap_findings(raw_items: list[dict[str, Any]]) -> list[dict[
                 merged["method"] = method
             continue
 
-        if relative_path.endswith("/log") or filename == "log" or "sqlmap identified" in content.lower():
+        if (
+            relative_path.endswith("/log")
+            or filename == "log"
+            or _looks_like_sqlmap_confirmation(content)
+        ):
             _merge_sqlmap_log_details(merged, content)
             continue
 
@@ -727,6 +1111,16 @@ def _canonicalize_sqlmap_findings(raw_items: list[dict[str, Any]]) -> list[dict[
     titles = _dedupe_strings(merged.get("titles") or [])
     payloads = _dedupe_strings(merged.get("payloads") or [])
     dbms = str(merged.get("dbms") or "").strip()
+    raw_text = "\n".join(raw_snippets)
+    if not _sqlmap_detection_confirmed(
+        raw_text=raw_text,
+        parameter=parameter,
+        techniques=techniques,
+        titles=titles,
+        payloads=payloads,
+        dbms=dbms,
+    ):
+        return []
 
     description_parts: list[str] = []
     if parameter and endpoint:
@@ -797,6 +1191,53 @@ def _canonicalize_sqlmap_findings(raw_items: list[dict[str, Any]]) -> list[dict[
             "finding_key": finding_key,
         }
     ]
+
+
+def _looks_like_sqlmap_confirmation(content: str) -> bool:
+    lowered = content.lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "sqlmap resumed the following injection point",
+            "sqlmap identified the following injection point",
+            "parameter:",
+            "\ntype:",
+            "\ntitle:",
+            "\npayload:",
+            "back-end dbms:",
+        )
+    )
+
+
+def _sqlmap_detection_confirmed(
+    *,
+    raw_text: str,
+    parameter: str,
+    techniques: list[str],
+    titles: list[str],
+    payloads: list[str],
+    dbms: str,
+) -> bool:
+    lowered = raw_text.lower()
+    negative_markers = (
+        "might not be injectable",
+        "does not appear to be injectable",
+        "all tested parameters do not appear to be injectable",
+        "no parameter(s) found for testing",
+    )
+    if any(marker in lowered for marker in negative_markers):
+        return False
+    if parameter and (techniques or titles or payloads):
+        return True
+    if parameter and dbms:
+        return True
+    return any(
+        marker in lowered
+        for marker in (
+            "sqlmap resumed the following injection point",
+            "sqlmap identified the following injection point",
+        )
+    )
 
 
 def _parse_sqlmap_target_descriptor(content: str) -> tuple[str, str]:
@@ -990,7 +1431,15 @@ def _extract_findings(
 ) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
 
-    if artifact_type not in _VULNERABILITY_ARTIFACT_TYPES | _IMPACT_ARTIFACT_TYPES:
+    if artifact_type == "endpoints":
+        items = [
+            item
+            for item in items
+            if str(item.get("vulnerability_type") or "").strip()
+        ]
+        if not items:
+            return findings
+    elif artifact_type not in _VULNERABILITY_ARTIFACT_TYPES | _IMPACT_ARTIFACT_TYPES:
         return findings
 
     source_type = "scanner"
@@ -998,15 +1447,32 @@ def _extract_findings(
         source_type = "ai_analysis"
     elif artifact_type in _IMPACT_ARTIFACT_TYPES:
         source_type = "exploit_verify"
-    verification_state = _verification_state_for_source(source_type)
 
     for item in items:
         title = str(item.get("title") or item.get("name") or f"{tool_name} finding")
         severity = _normalize_severity(item.get("severity"))
-        target = str(item.get("target") or item.get("endpoint") or "unknown")
-        endpoint = item.get("endpoint")
+        verification_state = _resolve_verification_state(
+            item.get("verification_state"),
+            source_type=source_type,
+        )
+        verification_confidence = _normalize_verification_confidence(
+            item.get("verification_confidence"),
+            default_confidence=item.get("confidence"),
+            severity=severity,
+            verification_state=verification_state,
+        )
+        endpoint = item.get("endpoint") or item.get("url")
+        target = str(
+            item.get("target")
+            or item.get("host")
+            or endpoint
+            or "unknown"
+        )
         cve_id = item.get("cve_id")
-        confidence = int(item.get("confidence") or _normalize_confidence(None, severity))
+        confidence = max(
+            int(item.get("confidence") or _normalize_confidence(None, severity)),
+            verification_confidence,
+        )
         fingerprint = sha256_json(
             {
                 "family": item.get("vulnerability_type") or item.get("title") or title,
@@ -1032,9 +1498,70 @@ def _extract_findings(
                 "primary_technology": item.get("primary_technology"),
                 "exploitability": item.get("exploitability"),
                 "exploitability_score": item.get("exploitability_score"),
+                "challenge_family": item.get("challenge_family"),
+                "attack_primitive": item.get("attack_primitive"),
+                "workflow_state": item.get("workflow_state"),
+                "workflow_stage": item.get("workflow_stage"),
+                "planner_action": item.get("planner_action"),
+                "proof_contract": item.get("proof_contract"),
+                "target_profile": item.get("target_profile"),
+                "payload_archetype_key": item.get("payload_archetype_key"),
                 "verification_state": verification_state,
-                "verification_confidence": confidence,
+                "verification_confidence": verification_confidence,
                 "verified": verification_state == "verified",
+            },
+            "metadata": {
+                **(
+                    {"verified_at": _utc_now()}
+                    if verification_state == "verified"
+                    else {}
+                ),
+                **(
+                    {"verification_context": item.get("verification_context")}
+                    if isinstance(item.get("verification_context"), dict)
+                    else {}
+                ),
+                **({"capability_pack": item.get("capability_pack")} if item.get("capability_pack") else {}),
+                **(
+                    {"triggering_condition": item.get("triggering_condition")}
+                    if item.get("triggering_condition")
+                    else {}
+                ),
+                **(
+                    {"source_context": item.get("source_context")}
+                    if isinstance(item.get("source_context"), dict)
+                    else {}
+                ),
+                **(
+                    {"sink_context": item.get("sink_context")}
+                    if isinstance(item.get("sink_context"), dict)
+                    else {}
+                ),
+                **(
+                    {"route_context": item.get("route_context")}
+                    if isinstance(item.get("route_context"), dict)
+                    else {}
+                ),
+                **(
+                    {"planner_hook": item.get("planner_hook")}
+                    if isinstance(item.get("planner_hook"), dict)
+                    else {}
+                ),
+                **(
+                    {"cheatsheet_entry_keys": item.get("cheatsheet_entry_keys")}
+                    if isinstance(item.get("cheatsheet_entry_keys"), list)
+                    else {}
+                ),
+                **(
+                    {"payload_selector": item.get("payload_selector")}
+                    if isinstance(item.get("payload_selector"), dict)
+                    else {}
+                ),
+                **(
+                    {"payload_plan": item.get("payload_plan")}
+                    if isinstance(item.get("payload_plan"), dict)
+                    else {}
+                ),
             },
         }
         findings.append(
@@ -1377,6 +1904,9 @@ def _extract_stateful_context(raw_items: list[dict[str, Any]]) -> dict[str, int]
     authenticated_page_count = 0
 
     for item in raw_items:
+        capability = item.get("browser_xss_capability")
+        if isinstance(capability, dict):
+            authenticated_page_count += 0
         sessions = item.get("sessions")
         if isinstance(sessions, list):
             for session in sessions:
@@ -1410,6 +1940,202 @@ def _extract_stateful_context(raw_items: list[dict[str, Any]]) -> dict[str, int]
         "workflow_count": workflow_count,
         "replay_count": replay_count,
         "authenticated_page_count": authenticated_page_count,
+        "capability_pack_count": sum(
+            len(item.get("capabilities") or {})
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "xss_candidate_count": sum(
+            len(item.get("xss_candidates") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "browser_xss_planner_hook_count": sum(
+            len((item.get("browser_xss_capability") or {}).get("planner_hooks") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "browser_xss_route_count": sum(
+            len((item.get("browser_xss_capability") or {}).get("route_assessments") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "browser_xss_negative_route_count": sum(
+            int(((item.get("browser_xss_capability") or {}).get("route_assessment_counts") or {}).get("negative_evidence_routes") or 0)
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "browser_xss_ai_advisory_ready_count": sum(
+            1
+            for item in raw_items
+            if isinstance(item, dict)
+            and bool(((item.get("browser_xss_capability") or {}).get("ai_advisory_ready")))
+        ),
+        "browser_xss_ai_focus_route_count": sum(
+            len((((item.get("browser_xss_capability") or {}).get("ai_advisory_bundle") or {}).get("focus_routes") or []))
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "auth_candidate_count": sum(
+            len(item.get("auth_candidates") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "multi_role_auth_planner_hook_count": sum(
+            len((item.get("multi_role_stateful_auth_capability") or {}).get("planner_hooks") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "multi_role_auth_route_count": sum(
+            len((item.get("multi_role_stateful_auth_capability") or {}).get("route_assessments") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "multi_role_auth_negative_route_count": sum(
+            int(((item.get("multi_role_stateful_auth_capability") or {}).get("route_assessment_counts") or {}).get("negative_evidence_routes") or 0)
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "multi_role_auth_ai_advisory_ready_count": sum(
+            1
+            for item in raw_items
+            if isinstance(item, dict)
+            and bool(((item.get("multi_role_stateful_auth_capability") or {}).get("ai_advisory_ready")))
+        ),
+        "multi_role_auth_ai_focus_route_count": sum(
+            len((((item.get("multi_role_stateful_auth_capability") or {}).get("ai_advisory_bundle") or {}).get("focus_routes") or []))
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "access_control_candidate_count": sum(
+            len(item.get("access_control_candidates") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "access_control_workflow_planner_hook_count": sum(
+            len((item.get("access_control_workflow_abuse_capability") or {}).get("planner_hooks") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "access_control_workflow_route_count": sum(
+            len((item.get("access_control_workflow_abuse_capability") or {}).get("route_assessments") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "access_control_workflow_negative_route_count": sum(
+            int(((item.get("access_control_workflow_abuse_capability") or {}).get("route_assessment_counts") or {}).get("negative_evidence_routes") or 0)
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "access_control_workflow_ai_advisory_ready_count": sum(
+            1
+            for item in raw_items
+            if isinstance(item, dict)
+            and bool(((item.get("access_control_workflow_abuse_capability") or {}).get("ai_advisory_ready")))
+        ),
+        "access_control_workflow_ai_focus_route_count": sum(
+            len((((item.get("access_control_workflow_abuse_capability") or {}).get("ai_advisory_bundle") or {}).get("focus_routes") or []))
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "injection_candidate_count": sum(
+            len(item.get("injection_candidates") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "injection_planner_hook_count": sum(
+            len((item.get("injection_capability") or {}).get("planner_hooks") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "injection_route_count": sum(
+            len((item.get("injection_capability") or {}).get("route_assessments") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "injection_negative_route_count": sum(
+            int(((item.get("injection_capability") or {}).get("route_assessment_counts") or {}).get("negative_evidence_routes") or 0)
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "injection_ai_advisory_ready_count": sum(
+            1
+            for item in raw_items
+            if isinstance(item, dict)
+            and bool(((item.get("injection_capability") or {}).get("ai_advisory_ready")))
+        ),
+        "injection_ai_focus_route_count": sum(
+            len((((item.get("injection_capability") or {}).get("ai_advisory_bundle") or {}).get("focus_routes") or []))
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "parser_file_candidate_count": sum(
+            len(item.get("parser_file_candidates") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "parser_file_planner_hook_count": sum(
+            len((item.get("parser_file_abuse_capability") or {}).get("planner_hooks") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "parser_file_route_count": sum(
+            len((item.get("parser_file_abuse_capability") or {}).get("route_assessments") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "parser_file_negative_route_count": sum(
+            int(((item.get("parser_file_abuse_capability") or {}).get("route_assessment_counts") or {}).get("negative_evidence_routes") or 0)
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "parser_file_ai_advisory_ready_count": sum(
+            1
+            for item in raw_items
+            if isinstance(item, dict)
+            and bool(((item.get("parser_file_abuse_capability") or {}).get("ai_advisory_ready")))
+        ),
+        "parser_file_ai_focus_route_count": sum(
+            len((((item.get("parser_file_abuse_capability") or {}).get("ai_advisory_bundle") or {}).get("focus_routes") or []))
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "disclosure_candidate_count": sum(
+            len(item.get("disclosure_candidates") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "disclosure_planner_hook_count": sum(
+            len((item.get("disclosure_misconfig_crypto_capability") or {}).get("planner_hooks") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "disclosure_route_count": sum(
+            len((item.get("disclosure_misconfig_crypto_capability") or {}).get("route_assessments") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "disclosure_negative_route_count": sum(
+            int(((item.get("disclosure_misconfig_crypto_capability") or {}).get("route_assessment_counts") or {}).get("negative_evidence_routes") or 0)
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "disclosure_ai_advisory_ready_count": sum(
+            1
+            for item in raw_items
+            if isinstance(item, dict)
+            and bool(((item.get("disclosure_misconfig_crypto_capability") or {}).get("ai_advisory_ready")))
+        ),
+        "disclosure_ai_focus_route_count": sum(
+            len((((item.get("disclosure_misconfig_crypto_capability") or {}).get("ai_advisory_bundle") or {}).get("focus_routes") or []))
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
+        "probe_finding_count": sum(
+            len(item.get("probe_findings") or [])
+            for item in raw_items
+            if isinstance(item, dict)
+        ),
     }
 
 
@@ -1512,6 +2238,42 @@ def _classify_finding_family(
     text = " ".join(
         part for part in (title, description, str(payload or ""), tool_name, target) if part
     ).lower()
+    if ("introspection" in text or "__schema" in text) and "graphql" in text:
+        return "graphql_introspection"
+    if "graphql" in text and any(
+        marker in text
+        for marker in (
+            "denial of service",
+            "batch queries",
+            "alias overloading",
+            "field duplication",
+            "directive overloading",
+            "circular-query",
+            "circular query",
+        )
+    ):
+        return "graphql_dos"
+    if "graphql" in text and any(
+        marker in text
+        for marker in (
+            "csrf",
+            "allowed over get",
+            "url-encoded query",
+            "get method query support",
+        )
+    ):
+        return "csrf"
+    if "graphql" in text and any(
+        marker in text
+        for marker in (
+            "graphiql",
+            "playground",
+            "field suggestions",
+            "trace mode",
+            "unhandled errors",
+        )
+    ):
+        return "debug_exposure"
     family_rules = [
         ("sql_injection", ("sql injection", "injectable", "sqli")),
         ("idor", ("idor", "broken access control", "object level authorization")),
@@ -1520,7 +2282,6 @@ def _classify_finding_family(
         ("privilege_escalation", ("privilege escalation", "privilege indicators")),
         ("unsafe_deserialization", ("deserialization", "serialized object", "ysoserial")),
         ("openapi_exposure", ("openapi", "swagger")),
-        ("graphql_introspection", ("graphql", "introspection")),
         ("debug_exposure", ("debug", "stack trace")),
         ("cors_misconfiguration", ("cors", "access-control-allow-origin")),
         ("credential_exposure", ("credential", "secret", "token leak")),
@@ -1562,6 +2323,33 @@ def _verification_state_for_source(source_type: str) -> str:
     }.get(source_type, "detected")
 
 
+def _resolve_verification_state(value: Any, *, source_type: str) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"verified", "suspected", "detected"}:
+        return normalized
+    return _verification_state_for_source(source_type)
+
+
+def _normalize_verification_confidence(
+    value: Any,
+    *,
+    default_confidence: Any,
+    severity: str,
+    verification_state: str,
+) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = _normalize_confidence(default_confidence, severity)
+
+    minimum = 90 if verification_state == "verified" else 0
+    return max(minimum, min(parsed, 100))
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 def _infer_primary_technology(item: dict[str, Any], target: str) -> str:
     technologies = _normalize_technologies(
         item.get("technologies")
@@ -1594,6 +2382,7 @@ def _merge_vulnerability_items(
         return candidate
 
     merged = dict(existing)
+    merged["title"] = _prefer_finding_title(merged, candidate)
     if _severity_rank(candidate.get("severity", "info")) > _severity_rank(merged.get("severity", "info")):
         merged["severity"] = candidate.get("severity")
     merged["confidence"] = max(int(merged.get("confidence", 0) or 0), int(candidate.get("confidence", 0) or 0))
@@ -1609,6 +2398,8 @@ def _merge_vulnerability_items(
         "response",
         "exploit_result",
         "primary_technology",
+        "verification_state",
+        "verification_confidence",
     ):
         merged[key] = _prefer_non_empty(merged.get(key), candidate.get(key))
     if _exploitability_score(str(candidate.get("exploitability", "low"))) > _exploitability_score(str(merged.get("exploitability", "low"))):
@@ -1624,6 +2415,29 @@ def _prefer_non_empty(current: Any, candidate: Any) -> Any:
         return candidate
     if len(candidate_value) > len(current_value):
         return candidate
+    return current
+
+
+def _prefer_finding_title(existing: dict[str, Any], candidate: dict[str, Any]) -> str:
+    current = str(existing.get("title") or "").strip()
+    incoming = str(candidate.get("title") or "").strip()
+    if not current:
+        return incoming
+    if not incoming:
+        return current
+
+    current_lower = current.lower()
+    incoming_lower = incoming.lower()
+    generic_prefixes = (
+        "unauthorizederror",
+        "error:",
+        "httpx_probe finding",
+        "web_interact finding",
+    )
+    if any(current_lower.startswith(prefix) for prefix in generic_prefixes):
+        return incoming
+    if len(incoming) > len(current):
+        return incoming
     return current
 
 
@@ -1810,6 +2624,13 @@ def _first_url(content: str) -> str | None:
     match = re.search(r"https?://[^\s'\"]+", content)
     if match:
         return match.group(0)
+    return None
+
+
+def _last_url(content: str) -> str | None:
+    matches = re.findall(r"https?://[^\s'\"]+", content)
+    if matches:
+        return matches[-1]
     return None
 
 

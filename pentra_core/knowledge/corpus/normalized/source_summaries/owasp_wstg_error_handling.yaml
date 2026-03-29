@@ -1,0 +1,42 @@
+key: owasp_wstg_error_handling
+title: OWASP WSTG Error Handling Testing normalized source summary
+source_key: owasp_wstg_error_handling
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's error-handling methodology gives Pentra the bounded replay model for
+  verbose failures and stack traces: reproduce the trigger, capture the exact
+  response, and separate internal disclosure from generic errors.
+facts:
+  - fact_key: owasp_wstg_error_handling_replay_patterns
+    title: Error-handling replay patterns
+    fact_type: observability_summary
+    summary: >
+      Error-handling review should preserve the trigger, HTTP status, and
+      internal markers so verbose disclosure can be distinguished from benign
+      failure handling.
+    tags:
+      - errors
+      - stack_traces
+      - disclosure
+    data:
+      high_signal_error_disclosure_checks:
+        - verbose_server_error_pages
+        - framework_stack_trace_markers
+        - exception_trigger_reproduction
+        - log_and_debug_marker_capture
+      replay_implications:
+        - Preserve status code, trigger, and response markers when classifying stack-trace exposure.
+        - Distinguish handled error states from internal disclosure before promotion.
+    citations:
+      - fact_key: owasp_wstg_error_handling_replay_patterns
+        title: OWASP WSTG Error Handling Testing
+        source_key: owasp_wstg_error_handling
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/08-Testing_for_Error_Handling/README
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - verbose_error_testing_methodology
+          - stack_trace_testing_methodology
+          - error_disclosure_testing

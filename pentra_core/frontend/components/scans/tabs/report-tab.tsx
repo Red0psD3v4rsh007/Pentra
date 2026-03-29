@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, type ReactNode } from "react"
-import { Check, Copy, Download, FileJson, FileSpreadsheet, FileText, RotateCcw } from "lucide-react"
+import { Check, Copy, Download, FileCode2, FileJson, FileSpreadsheet, FileText, RotateCcw } from "lucide-react"
 
 import { AIAdvisoryPanel } from "@/components/scans/ai-advisory-panel"
 import {
@@ -66,9 +66,21 @@ export function ReportTab({
 
   const counts = report.severity_counts ?? {}
   const verificationCounts = report.verification_counts ?? {}
+  const verificationPipeline = report.verification_pipeline
+  const pipelineOverall = verificationPipeline?.overall ?? {
+    total_findings: 0,
+    verified: 0,
+    reproduced: 0,
+    queued: 0,
+    needs_evidence: 0,
+    rejected: 0,
+    expired: 0,
+    verified_share: 0,
+    proof_ready_share: 0,
+  }
   const executionSummary = report.execution_summary ?? {}
   const comparison = report.comparison
-  const exportFormats = report.export_formats?.length ? report.export_formats : ["markdown", "json", "csv"]
+  const exportFormats = report.export_formats?.length ? report.export_formats : ["markdown", "json", "csv", "html"]
 
   return (
     <div className="space-y-5">
@@ -121,6 +133,14 @@ export function ReportTab({
               disabled={isDownloading !== null}
             />
           ) : null}
+          {exportFormats.includes("html") ? (
+            <ActionButton
+              icon={<FileCode2 className="h-4 w-4" />}
+              label={isDownloading === "html" ? "Downloading..." : "Download HTML"}
+              onClick={() => downloadReport("html")}
+              disabled={isDownloading !== null}
+            />
+          ) : null}
           {report.retest?.eligible ? (
             <button
               type="button"
@@ -135,12 +155,13 @@ export function ReportTab({
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-6">
+      <div className="grid gap-4 xl:grid-cols-7">
         <SummaryCard label="Critical" value={Number(counts.critical ?? 0)} className="text-critical" />
         <SummaryCard label="High" value={Number(counts.high ?? 0)} className="text-high" />
         <SummaryCard label="Verified" value={Number(verificationCounts.verified ?? 0)} className="text-low" />
         <SummaryCard label="Evidence" value={report.evidence_count} className="text-primary" />
         <SummaryCard label="Live" value={Number(executionSummary.live ?? 0)} className="text-low" />
+        <SummaryCard label="Derived" value={Number(executionSummary.derived ?? 0)} className="text-primary" />
         <SummaryCard label="Blocked" value={Number(executionSummary.blocked ?? 0)} className="text-critical" />
       </div>
 
@@ -205,7 +226,8 @@ export function ReportTab({
               <dt className="text-muted-foreground">Execution Truth</dt>
               <dd className="mt-1 text-foreground">
                 Live {Number(executionSummary.live ?? 0)} · Simulated {Number(executionSummary.simulated ?? 0)} ·
-                Blocked {Number(executionSummary.blocked ?? 0)} · Inferred {Number(executionSummary.inferred ?? 0)}
+                Derived {Number(executionSummary.derived ?? 0)} · Blocked {Number(executionSummary.blocked ?? 0)} ·
+                Inferred {Number(executionSummary.inferred ?? 0)}
               </dd>
             </div>
           </dl>
@@ -226,6 +248,96 @@ export function ReportTab({
           ) : null}
         </section>
       </div>
+
+      <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-foreground">Verification Pipeline</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Detection, reproduced proof, queued verification, and evidence gaps are separated here.
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground">
+            Proof-ready share {Math.round(Number(pipelineOverall.proof_ready_share ?? 0) * 100)}%
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+          <MiniMetric label="Verified" value={Number(pipelineOverall.verified ?? 0)} />
+          <MiniMetric label="Reproduced" value={Number(pipelineOverall.reproduced ?? 0)} />
+          <MiniMetric label="Queued" value={Number(pipelineOverall.queued ?? 0)} />
+          <MiniMetric label="Needs Evidence" value={Number(pipelineOverall.needs_evidence ?? 0)} />
+          <MiniMetric label="Rejected" value={Number(pipelineOverall.rejected ?? 0)} />
+          <MiniMetric label="Expired" value={Number(pipelineOverall.expired ?? 0)} />
+        </div>
+
+        <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Queue By Type
+            </p>
+            {verificationPipeline?.by_type?.length ? (
+              verificationPipeline.by_type.map((item) => (
+                <div key={item.vulnerability_type} className="rounded-lg border border-border bg-background p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-foreground">{item.vulnerability_type}</p>
+                    <span className="rounded-md bg-primary/10 px-2 py-1 text-xs text-primary">
+                      Proof-ready {Math.round(Number(item.proof_ready_share ?? 0) * 100)}%
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-muted-foreground md:grid-cols-6">
+                    <span>V {Number(item.verified ?? 0)}</span>
+                    <span>R {Number(item.reproduced ?? 0)}</span>
+                    <span>Q {Number(item.queued ?? 0)}</span>
+                    <span>E {Number(item.needs_evidence ?? 0)}</span>
+                    <span>X {Number(item.rejected ?? 0)}</span>
+                    <span>EX {Number(item.expired ?? 0)}</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="rounded-lg border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
+                No verification pipeline breakdown is available for this report.
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Verification Queue
+            </p>
+            {verificationPipeline?.queue?.length ? (
+              verificationPipeline.queue.map((item) => (
+                <div key={item.finding_id} className="rounded-lg border border-border bg-background p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-foreground">{item.title}</p>
+                    <span className="rounded-md bg-primary/10 px-2 py-1 text-xs text-primary">
+                      {item.queue_state}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">{item.readiness_reason}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {item.severity} · {item.vulnerability_type} · {item.target}
+                  </p>
+                  {item.required_actions.length ? (
+                    <div className="mt-3 space-y-2">
+                      {item.required_actions.map((action) => (
+                        <div key={action} className="rounded-md border border-border px-3 py-2 text-sm text-foreground">
+                          {action}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))
+            ) : (
+              <p className="rounded-lg border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">
+                No verification queue items are pending.
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
 
       <AIAdvisoryPanel
         reasoning={advisory}

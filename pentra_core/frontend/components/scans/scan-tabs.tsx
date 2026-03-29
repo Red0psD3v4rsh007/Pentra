@@ -3,35 +3,45 @@
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import {
+  Bot,
   LayoutDashboard,
   AlertTriangle,
   GitBranch,
   FileSearch,
   Clock,
   FileText,
+  Target,
+  ListTree,
+  TerminalSquare,
 } from "lucide-react"
 
 interface ScanTabsProps {
   tabs: readonly string[]
   activeTab: string
   onTabChange: (tab: string) => void
+  badges?: Record<string, string | null | undefined>
 }
 
 const tabIcons: Record<string, React.ElementType> = {
   Overview: LayoutDashboard,
+  "Target Model": Target,
+  Planner: Bot,
   Findings: AlertTriangle,
   "Attack Graph": GitBranch,
   Evidence: FileSearch,
   Timeline: Clock,
+  Jobs: ListTree,
+  "Command Console": TerminalSquare,
   Report: FileText,
 }
 
-export function ScanTabs({ tabs, activeTab, onTabChange }: ScanTabsProps) {
+export function ScanTabs({ tabs, activeTab, onTabChange, badges }: ScanTabsProps) {
   return (
     <div className="sticky top-20 z-20 border-b border-border bg-background/95 backdrop-blur-sm">
       <div className="flex px-6">
         {tabs.map((tab) => {
           const Icon = tabIcons[tab]
+          const badge = badges?.[tab]
           return (
             <button
               key={tab}
@@ -52,6 +62,18 @@ export function ScanTabs({ tabs, activeTab, onTabChange }: ScanTabsProps) {
                 />
               )}
               {tab}
+              {badge ? (
+                <span
+                  className={cn(
+                    "rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                    activeTab === tab
+                      ? "border-primary/30 bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground"
+                  )}
+                >
+                  {badge}
+                </span>
+              ) : null}
               {activeTab === tab && (
                 <motion.div
                   layoutId="activeTabIndicator"

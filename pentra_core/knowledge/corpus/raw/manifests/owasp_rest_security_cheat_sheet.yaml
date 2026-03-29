@@ -1,0 +1,33 @@
+key: owasp_rest_security_cheat_sheet_phase1
+phase: 1
+source_key: owasp_rest_security_cheat_sheet
+title: OWASP REST Security Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official REST API guidance that shapes content-type validation,
+  method restrictions, stateless auth reasoning, and API workflow ordering.
+parser_key: manual_structured_summary
+normalization_units:
+  - rest_security_constraints
+  - api_workflow_ordering_guidance
+target_outputs:
+  - normalized/source_summaries/owasp_rest_security_cheat_sheet.yaml
+focus_areas:
+  - access_control
+  - jwt
+  - content_type_validation
+  - method_restrictions
+usage_notes: >
+  Normalize only the parts that drive target-profile classification and API
+  proof boundaries. Do not duplicate generic REST guidance.
+citations:
+  - fact_key: owasp_rest_security_cheat_sheet_source
+    title: OWASP REST Security Cheat Sheet
+    source_key: owasp_rest_security_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-26T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - rest_api_guidance
+      - stateless_auth_constraints
+      - api_authorization_guidance

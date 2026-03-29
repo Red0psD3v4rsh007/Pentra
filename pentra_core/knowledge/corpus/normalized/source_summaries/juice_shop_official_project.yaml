@@ -1,0 +1,89 @@
+key: juice_shop_official_project
+title: OWASP Juice Shop project normalized source summary
+source_key: juice_shop_official_project
+document_type: source_summary
+generated_at: "2026-03-24T12:00:00+05:30"
+summary: >
+  The official Juice Shop project describes the target as a modern insecure web
+  application for security training and shows the live challenge-family
+  taxonomy that Pentra should use when grounding the benchmark lane.
+facts:
+  - fact_key: juice_shop_official_project_identity
+    title: Juice Shop benchmark target identity
+    fact_type: benchmark_target_identity
+    summary: >
+      Juice Shop is a modern insecure web application designed for security
+      training, tooling, and challenge-based practice.
+    tags:
+      - benchmark_target_identity
+      - training_context
+    data:
+      stack_markers:
+        - Node.js
+        - Express
+        - Angular
+      target_role: intentionally_vulnerable_training_application
+    citations:
+      - fact_key: juice_shop_official_project_identity
+        title: OWASP Juice Shop Project Page
+        source_key: juice_shop_official_project
+        source_url: https://owasp.org/www-project-juice-shop/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - benchmark_target_identity
+          - project_scope
+          - official_training_context
+  - fact_key: juice_shop_official_project_category_taxonomy
+    title: Juice Shop official public challenge-family taxonomy
+    fact_type: challenge_family_taxonomy
+    summary: >
+      The official project page exposes the current high-level challenge-family
+      distribution for the public project and aligns closely with the local
+      runtime inventory.
+    tags:
+      - challenge_family_mapping
+      - benchmark_context
+    data:
+      current_public_version: "19.2.1"
+      total_challenges: 111
+      category_counts:
+        Broken Access Control: 11
+        Broken Anti Automation: 4
+        Broken Authentication: 9
+        Cryptographic Issues: 5
+        Improper Input Validation: 12
+        Injection: 11
+        Insecure Deserialization: 3
+        Miscellaneous: 7
+        Observability Failures: 4
+        Security Misconfiguration: 4
+        Security through Obscurity: 3
+        Sensitive Data Exposure: 16
+        Unvalidated Redirects: 2
+        Vulnerable Components: 9
+        XSS: 9
+        XXE: 2
+    citations:
+      - fact_key: juice_shop_official_project_category_taxonomy
+        title: OWASP Juice Shop Project Page
+        source_key: juice_shop_official_project
+        source_url: https://owasp.org/www-project-juice-shop/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - challenge_family_mapping
+          - official_training_context
+      - fact_key: juice_shop_official_project_release_anchor
+        title: OWASP Juice Shop GitHub Releases
+        source_key: juice_shop_github_releases
+        source_url: https://github.com/juice-shop/juice-shop/releases
+        trust_tier: official_project
+        retrieved_at: "2026-03-24T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - source_version_truth
+          - release_drift_detection
+        source_version: "19.1.1"

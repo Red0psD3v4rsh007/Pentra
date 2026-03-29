@@ -1,0 +1,76 @@
+{
+  "key": "repo_parser_upload_demo",
+  "enabled": true,
+  "asset_name": "Phase 10 Parser Upload Demo",
+  "asset_type": "web",
+  "target": "http://127.0.0.1:8090",
+  "healthcheck_url": "http://127.0.0.1:8090/healthz",
+  "launch_mode": "repo_local",
+  "repo_local_launch_script": "pentra_core/scripts/local/run_phase10_parser_demo_target.sh",
+  "ground_truth_source": "pentra_core/dev_targets/capability_benchmarks/repo_parser_upload_demo.json",
+  "notes": "Repo-shipped parser/upload benchmark target for upload workflow, XML parser, and serialized object boundary coverage.",
+  "expected_target_profile_keys": [
+    "upload_parser_heavy"
+  ],
+  "pack_coverage_expectations": {
+    "p3a_parser_file_abuse": {
+      "expected_vulnerability_types": [
+        "xxe",
+        "insecure_deserialization"
+      ],
+      "benchmark_inputs_enabled": false
+    }
+  },
+  "expectations": {
+    "expected_vulnerability_types": [
+      "xxe",
+      "insecure_deserialization"
+    ],
+    "expected_verified_types": [],
+    "minimum_detected_recall": 1.0,
+    "minimum_verified_recall": 0.0,
+    "minimum_verified_share": 0.0
+  },
+  "scan_plans": [
+    {
+      "key": "repo_parser_upload_demo_vuln",
+      "label": "Repo parser/upload demo / vuln",
+      "scan_type": "vuln",
+      "config_template": "default_external_web_api_v1",
+      "timeout_seconds": 600,
+      "config_overrides": {
+        "selected_checks": {
+          "authenticated_crawling": true,
+          "workflow_replay": true,
+          "stateful_testing": true
+        },
+        "stateful_testing": {
+          "enabled": true,
+          "seed_paths": [
+            "/",
+            "/login",
+            "/portal/upload",
+            "/portal/import/xml",
+            "/portal/deserialize",
+            "/portal/attachments"
+          ],
+          "default_csrf_token": "parser-demo-csrf",
+          "auth": {
+            "login_page_path": "/login",
+            "username_field": "username",
+            "password_field": "password",
+            "success_path_contains": "/portal/upload",
+            "credentials": [
+              {
+                "label": "uploader",
+                "username": "uploader",
+                "password": "upload123",
+                "role": "user"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

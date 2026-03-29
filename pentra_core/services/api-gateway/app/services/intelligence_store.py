@@ -162,10 +162,16 @@ def build_target_knowledge(scans: list[Any]) -> list[dict[str, Any]]:
             # Track auth surfaces
             evidence = getattr(finding, "evidence", None) or {}
             if isinstance(evidence, dict):
-                if evidence.get("surface") == "web":
-                    route = evidence.get("route_group") or ""
-                    if any(kw in str(route).lower() for kw in ("login", "auth", "oauth", "token")):
-                        asset["auth_surfaces"].add(str(route))
+                classification = evidence.get("classification") or {}
+                if not isinstance(classification, dict):
+                    classification = {}
+                surface = classification.get("surface") or evidence.get("surface")
+                route = classification.get("route_group") or evidence.get("route_group") or _finding_endpoint(finding)
+                if surface == "web" and any(
+                    kw in str(route).lower()
+                    for kw in ("login", "auth", "oauth", "token")
+                ):
+                    asset["auth_surfaces"].add(str(route))
 
     result = []
     for asset in assets.values():
@@ -189,8 +195,17 @@ def build_target_knowledge(scans: list[Any]) -> list[dict[str, Any]]:
 
 def _finding_vuln_type(finding: Any) -> str:
     """Extract vulnerability type from a Finding model."""
+    direct = getattr(finding, "vulnerability_type", None)
+    if direct:
+        return str(direct).strip()
+
     evidence = getattr(finding, "evidence", None) or {}
     if isinstance(evidence, dict):
+        classification = evidence.get("classification") or {}
+        if isinstance(classification, dict):
+            vtype = classification.get("vulnerability_type")
+            if vtype:
+                return str(vtype).strip()
         vtype = evidence.get("vulnerability_type")
         if vtype:
             return str(vtype).strip()
@@ -201,6 +216,11 @@ def _finding_endpoint(finding: Any) -> str:
     """Extract endpoint from a Finding model."""
     evidence = getattr(finding, "evidence", None) or {}
     if isinstance(evidence, dict):
+        classification = evidence.get("classification") or {}
+        if isinstance(classification, dict):
+            route_group = classification.get("route_group")
+            if route_group:
+                return str(route_group).strip()
         endpoint = evidence.get("endpoint") or evidence.get("target")
         if endpoint:
             return str(endpoint).strip()

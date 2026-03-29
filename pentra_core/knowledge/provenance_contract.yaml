@@ -1,0 +1,48 @@
+version: 1
+program: phase10_public_source_first
+allowed_trust_tiers:
+  - official_public
+  - official_project
+  - runtime_truth
+optional_trust_tiers:
+  - community_public
+blocked_trust_tiers:
+  - credentialed_optional
+  - proprietary_private
+required_citation_fields:
+  - fact_key
+  - title
+  - source_key
+  - source_url
+  - trust_tier
+  - retrieved_at
+  - extraction_mode
+  - authority_for
+required_benchmark_truth_fields:
+  - target_key
+  - target_version
+  - source_key
+  - source_url
+  - retrieved_at
+normalized_fact_rules:
+  - Every normalized fact must preserve source provenance.
+  - Benchmark facts must be version-pinned to the exact target under test.
+  - No normalized fact may promote a product finding without runtime proof.
+  - Community public material may assist methodology expansion but must not
+    override official project truth or local runtime truth.
+benchmark_truth_rules:
+  - Do not use one timeless challenge count for mutable training targets.
+  - Runtime inventory must override drifted historical expectations.
+  - Benchmark manifests should record image digest, app version, and runtime
+    inventory evidence when challenge content changes across releases.
+storage_modes:
+  official_public: structured_facts_and_short_citations
+  official_project: structured_facts_and_version_pins
+  runtime_truth: full_local_artifact_and_structured_facts
+  community_public: metadata_only_until_explicitly_approved
+  credentialed_optional: blocked_in_phase0
+  proprietary_private: blocked
+restricted_content_policy: >
+  Do not store bulk proprietary, gated, or copyrighted lab material in the
+  repo. Prefer structured facts, URLs, target-version notes, and short
+  citations over large copied bodies of source text.

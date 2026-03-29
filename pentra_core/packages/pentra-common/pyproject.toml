@@ -13,6 +13,8 @@ dependencies = [
     "passlib[bcrypt]>=1.7,<2",
     "redis>=5.0,<6",
     "httpx>=0.27,<1",
+    "openai>=1.107.0,<2",
+    "anthropic>=0.60.0,<1",
 ]
 
 [build-system]

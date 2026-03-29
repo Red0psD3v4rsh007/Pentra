@@ -1,0 +1,31 @@
+key: owasp_logging_cheat_sheet_phase1
+phase: 1
+source_key: owasp_logging_cheat_sheet
+title: OWASP Logging Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official logging guidance that shapes error-disclosure reasoning,
+  observability signal quality, and security-event handling.
+parser_key: manual_structured_summary
+normalization_units:
+  - security_logging_summary
+target_outputs:
+  - normalized/source_summaries/owasp_logging_cheat_sheet.yaml
+focus_areas:
+  - event_selection
+  - data_minimization
+  - error_handling
+usage_notes: >
+  Preserve observability and disclosure constraints. Avoid adding monitoring
+  bypass or log-evasion procedures.
+citations:
+  - fact_key: owasp_logging_cheat_sheet_source
+    title: OWASP Logging Cheat Sheet
+    source_key: owasp_logging_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-27T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - observability_failure_guidance
+      - error_and_event_logging_guidance
+      - security_signal_logging

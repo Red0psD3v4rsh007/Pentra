@@ -1,0 +1,44 @@
+key: owasp_cheat_sheet_series_phase1
+phase: 1
+source_key: owasp_cheat_sheet_series
+title: OWASP Cheat Sheet Series acquisition manifest
+acquisition_scope: >
+  Capture high-value application-security technique references and cheat-sheet
+  topics that can seed payload archetypes, exploit preconditions, and safe
+  verification patterns.
+parser_key: manual_structured_summary
+normalization_units:
+  - technique_reference_index
+  - payload_archetype_seed_list
+  - verification_pattern_seed_list
+target_outputs:
+  - normalized/source_summaries/owasp_cheat_sheet_series.yaml
+focus_areas:
+  - access_control
+  - authentication
+  - csrf
+  - deserialization
+  - file_upload
+  - injection_prevention
+  - jwt
+  - prototype_pollution
+  - rest_security
+  - session_management
+  - server_side_request_forgery
+  - xml_external_entity_prevention
+  - xss_prevention
+usage_notes: >
+  Use cheat sheets as concise technique references and payload-pattern seeds.
+  Keep stored output short and structured.
+citations:
+  - fact_key: owasp_cheat_sheet_series_source
+    title: OWASP Cheat Sheet Series
+    source_key: owasp_cheat_sheet_series
+    source_url: https://cheatsheetseries.owasp.org/
+    trust_tier: official_public
+    retrieved_at: "2026-03-24T12:00:00+05:30"
+    extraction_mode: browse
+    authority_for:
+      - payload_archetypes
+      - implementation_guidance
+      - exploit_preconditions

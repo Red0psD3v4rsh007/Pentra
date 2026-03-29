@@ -17,16 +17,18 @@ def get_artifact_store_root() -> Path:
     return Path(os.getenv("ARTIFACT_STORE_PATH", DEFAULT_ARTIFACT_STORE))
 
 
-def resolve_storage_ref(storage_ref: str) -> Path:
+def resolve_storage_ref(storage_ref: str, *, root: Path | None = None) -> Path:
     """Resolve a storage_ref into a local filesystem path."""
+    artifact_root = root or get_artifact_store_root()
+
     if storage_ref.startswith("artifacts/"):
         relative = storage_ref.removeprefix("artifacts/")
-        return get_artifact_store_root() / relative
+        return artifact_root / relative
 
     if storage_ref.startswith("graphs/"):
-        return get_artifact_store_root() / storage_ref
+        return artifact_root / storage_ref
 
-    return get_artifact_store_root() / storage_ref
+    return artifact_root / storage_ref
 
 
 def ensure_parent_dir(storage_ref: str) -> Path:
@@ -45,12 +47,28 @@ def read_json_artifact(storage_ref: str) -> dict[str, Any] | list[Any] | None:
     return json.loads(path.read_text())
 
 
+def read_text_artifact(storage_ref: str) -> str | None:
+    """Read a text payload from the given storage_ref if it exists."""
+    path = resolve_storage_ref(storage_ref)
+    if not path.exists():
+        return None
+
+    return path.read_text()
+
+
 def write_json_artifact(storage_ref: str, payload: Any) -> tuple[int, str]:
     """Write JSON payload and return the byte length and SHA-256 checksum."""
     path = ensure_parent_dir(storage_ref)
     raw = json.dumps(payload, indent=2, default=str)
     path.write_text(raw)
     return len(raw.encode("utf-8")), sha256_text(raw)
+
+
+def write_text_artifact(storage_ref: str, payload: str) -> tuple[int, str]:
+    """Write a text payload and return the byte length and SHA-256 checksum."""
+    path = ensure_parent_dir(storage_ref)
+    path.write_text(payload)
+    return len(payload.encode("utf-8")), sha256_text(payload)
 
 
 def sha256_text(value: str) -> str:

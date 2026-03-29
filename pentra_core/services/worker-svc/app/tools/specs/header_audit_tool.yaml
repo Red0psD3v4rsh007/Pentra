@@ -1,0 +1,22 @@
+name: header_audit_tool
+worker_family: web
+image: projectdiscovery/nuclei:latest
+command:
+  - nuclei
+  - -u
+  - "{target}"
+  - -tags
+  - security-headers,misconfig
+  - -severity
+  - info,low,medium
+  - -json
+  - -o
+  - "{output_dir}/header_audit.json"
+output_parser: json
+artifact_type: vulnerabilities
+default_timeout: 120
+
+description: |
+  Compatibility alias for the legacy header audit tool id still emitted by the
+  live DAG builder. Audits HTTP security headers such as HSTS, CSP, X-Frame-Options,
+  Referrer-Policy, and related deployment hardening signals.

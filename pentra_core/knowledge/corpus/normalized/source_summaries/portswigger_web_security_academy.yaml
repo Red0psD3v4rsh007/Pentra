@@ -1,0 +1,60 @@
+key: portswigger_web_security_academy
+title: PortSwigger Web Security Academy normalized source summary
+source_key: portswigger_web_security_academy
+document_type: source_summary
+generated_at: "2026-03-24T12:00:00+05:30"
+summary: >
+  PortSwigger Web Security Academy exposes a dense public topic taxonomy that
+  Pentra can convert into challenge families, exploit paths, and browser-first
+  proof patterns.
+facts:
+  - fact_key: portswigger_web_security_academy_topic_families
+    title: Web Security Academy topic families
+    fact_type: topic_taxonomy
+    summary: >
+      The public topic index covers both common web vulnerabilities and the
+      harder modern families Pentra is currently weak at, especially DOM,
+      business logic, race conditions, GraphQL, and prototype pollution.
+    tags:
+      - web_attack_taxonomy
+      - lab_taxonomy
+    data:
+      priority_topics:
+        - Access control vulnerabilities
+        - Authentication vulnerabilities
+        - API testing
+        - Business logic vulnerabilities
+        - Clickjacking
+        - Cross-site scripting
+        - Cross-site request forgery
+        - DOM-based vulnerabilities
+        - File upload vulnerabilities
+        - GraphQL API vulnerabilities
+        - HTTP Host header attacks
+        - Injections
+        - NoSQL injection
+        - OAuth authentication
+        - Prototype pollution
+        - Race conditions
+        - Request smuggling
+        - Server-side template injection
+        - SQL injection
+        - Web cache poisoning
+        - XXE injection
+      extraction_goal:
+        - challenge_family_mapping
+        - exploit_paths
+        - proof_patterns
+    citations:
+      - fact_key: portswigger_web_security_academy_topic_families
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - web_attack_taxonomy
+          - exploit_paths
+          - challenge_family_mapping
+          - proof_patterns

@@ -1,0 +1,44 @@
+key: owasp_query_parameterization_cheat_sheet
+title: OWASP Query Parameterization Cheat Sheet normalized source summary
+source_key: owasp_query_parameterization_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-26T00:00:00Z"
+summary: >
+  OWASP's query parameterization guidance anchors Pentra's query-shape model:
+  bind variables keep data separate from query text, while unbound dynamic
+  clauses remain the higher-risk mutation surface.
+facts:
+  - fact_key: owasp_query_parameterization_bind_variables
+    title: Bind variables preserve query-shape stability
+    fact_type: implementation_guidance
+    summary: >
+      Prepared statements and bind variables keep user-controlled data out of
+      the query structure. Dynamic clauses that cannot be bound require
+      application-side allowlists and explicit mapping.
+    tags:
+      - query_parameterization
+      - bind_variables
+      - query_shape
+    data:
+      stable_query_shape_controls:
+        - prepared_statements
+        - bind_variables
+      unsafe_dynamic_areas:
+        - table_names
+        - column_names
+        - order_by_direction
+      replay_implications:
+        - Prefer candidates with repeatable parameter names and stable request bodies.
+        - Record whether suspicious input affects a bound value position or a structural clause.
+    citations:
+      - fact_key: owasp_query_parameterization_bind_variables
+        title: OWASP Query Parameterization Cheat Sheet
+        source_key: owasp_query_parameterization_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-26T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - query_parameterization_guidance
+          - bind_variable_guidance
+          - replayable_query_shape_constraints

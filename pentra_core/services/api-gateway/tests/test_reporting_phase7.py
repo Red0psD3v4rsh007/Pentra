@@ -21,6 +21,8 @@ def _finding(
     target: str,
     route_group: str,
     verification_state: str = "detected",
+    truth_state: str | None = None,
+    truth_summary: dict | None = None,
     confidence: int = 80,
     remediation: str | None = None,
 ):
@@ -50,6 +52,8 @@ def _finding(
         vulnerability_type=vulnerability_type,
         verification_state=verification_state,
         verification_confidence=confidence,
+        truth_state=truth_state,
+        truth_summary=truth_summary,
         exploitability="high",
         surface="web",
     )
@@ -169,6 +173,61 @@ def test_build_report_markdown_includes_phase7_sections():
             "executive_summary": "Autonomous assessment identified 2 high-risk findings.",
             "severity_counts": {"critical": 1, "high": 1, "medium": 0, "low": 0, "info": 0},
             "verification_counts": {"verified": 1, "suspected": 0, "detected": 1},
+            "verification_summary": {
+                "profile_id": "external_web_api_v1",
+                "overall": {
+                    "total_findings": 2,
+                    "verified": 1,
+                    "suspected": 0,
+                    "detected": 1,
+                    "verified_share": 0.5,
+                },
+                "by_type": [
+                    {
+                        "vulnerability_type": "sql_injection",
+                        "total_findings": 1,
+                        "verified": 1,
+                        "suspected": 0,
+                        "detected": 0,
+                        "verified_share": 1.0,
+                    },
+                    {
+                        "vulnerability_type": "workflow_bypass",
+                        "total_findings": 1,
+                        "verified": 0,
+                        "suspected": 0,
+                        "detected": 1,
+                        "verified_share": 0.0,
+                    },
+                ],
+            },
+            "verification_pipeline": {
+                "profile_id": "external_web_api_v1",
+                "scan_type": "full",
+                "overall": {
+                    "total_findings": 2,
+                    "verified": 1,
+                    "reproduced": 0,
+                    "queued": 0,
+                    "needs_evidence": 1,
+                    "rejected": 0,
+                    "expired": 0,
+                    "verified_share": 0.5,
+                    "proof_ready_share": 0.5,
+                },
+                "by_type": [],
+                "queue": [
+                    {
+                        "finding_id": "finding-2",
+                        "title": "Workflow bypass",
+                        "queue_state": "needs_evidence",
+                        "readiness_reason": "Additional provenance or proof material is required before verification.",
+                        "required_actions": [
+                            "Attach source, target, and persisted evidence provenance."
+                        ],
+                    }
+                ],
+            },
             "comparison": {
                 "summary": "Compared with the previous scan, Pentra found 1 new and 1 resolved finding.",
                 "counts": {"new": 1, "resolved": 1, "persistent": 1, "escalated": 0},
@@ -215,5 +274,169 @@ def test_build_report_markdown_includes_phase7_sections():
 
     assert "## Historical Comparison" in markdown
     assert "## Attack Path Narrative" in markdown
+    assert "## Verification Coverage" in markdown
+    assert "## Verification Pipeline" in markdown
+    assert "## Verification Queue" in markdown
+    assert "sql_injection: 1/1 verified (100%)" in markdown
     assert "## Remediation Plan" in markdown
     assert "## Grouped Findings" in markdown
+
+
+def test_build_verification_summary_groups_by_type_and_profile():
+    from app.services.scan_service import _build_verification_summary
+
+    scan = SimpleNamespace(
+        scan_type="full",
+        config={"profile_id": "external_web_api_v1"},
+    )
+    findings = [
+        _finding(
+            finding_id="f-1",
+            title="Verified SQLi",
+            severity="critical",
+            vulnerability_type="sql_injection",
+            target="https://example.com/api/login",
+            route_group="/api/login",
+            verification_state="verified",
+            confidence=96,
+        ),
+        _finding(
+            finding_id="f-2",
+            title="Workflow bypass",
+            severity="high",
+            vulnerability_type="workflow_bypass",
+            target="https://example.com/checkout/review",
+            route_group="/checkout/review",
+            verification_state="verified",
+            confidence=92,
+        ),
+        _finding(
+            finding_id="f-3",
+            title="GraphQL introspection",
+            severity="medium",
+            vulnerability_type="graphql_introspection",
+            target="https://example.com/graphql",
+            route_group="/graphql",
+            verification_state="detected",
+            confidence=80,
+        ),
+    ]
+
+    summary = _build_verification_summary(scan=scan, findings=findings)
+
+    assert summary["profile_id"] == "external_web_api_v1"
+    assert summary["scan_type"] == "full"
+    assert summary["overall"]["total_findings"] == 3
+    assert summary["overall"]["verified"] == 2
+    assert summary["overall"]["verified_share"] == 0.667
+    assert summary["by_type"][0]["vulnerability_type"] == "sql_injection"
+    workflow_group = next(
+        item for item in summary["by_type"] if item["vulnerability_type"] == "workflow_bypass"
+    )
+    assert workflow_group["verified_share"] == 1.0
+
+
+def test_build_verification_pipeline_summary_distinguishes_queue_and_reproduced() -> None:
+    from app.services.scan_service import _build_verification_pipeline_summary
+
+    scan = SimpleNamespace(
+        scan_type="full",
+        config={"profile_id": "external_web_api_v1"},
+    )
+    findings = [
+        _finding(
+            finding_id="f-1",
+            title="Verified SQLi",
+            severity="critical",
+            vulnerability_type="sql_injection",
+            target="https://example.com/api/login",
+            route_group="/api/login",
+            verification_state="verified",
+            truth_state="verified",
+            truth_summary={
+                "state": "verified",
+                "promoted": True,
+                "provenance_complete": True,
+                "replayable": True,
+                "evidence_reference_count": 1,
+                "raw_evidence_present": True,
+                "scan_job_bound": True,
+                "notes": [],
+            },
+            confidence=96,
+        ),
+        _finding(
+            finding_id="f-2",
+            title="Queued workflow bypass",
+            severity="high",
+            vulnerability_type="workflow_bypass",
+            target="https://example.com/checkout/review",
+            route_group="/checkout/review",
+            verification_state="suspected",
+            truth_state="suspected",
+            truth_summary={
+                "state": "suspected",
+                "promoted": False,
+                "provenance_complete": True,
+                "replayable": False,
+                "evidence_reference_count": 1,
+                "raw_evidence_present": True,
+                "scan_job_bound": True,
+                "notes": [],
+            },
+            confidence=88,
+        ),
+        _finding(
+            finding_id="f-3",
+            title="Reproduced auth bypass",
+            severity="high",
+            vulnerability_type="auth_bypass",
+            target="https://example.com/admin",
+            route_group="/admin",
+            verification_state="verified",
+            truth_state="reproduced",
+            truth_summary={
+                "state": "reproduced",
+                "promoted": False,
+                "provenance_complete": True,
+                "replayable": False,
+                "evidence_reference_count": 1,
+                "raw_evidence_present": True,
+                "scan_job_bound": True,
+                "notes": [],
+            },
+            confidence=90,
+        ),
+        _finding(
+            finding_id="f-4",
+            title="Weak detection",
+            severity="medium",
+            vulnerability_type="idor",
+            target="https://example.com/api/users/7",
+            route_group="/api/users/{id}",
+            verification_state="detected",
+            truth_state="observed",
+            truth_summary={
+                "state": "observed",
+                "promoted": False,
+                "provenance_complete": False,
+                "replayable": False,
+                "evidence_reference_count": 0,
+                "raw_evidence_present": False,
+                "scan_job_bound": False,
+                "notes": [],
+            },
+            confidence=70,
+        ),
+    ]
+
+    summary = _build_verification_pipeline_summary(scan=scan, findings=findings)
+
+    assert summary["overall"]["verified"] == 1
+    assert summary["overall"]["reproduced"] == 1
+    assert summary["overall"]["queued"] == 1
+    assert summary["overall"]["needs_evidence"] == 1
+    assert summary["overall"]["proof_ready_share"] == 0.5
+    assert summary["queue"][0]["queue_state"] == "reproduced"
+    assert any(item["queue_state"] == "queued" for item in summary["queue"])
+    assert any(item["queue_state"] == "needs_evidence" for item in summary["queue"])

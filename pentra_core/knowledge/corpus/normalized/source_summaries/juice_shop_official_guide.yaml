@@ -1,0 +1,42 @@
+key: juice_shop_official_guide
+title: OWASP Juice Shop official guide normalized source summary
+source_key: juice_shop_official_guide
+document_type: source_summary
+generated_at: "2026-03-24T12:00:00+05:30"
+summary: >
+  The public Juice Shop guide gives Pentra challenge-family context and
+  challenge-hunting navigation structure without needing to store long
+  walkthrough content.
+facts:
+  - fact_key: juice_shop_official_guide_public_context
+    title: Juice Shop official guide public challenge context
+    fact_type: challenge_guide_summary
+    summary: >
+      The public guide is organized around challenge-hunting and challenge
+      categories, which makes it useful for challenge-family mapping and
+      benchmark context.
+    tags:
+      - challenge_family_mapping
+      - benchmark_context
+    data:
+      context_areas:
+        - Challenge tracking
+        - Finding hidden server-side endpoints
+        - Challenge categories
+        - Coding challenges
+        - Tutorial and customization context
+      note: >
+        The public guide helps map challenge families and navigation paths, but
+        Pentra should avoid copying long walkthrough bodies into the corpus.
+    citations:
+      - fact_key: juice_shop_official_guide_public_context
+        title: OWASP Juice Shop Official Guide
+        source_key: juice_shop_official_guide
+        source_url: https://help.owasp-juice.shop/part1/challenges.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - challenge_family_mapping
+          - benchmark_context
+          - feature_to_challenge_hints

@@ -1,0 +1,842 @@
+version: 1
+program: phase10_public_source_first
+phase: 2
+generated_at: "2026-03-24T15:00:00+05:30"
+capability_graphs:
+  - key: juice_shop_local_web_graph
+    name: Juice Shop local web capability graph
+    description: >
+      Capability graph for the pinned Juice Shop local benchmark lane,
+      connecting challenge families to primitives, workflow states, role
+      models, proof contracts, and planner actions.
+    benchmark_target_keys:
+      - juice_shop_local
+    target_profile_keys:
+      - spa_rest_api
+      - auth_heavy_admin_portal
+      - workflow_heavy_commerce
+    source_summary_keys:
+      - juice_shop_runtime_inventory_local_19_2_1
+      - juice_shop_official_project
+      - portswigger_web_security_academy
+      - owasp_wstg_stable
+    challenge_family_keys:
+      - xss
+      - injection
+      - input_validation
+      - broken_access_control
+      - broken_authentication
+      - broken_anti_automation
+      - sensitive_data_exposure
+      - observability_failures
+      - cryptographic_issues
+      - insecure_deserialization
+      - xxe
+      - security_misconfiguration
+      - unvalidated_redirects
+      - vulnerable_components
+      - security_through_obscurity
+      - miscellaneous
+      - business_logic_abuse
+    attack_primitive_keys:
+      - reflected_xss_route_probe
+      - dom_xss_browser_probe
+      - stored_xss_workflow_probe
+      - sql_injection_parameter_diff
+      - nosql_and_graphql_injection_probe
+      - idor_role_diff_probe
+      - privileged_api_surface_diff
+      - session_and_token_abuse_probe
+      - login_and_reset_flow_mutation_probe
+      - anti_automation_limit_probe
+      - secret_and_config_exposure_probe
+      - stack_trace_and_log_disclosure_probe
+      - weak_crypto_material_inspection
+      - xxe_parser_endpoint_probe
+      - deserialization_replay_probe
+      - redirect_target_control_probe
+      - component_and_asset_fingerprint_probe
+      - hidden_route_and_asset_enumeration_probe
+      - misconfiguration_surface_probe
+      - business_workflow_mutation_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - authenticated_surface
+      - privileged_surface
+      - role_transition_state
+      - client_search_reflection_state
+      - account_management_workflow
+      - basket_checkout_workflow
+      - admin_api_surface_state
+      - file_upload_workflow
+      - password_reset_workflow
+    role_model_keys:
+      - generic_web_roles
+      - juice_shop_local_roles
+    proof_contract_keys:
+      - browser_execution_xss
+      - stored_execution_xss
+      - injection_replay_contract
+      - role_differential_access_contract
+      - sensitive_data_exposure_replay
+      - stack_trace_disclosure_contract
+      - weak_crypto_material_contract
+      - xxe_parser_contract
+      - deserialization_replay_contract
+      - redirect_control_contract
+      - component_truth_contract
+      - misconfiguration_surface_contract
+    planner_action_keys:
+      - map_client_side_sinks
+      - stage_route_specific_xss_payloads
+      - replay_stored_xss_workflow
+      - compare_role_access
+      - enumerate_privileged_api_surface
+      - verify_suspected_injection
+      - pressure_auth_tokens_and_login_flows
+      - probe_rate_limits_and_anti_automation
+      - inspect_error_and_log_disclosure
+      - inspect_config_and_secret_exposure
+      - probe_parser_boundaries
+      - mutate_business_workflows
+      - validate_redirect_targets
+      - fingerprint_components_and_hidden_assets
+    edges:
+      - source_key: xss
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: dom_xss_browser_probe
+        target_type: attack_primitive
+        description: DOM-oriented browser probing is central to Juice Shop XSS coverage.
+      - source_key: xss
+        source_type: challenge_family
+        relation: family_requires_proof_contract
+        target_key: browser_execution_xss
+        target_type: proof_contract
+        description: Reflection alone is not enough to promote XSS.
+      - source_key: xss
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: map_client_side_sinks
+        target_type: planner_action
+        description: Browser sink discovery should precede broader XSS replay.
+      - source_key: broken_access_control
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: idor_role_diff_probe
+        target_type: attack_primitive
+        description: Access-control coverage depends on differential object and route replay.
+      - source_key: broken_access_control
+        source_type: challenge_family
+        relation: family_requires_proof_contract
+        target_key: role_differential_access_contract
+        target_type: proof_contract
+        description: Access-control claims require multi-role comparison.
+      - source_key: broken_access_control
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: compare_role_access
+        target_type: planner_action
+        description: The planner should compare route behavior across roles.
+      - source_key: compare_role_access
+        source_type: planner_action
+        relation: action_targets_primitive
+        target_key: idor_role_diff_probe
+        target_type: attack_primitive
+        description: Role comparison targets IDOR and route-level authorization abuse.
+      - source_key: juice_shop_local_roles
+        source_type: role_model
+        relation: role_model_enables_action
+        target_key: compare_role_access
+        target_type: planner_action
+        description: The Juice Shop role model enables customer versus admin comparison.
+      - source_key: sensitive_data_exposure
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: secret_and_config_exposure_probe
+        target_type: attack_primitive
+        description: Disclosure coverage depends on exact exposed data replay.
+      - source_key: sensitive_data_exposure
+        source_type: challenge_family
+        relation: family_requires_proof_contract
+        target_key: sensitive_data_exposure_replay
+        target_type: proof_contract
+        description: Exposed data must be preserved in replayable responses.
+      - source_key: sensitive_data_exposure
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: inspect_config_and_secret_exposure
+        target_type: planner_action
+        description: Config and secret responses should be pressure-tested first.
+      - source_key: injection
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: sql_injection_parameter_diff
+        target_type: attack_primitive
+        description: Parameter-differential replay is the main injection primitive.
+      - source_key: injection
+        source_type: challenge_family
+        relation: family_requires_proof_contract
+        target_key: injection_replay_contract
+        target_type: proof_contract
+        description: Scanner heuristics are insufficient without replay.
+      - source_key: injection
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: verify_suspected_injection
+        target_type: planner_action
+        description: Injection signals should enter replay-first verification.
+      - source_key: security_misconfiguration
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: misconfiguration_surface_probe
+        target_type: attack_primitive
+        description: Misconfiguration often appears through exposed privileged surfaces.
+      - source_key: security_misconfiguration
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: enumerate_privileged_api_surface
+        target_type: planner_action
+        description: Enumerating privileged APIs closes major evidence gaps.
+      - source_key: business_logic_abuse
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: business_workflow_mutation_probe
+        target_type: attack_primitive
+        description: Business-logic coverage depends on workflow mutation.
+      - source_key: business_logic_abuse
+        source_type: challenge_family
+        relation: family_uses_workflow_state
+        target_key: basket_checkout_workflow
+        target_type: workflow_state
+        description: Checkout workflows are high-value business-logic targets.
+      - source_key: business_logic_abuse
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: mutate_business_workflows
+        target_type: planner_action
+        description: The planner should mutate stateful workflows directly.
+      - source_key: dom_xss_browser_probe
+        source_type: attack_primitive
+        relation: primitive_requires_proof_contract
+        target_key: browser_execution_xss
+        target_type: proof_contract
+        description: DOM XSS is only promotable with browser execution.
+      - source_key: stored_xss_workflow_probe
+        source_type: attack_primitive
+        relation: primitive_requires_proof_contract
+        target_key: stored_execution_xss
+        target_type: proof_contract
+        description: Stored XSS must prove persistence and later execution.
+      - source_key: session_and_token_abuse_probe
+        source_type: attack_primitive
+        relation: primitive_requires_proof_contract
+        target_key: weak_crypto_material_contract
+        target_type: proof_contract
+        description: Token and session abuse claims need direct material or replay proof.
+      - source_key: xxe
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: xxe_parser_endpoint_probe
+        target_type: attack_primitive
+        description: XML parser boundaries are the core XXE pressure point.
+      - source_key: xxe
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: probe_parser_boundaries
+        target_type: planner_action
+        description: Parser-focused verification should be explicit.
+      - source_key: vulnerable_components
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: component_and_asset_fingerprint_probe
+        target_type: attack_primitive
+        description: Hidden assets and versions seed later capability pressure.
+      - source_key: vulnerable_components
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: fingerprint_components_and_hidden_assets
+        target_type: planner_action
+        description: Component enumeration should feed discovery and route expansion.
+    citations:
+      - fact_key: juice_shop_local_web_graph_phase2
+        title: Local Juice Shop Runtime Inventory
+        source_key: juice_shop_runtime_inventory_local_19_2_1
+        source_url: http://127.0.0.1:3001/api/Challenges
+        trust_tier: runtime_truth
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: runtime_api
+        authority_for:
+          - benchmark_truth
+          - challenge_inventory
+          - target_version_truth
+        target_key: juice_shop_local
+        target_version: "19.2.1"
+        artifact_path: .local/pentra/phase9/juice_shop_challenge_inventory_latest.json
+  - key: spa_rest_api_capability_graph
+    name: SPA plus REST API capability graph
+    description: >
+      Reusable capability graph for modern single-page applications with REST
+      or JSON backends, emphasizing browser-aware discovery plus API replay.
+    benchmark_target_keys:
+      - juice_shop_local
+      - repo_demo_api
+      - webgoat_local
+    target_profile_keys:
+      - spa_rest_api
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_wstg_stable
+      - owasp_cheat_sheet_series
+    challenge_family_keys:
+      - xss
+      - injection
+      - broken_authentication
+      - broken_access_control
+      - business_logic_abuse
+      - input_validation
+    attack_primitive_keys:
+      - dom_xss_browser_probe
+      - reflected_xss_route_probe
+      - stored_xss_workflow_probe
+      - sql_injection_parameter_diff
+      - nosql_and_graphql_injection_probe
+      - idor_role_diff_probe
+      - session_and_token_abuse_probe
+      - business_workflow_mutation_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - authenticated_surface
+      - client_search_reflection_state
+      - role_transition_state
+    role_model_keys:
+      - generic_web_roles
+    proof_contract_keys:
+      - browser_execution_xss
+      - stored_execution_xss
+      - injection_replay_contract
+      - role_differential_access_contract
+      - weak_crypto_material_contract
+    planner_action_keys:
+      - map_client_side_sinks
+      - stage_route_specific_xss_payloads
+      - replay_stored_xss_workflow
+      - verify_suspected_injection
+      - compare_role_access
+      - pressure_auth_tokens_and_login_flows
+      - mutate_business_workflows
+    edges:
+      - source_key: xss
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: dom_xss_browser_probe
+        target_type: attack_primitive
+        description: SPA routes often need browser-first DOM XSS probing.
+      - source_key: xss
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: map_client_side_sinks
+        target_type: planner_action
+        description: Route-to-sink mapping should precede broad payload staging.
+      - source_key: injection
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: nosql_and_graphql_injection_probe
+        target_type: attack_primitive
+        description: JSON and GraphQL shapes appear frequently in SPA-backed APIs.
+      - source_key: injection
+        source_type: challenge_family
+        relation: family_requires_proof_contract
+        target_key: injection_replay_contract
+        target_type: proof_contract
+        description: API mutations still require replayable proof.
+      - source_key: broken_access_control
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: idor_role_diff_probe
+        target_type: attack_primitive
+        description: SPA API routes often expose object references across roles.
+      - source_key: broken_access_control
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: compare_role_access
+        target_type: planner_action
+        description: Differential replay should drive access-control validation.
+      - source_key: business_logic_abuse
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: business_workflow_mutation_probe
+        target_type: attack_primitive
+        description: SPA flows often encode workflow state across browser and API calls.
+      - source_key: dom_xss_browser_probe
+        source_type: attack_primitive
+        relation: primitive_requires_proof_contract
+        target_key: browser_execution_xss
+        target_type: proof_contract
+        description: Browser execution remains the promotion bar for client-side XSS.
+    citations:
+      - fact_key: spa_rest_api_capability_graph_phase3
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_paths
+          - web_attack_taxonomy
+  - key: traditional_server_rendered_capability_graph
+    name: Traditional server-rendered capability graph
+    description: >
+      Reusable capability graph for multi-page server-rendered applications
+      with form workflows, classic parameter surfaces, and lower client-side
+      routing complexity.
+    benchmark_target_keys:
+      - dvwa_local
+    target_profile_keys:
+      - traditional_server_rendered
+    source_summary_keys:
+      - owasp_wstg_stable
+      - owasp_cheat_sheet_series
+      - portswigger_web_security_academy
+    challenge_family_keys:
+      - xss
+      - injection
+      - broken_authentication
+      - broken_access_control
+      - unvalidated_redirects
+      - input_validation
+    attack_primitive_keys:
+      - reflected_xss_route_probe
+      - sql_injection_parameter_diff
+      - login_and_reset_flow_mutation_probe
+      - idor_role_diff_probe
+      - redirect_target_control_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - authenticated_surface
+      - password_reset_workflow
+      - account_management_workflow
+    role_model_keys:
+      - generic_web_roles
+    proof_contract_keys:
+      - browser_execution_xss
+      - injection_replay_contract
+      - role_differential_access_contract
+      - redirect_control_contract
+    planner_action_keys:
+      - stage_route_specific_xss_payloads
+      - verify_suspected_injection
+      - pressure_auth_tokens_and_login_flows
+      - compare_role_access
+      - validate_redirect_targets
+    edges:
+      - source_key: xss
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: reflected_xss_route_probe
+        target_type: attack_primitive
+        description: Server-rendered apps still lean heavily on reflected input positions.
+      - source_key: injection
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: sql_injection_parameter_diff
+        target_type: attack_primitive
+        description: Form and query parameters remain a central replay target.
+      - source_key: injection
+        source_type: challenge_family
+        relation: family_requires_proof_contract
+        target_key: injection_replay_contract
+        target_type: proof_contract
+        description: Classic server-side injection still requires replayable deltas.
+      - source_key: broken_authentication
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: login_and_reset_flow_mutation_probe
+        target_type: attack_primitive
+        description: Login and reset forms are a dominant auth surface here.
+      - source_key: unvalidated_redirects
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: validate_redirect_targets
+        target_type: planner_action
+        description: Redirect handling is often visible through classic route transitions.
+      - source_key: broken_access_control
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: compare_role_access
+        target_type: planner_action
+        description: Differential replay still closes the authorization gap fastest.
+    citations:
+      - fact_key: traditional_server_rendered_capability_graph_phase3
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - verification_guidance
+  - key: graphql_heavy_application_capability_graph
+    name: GraphQL-heavy application capability graph
+    description: >
+      Reusable capability graph for applications where GraphQL routes or
+      schema-led API behavior are first-class targets.
+    benchmark_target_keys:
+      - repo_demo_api
+      - webgoat_local
+    target_profile_keys:
+      - graphql_heavy_application
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_cheat_sheet_series
+      - owasp_wstg_stable
+    challenge_family_keys:
+      - injection
+      - broken_access_control
+      - sensitive_data_exposure
+      - input_validation
+    attack_primitive_keys:
+      - nosql_and_graphql_injection_probe
+      - idor_role_diff_probe
+      - privileged_api_surface_diff
+      - secret_and_config_exposure_probe
+    workflow_state_keys:
+      - anonymous_surface
+      - authenticated_surface
+      - role_transition_state
+    role_model_keys:
+      - generic_web_roles
+    proof_contract_keys:
+      - injection_replay_contract
+      - role_differential_access_contract
+      - sensitive_data_exposure_replay
+    planner_action_keys:
+      - verify_suspected_injection
+      - compare_role_access
+      - enumerate_privileged_api_surface
+      - inspect_config_and_secret_exposure
+    edges:
+      - source_key: injection
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: nosql_and_graphql_injection_probe
+        target_type: attack_primitive
+        description: GraphQL and JSON-aware mutations should drive the first replay path.
+      - source_key: injection
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: verify_suspected_injection
+        target_type: planner_action
+        description: Query-shape verification should precede broad web scanning.
+      - source_key: broken_access_control
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: idor_role_diff_probe
+        target_type: attack_primitive
+        description: Resolver-level authorization failures often appear as role differentials.
+      - source_key: sensitive_data_exposure
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: secret_and_config_exposure_probe
+        target_type: attack_primitive
+        description: Schema or debug responses can leak privileged data and internals.
+      - source_key: compare_role_access
+        source_type: planner_action
+        relation: action_targets_primitive
+        target_key: idor_role_diff_probe
+        target_type: attack_primitive
+        description: Role comparison should stay tied to object and resolver replay.
+      - source_key: privileged_api_surface_diff
+        source_type: attack_primitive
+        relation: primitive_requires_proof_contract
+        target_key: sensitive_data_exposure_replay
+        target_type: proof_contract
+        description: Privileged API disclosure still needs exact replay evidence.
+    citations:
+      - fact_key: graphql_heavy_application_capability_graph_phase3
+        title: OWASP Cheat Sheet Series
+        source_key: owasp_cheat_sheet_series
+        source_url: https://cheatsheetseries.owasp.org/
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_preconditions
+          - implementation_guidance
+  - key: auth_heavy_admin_portal_capability_graph
+    name: Auth-heavy admin portal capability graph
+    description: >
+      Reusable capability graph for privileged route families, multi-role
+      identity boundaries, and admin or management APIs.
+    benchmark_target_keys:
+      - repo_demo_api
+      - juice_shop_local
+    target_profile_keys:
+      - auth_heavy_admin_portal
+    source_summary_keys:
+      - owasp_wstg_stable
+      - owasp_cheat_sheet_series
+      - portswigger_web_security_academy
+    challenge_family_keys:
+      - broken_authentication
+      - broken_access_control
+      - sensitive_data_exposure
+      - security_misconfiguration
+    attack_primitive_keys:
+      - session_and_token_abuse_probe
+      - login_and_reset_flow_mutation_probe
+      - idor_role_diff_probe
+      - privileged_api_surface_diff
+      - secret_and_config_exposure_probe
+      - misconfiguration_surface_probe
+    workflow_state_keys:
+      - authenticated_surface
+      - privileged_surface
+      - role_transition_state
+      - admin_api_surface_state
+      - account_management_workflow
+    role_model_keys:
+      - generic_web_roles
+    proof_contract_keys:
+      - role_differential_access_contract
+      - sensitive_data_exposure_replay
+      - weak_crypto_material_contract
+      - misconfiguration_surface_contract
+    planner_action_keys:
+      - compare_role_access
+      - enumerate_privileged_api_surface
+      - pressure_auth_tokens_and_login_flows
+      - inspect_config_and_secret_exposure
+    edges:
+      - source_key: broken_authentication
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: session_and_token_abuse_probe
+        target_type: attack_primitive
+        description: Admin portals need token and session pressure before broad route mutation.
+      - source_key: broken_authentication
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: pressure_auth_tokens_and_login_flows
+        target_type: planner_action
+        description: Login, reset, and token flows should be exercised explicitly.
+      - source_key: broken_access_control
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: privileged_api_surface_diff
+        target_type: attack_primitive
+        description: Privileged APIs are a first-class differential replay surface.
+      - source_key: broken_access_control
+        source_type: challenge_family
+        relation: family_requires_proof_contract
+        target_key: role_differential_access_contract
+        target_type: proof_contract
+        description: Access claims need preserved role-to-role evidence.
+      - source_key: broken_access_control
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: enumerate_privileged_api_surface
+        target_type: planner_action
+        description: Planner focus should move to privileged management routes early.
+      - source_key: security_misconfiguration
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: misconfiguration_surface_probe
+        target_type: attack_primitive
+        description: Admin panels often expose privileged misconfiguration surfaces.
+      - source_key: compare_role_access
+        source_type: planner_action
+        relation: action_targets_primitive
+        target_key: idor_role_diff_probe
+        target_type: attack_primitive
+        description: Route and object differentials should share the same role-comparison lane.
+    citations:
+      - fact_key: auth_heavy_admin_portal_capability_graph_phase3
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_guidance
+          - testing_methodology
+  - key: workflow_heavy_commerce_capability_graph
+    name: Workflow-heavy commerce capability graph
+    description: >
+      Reusable capability graph for basket, checkout, order, and account
+      workflows where state transitions dominate exploitability.
+    benchmark_target_keys:
+      - juice_shop_local
+      - repo_demo_api
+      - crapi_local
+    target_profile_keys:
+      - workflow_heavy_commerce
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+      - owasp_cheat_sheet_series
+    challenge_family_keys:
+      - business_logic_abuse
+      - broken_access_control
+      - broken_authentication
+      - xss
+    attack_primitive_keys:
+      - business_workflow_mutation_probe
+      - idor_role_diff_probe
+      - login_and_reset_flow_mutation_probe
+      - stored_xss_workflow_probe
+    workflow_state_keys:
+      - authenticated_surface
+      - basket_checkout_workflow
+      - account_management_workflow
+      - role_transition_state
+    role_model_keys:
+      - generic_web_roles
+    proof_contract_keys:
+      - role_differential_access_contract
+      - stored_execution_xss
+      - sensitive_data_exposure_replay
+    planner_action_keys:
+      - mutate_business_workflows
+      - compare_role_access
+      - replay_stored_xss_workflow
+      - pressure_auth_tokens_and_login_flows
+    edges:
+      - source_key: business_logic_abuse
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: business_workflow_mutation_probe
+        target_type: attack_primitive
+        description: Workflow mutation is the central exploit lane for commerce targets.
+      - source_key: business_logic_abuse
+        source_type: challenge_family
+        relation: family_uses_workflow_state
+        target_key: basket_checkout_workflow
+        target_type: workflow_state
+        description: Checkout and payment transitions should stay attached to planning context.
+      - source_key: business_logic_abuse
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: mutate_business_workflows
+        target_type: planner_action
+        description: Planner should favor sequence mutation over isolated route checks.
+      - source_key: broken_access_control
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: idor_role_diff_probe
+        target_type: attack_primitive
+        description: Order and account object references still need role comparison.
+      - source_key: xss
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: stored_xss_workflow_probe
+        target_type: attack_primitive
+        description: Stored content workflows should remain available when user-generated content exists.
+      - source_key: stored_xss_workflow_probe
+        source_type: attack_primitive
+        relation: primitive_requires_proof_contract
+        target_key: stored_execution_xss
+        target_type: proof_contract
+        description: Stored XSS claims in commerce flows still require render-path execution.
+    citations:
+      - fact_key: workflow_heavy_commerce_capability_graph_phase3
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_paths
+          - web_attack_taxonomy
+  - key: upload_parser_heavy_capability_graph
+    name: Upload and parser-heavy capability graph
+    description: >
+      Reusable capability graph for applications with upload pipelines,
+      document ingestion, XML parsing, or serialized object handling.
+    benchmark_target_keys:
+      - repo_parser_upload_demo
+    target_profile_keys:
+      - upload_parser_heavy
+    source_summary_keys:
+      - owasp_cheat_sheet_series
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    challenge_family_keys:
+      - insecure_deserialization
+      - xxe
+      - security_misconfiguration
+      - sensitive_data_exposure
+      - vulnerable_components
+    attack_primitive_keys:
+      - xxe_parser_endpoint_probe
+      - deserialization_replay_probe
+      - misconfiguration_surface_probe
+      - component_and_asset_fingerprint_probe
+      - secret_and_config_exposure_probe
+    workflow_state_keys:
+      - authenticated_surface
+      - file_upload_workflow
+    role_model_keys:
+      - generic_web_roles
+    proof_contract_keys:
+      - xxe_parser_contract
+      - deserialization_replay_contract
+      - misconfiguration_surface_contract
+      - component_truth_contract
+      - sensitive_data_exposure_replay
+    planner_action_keys:
+      - probe_parser_boundaries
+      - inspect_config_and_secret_exposure
+      - fingerprint_components_and_hidden_assets
+    edges:
+      - source_key: xxe
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: xxe_parser_endpoint_probe
+        target_type: attack_primitive
+        description: XML import and parser endpoints are the primary XXE pressure lane.
+      - source_key: xxe
+        source_type: challenge_family
+        relation: family_recommends_action
+        target_key: probe_parser_boundaries
+        target_type: planner_action
+        description: Parser-boundary probing should stay explicit and bounded.
+      - source_key: insecure_deserialization
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: deserialization_replay_probe
+        target_type: attack_primitive
+        description: Serialized object replay should remain tied to upload or import context.
+      - source_key: insecure_deserialization
+        source_type: challenge_family
+        relation: family_requires_proof_contract
+        target_key: deserialization_replay_contract
+        target_type: proof_contract
+        description: Deserialization claims require replayable parser-side evidence.
+      - source_key: vulnerable_components
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: component_and_asset_fingerprint_probe
+        target_type: attack_primitive
+        description: Parser-heavy apps often expose conversion libraries and asset truth.
+      - source_key: sensitive_data_exposure
+        source_type: challenge_family
+        relation: family_has_primitive
+        target_key: secret_and_config_exposure_probe
+        target_type: attack_primitive
+        description: Upload services frequently leak config, storage, or processing internals.
+    citations:
+      - fact_key: upload_parser_heavy_capability_graph_phase3
+        title: OWASP Cheat Sheet Series
+        source_key: owasp_cheat_sheet_series
+        source_url: https://cheatsheetseries.owasp.org/
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_preconditions
+          - implementation_guidance

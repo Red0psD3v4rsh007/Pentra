@@ -1,0 +1,10 @@
+name: dependency_audit
+worker_family: vuln
+image: node:20-slim
+command:
+  - sh
+  - -c
+  - "cd {input_dir}/repo && ([ -f package-lock.json ] && npm audit --json > {output_dir}/dep_audit.json 2>&1 || [ -f requirements.txt ] && pip-audit -f json -o {output_dir}/dep_audit.json 2>&1 || echo '{}' > {output_dir}/dep_audit.json)"
+output_parser: json
+artifact_type: vulnerabilities
+default_timeout: 600

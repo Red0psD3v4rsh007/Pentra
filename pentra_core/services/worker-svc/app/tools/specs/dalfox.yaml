@@ -1,0 +1,53 @@
+id: dalfox
+name: dalfox
+image: hahwul/dalfox:latest
+worker_family: web
+command:
+  - /app/dalfox
+  - file
+  - "{input_dir}/dalfox_urls.txt"
+  - --silence
+  - --no-spinner
+  - --no-color
+  - --format
+  - json
+  - --output
+  - "{output_dir}/dalfox.json"
+  - --timeout
+  - "10"
+  - --delay
+  - "100"
+  - --fast-scan
+  - --skip-headless
+  - --skip-bav
+description: |
+  DOM and reflected XSS vulnerability scanner with query parameter analysis,
+  WAF evasion, and proof-of-concept generation.
+
+capabilities:
+  - Reflected XSS detection
+  - Stored XSS detection
+  - DOM-based XSS detection
+  - Parameter analysis and mining
+  - WAF evasion via encoding/mutation
+  - Blind XSS callback support
+
+input_artifacts:
+  - endpoints
+  - subdomains
+
+output_artifact_type: vulnerabilities
+output_parser: json
+artifact_type: vulnerabilities
+
+resource_limits:
+  memory: "1g"
+  cpu: 1.0
+  timeout_seconds: 60
+default_timeout: 60
+
+attack_vectors:
+  - xss_reflected
+  - xss_stored
+  - dom_xss
+  - parameter_tampering

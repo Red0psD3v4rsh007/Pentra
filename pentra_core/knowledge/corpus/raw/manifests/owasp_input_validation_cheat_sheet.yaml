@@ -1,0 +1,31 @@
+key: owasp_input_validation_cheat_sheet_phase1
+phase: 1
+source_key: owasp_input_validation_cheat_sheet
+title: OWASP Input Validation Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official input-validation strategy guidance that shapes allowlist
+  reasoning, parser-boundary mutation, and cross-pack parameter handling.
+parser_key: manual_structured_summary
+normalization_units:
+  - input_validation_strategy_summary
+target_outputs:
+  - normalized/source_summaries/owasp_input_validation_cheat_sheet.yaml
+focus_areas:
+  - allowlist_validation
+  - canonicalization
+  - structured_input_constraints
+usage_notes: >
+  Preserve validation boundary facts and canonicalization guidance. Avoid
+  copying attack strings or bypass variants.
+citations:
+  - fact_key: owasp_input_validation_cheat_sheet_source
+    title: OWASP Input Validation Cheat Sheet
+    source_key: owasp_input_validation_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-27T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - input_validation_guidance
+      - allowlist_strategy_guidance
+      - upload_validation_guidance

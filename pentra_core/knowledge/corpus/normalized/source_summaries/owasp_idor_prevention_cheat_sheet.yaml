@@ -1,0 +1,42 @@
+key: owasp_idor_prevention_cheat_sheet
+title: OWASP Insecure Direct Object Reference Prevention Cheat Sheet normalized source summary
+source_key: owasp_idor_prevention_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's IDOR guidance gives Pentra the main object-access design rules:
+  references should be scoped by ownership and access policy, not trusted just
+  because an identifier is present.
+facts:
+  - fact_key: owasp_idor_prevention_core_controls
+    title: IDOR prevention controls
+    fact_type: object_access_summary
+    summary: >
+      Object access should be validated through server-side ownership or policy
+      checks, and identifiers should be treated as lookup inputs rather than
+      proof of entitlement.
+    tags:
+      - idor
+      - object_access
+      - authorization
+    data:
+      high_signal_idor_controls:
+        - scoped_object_lookup
+        - opaque_or_indirect_references
+        - per_object_authorization_checks
+        - avoid_client_trust_for_object_ids
+      replay_implications:
+        - Preserve object identifiers as replay variables across roles.
+        - Compare authorization outcome and data exposure separately.
+    citations:
+      - fact_key: owasp_idor_prevention_core_controls
+        title: OWASP Insecure Direct Object Reference Prevention Cheat Sheet
+        source_key: owasp_idor_prevention_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - idor_guidance
+          - object_reference_validation
+          - access_control_replay_guidance

@@ -6,6 +6,10 @@ command:
   - "{sqlmap_target_url}"
   - --batch
   - --flush-session
+  - --random-agent
+  - --forms
+  - --crawl
+  - "3"
   - --threads
   - "{sqlmap_threads}"
   - --risk

@@ -1,0 +1,10 @@
+version: 1
+program: phase10_public_source_first
+phase: 2
+challenge_family_path: challenge_families.yaml
+attack_primitive_path: attack_primitives.yaml
+workflow_state_path: workflow_states.yaml
+role_model_path: role_models.yaml
+proof_contract_path: proof_contracts.yaml
+planner_action_path: planner_actions.yaml
+capability_graph_path: capability_graphs.yaml

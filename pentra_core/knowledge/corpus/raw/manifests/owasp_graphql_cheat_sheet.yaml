@@ -1,0 +1,33 @@
+key: owasp_graphql_cheat_sheet_phase1
+phase: 1
+source_key: owasp_graphql_cheat_sheet
+title: OWASP GraphQL Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official GraphQL attack-surface, access-control, and resource-limiting
+  guidance for GraphQL-heavy target profiles and API abuse reasoning.
+parser_key: manual_structured_summary
+normalization_units:
+  - graphql_attack_surface_summary
+  - graphql_resource_constraint_guidance
+target_outputs:
+  - normalized/source_summaries/owasp_graphql_cheat_sheet.yaml
+focus_areas:
+  - introspection
+  - batching
+  - query_depth_limits
+  - mutation_access_control
+usage_notes: >
+  Preserve only structured GraphQL discovery and constraint facts that can
+  drive planner bias and bounded replay on real targets.
+citations:
+  - fact_key: owasp_graphql_cheat_sheet_source
+    title: OWASP GraphQL Cheat Sheet
+    source_key: owasp_graphql_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-26T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - graphql_attack_guidance
+      - batching_attack_guidance
+      - api_abuse_patterns

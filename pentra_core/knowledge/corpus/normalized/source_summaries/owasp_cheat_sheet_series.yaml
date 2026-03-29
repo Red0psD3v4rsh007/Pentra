@@ -1,0 +1,46 @@
+key: owasp_cheat_sheet_series
+title: OWASP Cheat Sheet Series normalized source summary
+source_key: owasp_cheat_sheet_series
+document_type: source_summary
+generated_at: "2026-03-24T12:00:00+05:30"
+summary: >
+  The OWASP Cheat Sheet Series is a concise public reference library that
+  Pentra can use for payload archetypes, exploit preconditions, and safe
+  verification patterns.
+facts:
+  - fact_key: owasp_cheat_sheet_series_priority_topics
+    title: Phase 1 priority cheat-sheet topics
+    fact_type: technique_reference_index
+    summary: >
+      These cheat-sheet families are immediately useful for browser XSS,
+      access-control abuse, API abuse, injection safety, and stateful testing.
+    tags:
+      - payload_archetypes
+      - verification_patterns
+    data:
+      topics:
+        - Access Control
+        - Authentication
+        - Cross Site Request Forgery Prevention
+        - Deserialization
+        - File Upload
+        - Injection Prevention
+        - JSON Web Token
+        - Prototype Pollution Prevention
+        - REST Security
+        - Session Management
+        - Server Side Request Forgery Prevention
+        - XML External Entity Prevention
+        - Cross Site Scripting Prevention
+    citations:
+      - fact_key: owasp_cheat_sheet_series_priority_topics
+        title: OWASP Cheat Sheet Series
+        source_key: owasp_cheat_sheet_series
+        source_url: https://cheatsheetseries.owasp.org/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - payload_archetypes
+          - implementation_guidance
+          - exploit_preconditions

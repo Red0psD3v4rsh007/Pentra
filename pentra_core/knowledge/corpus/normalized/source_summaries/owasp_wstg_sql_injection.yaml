@@ -1,0 +1,45 @@
+key: owasp_wstg_sql_injection
+title: OWASP WSTG SQL injection normalized source summary
+source_key: owasp_wstg_stable
+document_type: source_summary
+generated_at: "2026-03-26T00:00:00Z"
+summary: >
+  OWASP WSTG remains the methodology anchor for injection testing. It frames
+  SQLi as a replayable input-validation problem with DB-specific branches and
+  adjacent NoSQL / ORM testing lanes.
+facts:
+  - fact_key: owasp_wstg_sql_injection_methodology
+    title: SQL injection testing methodology
+    fact_type: testing_methodology
+    summary: >
+      WSTG treats injection testing as systematic input mutation across syntax,
+      boolean, timing, and DB-specific behavior, and explicitly includes NoSQL
+      and ORM injection as adjacent branches.
+    tags:
+      - sql_injection
+      - nosql_injection
+      - orm_injection
+      - testing_methodology
+    data:
+      methodology_branches:
+        - syntax_breakout_and_query_closure
+        - boolean_condition_differentials
+        - time_based_differentials
+        - db_specific_testing
+        - nosql_injection
+        - orm_injection
+      replay_implications:
+        - Prefer candidates with stable request shapes and repeatable response deltas.
+        - Keep DB flavor and injection family classification probabilistic until replay evidence narrows it.
+    citations:
+      - fact_key: owasp_wstg_sql_injection_methodology
+        title: OWASP WSTG Testing for SQL Injection
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05-Testing_for_SQL_Injection
+        trust_tier: official_public
+        retrieved_at: "2026-03-26T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - verification_guidance
+          - attack_preconditions

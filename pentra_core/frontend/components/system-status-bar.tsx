@@ -13,9 +13,13 @@ interface SystemStatus {
 }
 
 const SERVICE_LABELS: Record<string, string> = {
+  api: "API",
   db: "Database",
   redis: "Redis",
   orchestrator: "Orchestrator",
+  worker: "Worker",
+  ai: "AI",
+  external_target_scanning: "External Target Permission",
 }
 
 function StatusDot({ state }: { state: string }) {

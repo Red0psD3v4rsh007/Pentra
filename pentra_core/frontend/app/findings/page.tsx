@@ -4,8 +4,7 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { AlertTriangle, ExternalLink, Search, ShieldCheck, ShieldOff } from "lucide-react"
 
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { TopBar } from "@/components/dashboard/top-bar"
+import { CommandLayout } from "@/components/layout/command-layout"
 import { Spinner } from "@/components/ui/spinner"
 import {
   listScanFindings,
@@ -29,6 +28,7 @@ const severityStyles = {
 
 const provenanceStyles = {
   live: "bg-low/10 text-low",
+  derived: "bg-primary/10 text-primary",
   inferred: "bg-primary/10 text-primary",
   blocked: "bg-critical/10 text-critical",
   simulated: "bg-amber-500/10 text-amber-400",
@@ -128,13 +128,8 @@ export default function FindingsPage() {
   )
 
   return (
-    <div className="min-h-screen bg-background">
-      <DashboardSidebar />
-
-      <div className="pl-60 transition-all duration-200">
-        <TopBar title="Findings" />
-
-        <main className="p-6">
+    <CommandLayout title="Findings">
+        <main className="p-5">
           <div className="mb-6 flex items-start justify-between gap-4">
             <div>
               <h1 className="text-2xl font-semibold text-foreground">Persisted Findings</h1>
@@ -205,6 +200,7 @@ export default function FindingsPage() {
             >
               <option value="all">All provenance</option>
               <option value="live">Live</option>
+              <option value="derived">Derived</option>
               <option value="inferred">Inferred</option>
               <option value="blocked">Blocked</option>
               <option value="simulated">Simulated</option>
@@ -333,7 +329,6 @@ export default function FindingsPage() {
             This index is loaded from persisted scan findings. If a scan has not produced findings yet, it will not appear here.
           </div>
         </main>
-      </div>
-    </div>
+    </CommandLayout>
   )
 }

@@ -1,0 +1,34 @@
+key: owasp_asvs_phase1
+phase: 1
+source_key: owasp_asvs
+title: OWASP ASVS acquisition manifest
+acquisition_scope: >
+  Capture the official verification-standard structure, machine-readable
+  outputs, and requirement taxonomy that Pentra can use to shape proof
+  contracts and validation coverage expectations.
+parser_key: manual_structured_summary
+normalization_units:
+  - verification_standard_summary
+  - requirement_taxonomy_summary
+  - machine_readable_asset_summary
+target_outputs:
+  - normalized/source_summaries/owasp_asvs.yaml
+focus_areas:
+  - verification_requirements
+  - control_taxonomy
+  - machine_readable_requirements
+usage_notes: >
+  Use ASVS to shape verification contracts and coverage language, not to infer
+  live vulnerability truth in a target.
+citations:
+  - fact_key: owasp_asvs_source
+    title: OWASP Application Security Verification Standard
+    source_key: owasp_asvs
+    source_url: https://owasp.org/www-project-application-security-verification-standard/
+    trust_tier: official_public
+    retrieved_at: "2026-03-24T12:00:00+05:30"
+    extraction_mode: browse
+    authority_for:
+      - verification_requirements
+      - control_taxonomy
+      - benchmark_truth_constraints

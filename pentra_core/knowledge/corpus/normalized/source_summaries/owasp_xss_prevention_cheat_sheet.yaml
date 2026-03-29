@@ -1,0 +1,43 @@
+key: owasp_xss_prevention_cheat_sheet
+title: OWASP Cross Site Scripting Prevention Cheat Sheet normalized source summary
+source_key: owasp_xss_prevention_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's XSS prevention guidance gives Pentra the context boundaries that
+  matter most for browser reasoning: output encoding and sink handling must be
+  modeled by HTML, attribute, JavaScript, CSS, and URL context.
+facts:
+  - fact_key: owasp_xss_prevention_context_rules
+    title: XSS context and output rules
+    fact_type: browser_context_summary
+    summary: >
+      Browser-facing sinks need context-specific encoding and validation.
+      Pentra should map reflections and client-side flows to HTML, attribute,
+      JavaScript, CSS, and URL contexts before selecting proof strategy.
+    tags:
+      - xss
+      - browser
+      - context_model
+    data:
+      high_signal_xss_contexts:
+        - html_context
+        - attribute_context
+        - javascript_context
+        - css_context
+        - url_context
+      replay_implications:
+        - Preserve the sink context as part of route-level XSS assessment.
+        - Separate DOM sink reachability from server reflection evidence.
+    citations:
+      - fact_key: owasp_xss_prevention_context_rules
+        title: OWASP Cross Site Scripting Prevention Cheat Sheet
+        source_key: owasp_xss_prevention_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - xss_context_taxonomy
+          - sanitization_guidance
+          - sink_context_modeling

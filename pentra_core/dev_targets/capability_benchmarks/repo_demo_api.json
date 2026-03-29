@@ -1,0 +1,105 @@
+{
+  "key": "repo_demo_api",
+  "enabled": true,
+  "asset_name": "Phase 9 Capability Demo API",
+  "asset_type": "api",
+  "target": "http://127.0.0.1:8088",
+  "healthcheck_url": "http://127.0.0.1:8088/healthz",
+  "launch_mode": "repo_local",
+  "repo_local_launch_script": "pentra_core/scripts/local/run_phase3_demo_target.sh",
+  "ground_truth_source": "pentra_core/dev_targets/capability_benchmarks/repo_demo_api.json",
+  "notes": "Repo-shipped benchmark target with known auth, IDOR, SQLi, workflow, GraphQL, and disclosure/misconfiguration exposure.",
+  "expected_target_profile_keys": [
+    "spa_rest_api",
+    "auth_heavy_admin_portal"
+  ],
+  "pack_coverage_expectations": {
+    "p3a_multi_role_stateful_auth": {
+      "expected_vulnerability_types": [
+        "idor"
+      ],
+      "minimum_detected_recall": 1.0,
+      "benchmark_inputs_enabled": false
+    },
+    "p3a_access_control_workflow_abuse": {
+      "expected_vulnerability_types": [
+        "workflow_bypass"
+      ],
+      "minimum_detected_recall": 1.0,
+      "benchmark_inputs_enabled": false
+    },
+    "p3a_disclosure_misconfig_crypto": {
+      "expected_vulnerability_types": [
+        "openapi_exposure",
+        "stack_trace_exposure"
+      ],
+      "benchmark_inputs_enabled": false
+    }
+  },
+  "expectations": {
+    "expected_vulnerability_types": [
+      "auth_bypass",
+      "idor",
+      "sql_injection",
+      "workflow_bypass",
+      "graphql_introspection"
+    ],
+    "expected_verified_types": [
+      "auth_bypass",
+      "idor",
+      "workflow_bypass"
+    ],
+    "minimum_detected_recall": 0.8,
+    "minimum_verified_recall": 0.667,
+    "minimum_verified_share": 0.5
+  },
+  "scan_plans": [
+    {
+      "key": "repo_demo_api_vuln",
+      "label": "Repo demo API / vuln",
+      "scan_type": "vuln",
+      "config_template": "default_external_web_api_v1",
+      "timeout_seconds": 600,
+      "config_overrides": {
+        "selected_checks": {
+          "sqlmap": {
+            "path": "/api/v1/auth/login?username=admin&password=admin123"
+          },
+          "authenticated_crawling": true,
+          "workflow_replay": true,
+          "stateful_testing": true
+        },
+        "stateful_testing": {
+          "enabled": true,
+          "seed_paths": [
+            "/",
+            "/login",
+            "/portal/dashboard",
+            "/portal/checkout/cart"
+          ],
+          "default_csrf_token": "demo-csrf",
+          "auth": {
+            "login_page_path": "/login",
+            "username_field": "username",
+            "password_field": "password",
+            "success_path_contains": "/portal/dashboard",
+            "credentials": [
+              {
+                "label": "john",
+                "username": "john",
+                "password": "test",
+                "role": "user"
+              },
+              {
+                "label": "admin",
+                "username": "admin",
+                "password": "admin123",
+                "role": "admin"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

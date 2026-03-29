@@ -1,0 +1,74 @@
+pack_key: p3a_injection
+name: Injection capability pack
+phase: 3
+description: >
+  Injection capability pack for parameter and query-shape discovery, GraphQL
+  and JSON surface classification, replay-aware candidate generation, and
+  negative evidence without direct exploit execution.
+ontology_family_keys:
+  - injection
+  - input_validation
+attack_primitive_keys:
+  - sql_injection_parameter_diff
+  - nosql_and_graphql_injection_probe
+proof_contract_keys:
+  - injection_replay_contract
+planner_action_keys:
+  - verify_suspected_injection
+target_profile_keys:
+  - spa_rest_api
+  - traditional_server_rendered
+  - graphql_heavy_application
+pack_dependency_keys: []
+knowledge_dependencies:
+  ontology_index_path: pentra_core/knowledge/ontology/index.yaml
+  source_profile: public_source_first
+  cheatsheet_category_keys:
+    - injection_and_query_abuse
+    - graphql_and_api_abuse
+  source_registry_keys:
+    - owasp_wstg_stable
+    - portswigger_sql_injection_cheat_sheet
+    - owasp_sql_injection_prevention_cheat_sheet
+    - owasp_query_parameterization_cheat_sheet
+    - owasp_input_validation_cheat_sheet
+    - owasp_graphql_cheat_sheet
+    - owasp_rest_security_cheat_sheet
+    - portswigger_graphql_api_vulnerabilities
+  corpus_dependency_notes:
+    - Consume official injection methodology, DB-flavor guidance, parameterization guidance, and API-specific constraint material from the Phase 0 to 2 registries.
+    - Keep heuristic route discovery separate from replayable proof and never promote without injection_replay_contract evidence.
+subphases:
+  - key: p3a_4a
+    name: ontology_and_corpus_binding
+  - key: p3a_4b
+    name: discovery
+  - key: p3a_4c
+    name: candidate_generation
+  - key: p3a_4d
+    name: proof_and_negative_evidence
+  - key: p3a_4e
+    name: benchmark_and_regression
+runtime_dependencies:
+  - web_interact
+  - sqlmap
+  - custom_poc
+  - graphql_cop
+candidate_generators:
+  - parameter_differential_candidate
+  - graphql_surface_candidate
+  - json_query_shape_candidate
+verifier_entrypoints:
+  - injection_replay
+ai_advisory:
+  enabled: true
+  advisory_mode: injection_parameter_focus
+  prompt_contract_id: pentra.ai.advisory
+  trust_boundary: advisor_only
+negative_evidence_behavior:
+  - heuristic signals without replay context remain advisory-only
+  - routes with structured inputs but no repeatable request shape demote after bounded replay gaps are recorded
+benchmark_target_keys:
+  - dvwa_local
+  - webgoat_local
+  - repo_demo_api

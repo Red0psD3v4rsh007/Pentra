@@ -27,11 +27,22 @@ import shutil
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Awaitable, Callable
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from urllib.request import Request, urlopen
 
 from app.engine.web_interaction_runner import WebInteractionRunner
+from app.engine.tool_command_registry import (
+    TOOL_CATALOG,
+    ToolExecutionLog,
+    build_comprehensive_nuclei_templates,
+    get_tool,
+)
+from app.tools.tool_registry import get_tools_for_family
+from pentra_common.execution_truth import classify_tool_execution
+
+import time as _time
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +57,24 @@ LIVE_EXECUTION_TOOLS = frozenset(
     tool.strip()
     for tool in os.getenv(
         "WORKER_LIVE_TOOLS",
-        "scope_check,httpx_probe,ffuf,nuclei,sqlmap,sqlmap_verify,custom_poc,web_interact",
+        "scope_check,subfinder,amass,nmap_discovery,nmap_svc,httpx_probe,ffuf,nuclei,zap,"
+        "sqlmap,sqlmap_verify,custom_poc,web_interact,dalfox,graphql_cop,jwt_tool,"
+        "cors_scanner,nikto,header_audit_tool,git_clone,semgrep,trufflehog,"
+        "dependency_audit,api_spec_parser",
     ).split(",")
     if tool.strip()
 )
 LIVE_TARGET_POLICY = os.getenv("WORKER_LIVE_TARGET_POLICY", "local_only").lower()
 MAX_LIVE_TIMEOUT = int(os.getenv("WORKER_LIVE_MAX_TIMEOUT_SECONDS", "900"))
+PREWARM_ENABLED = os.getenv("WORKER_PREWARM_IMAGES", "true").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+}
+PREWARM_MAX_CONCURRENCY = int(os.getenv("WORKER_PREWARM_MAX_CONCURRENCY", "2"))
+_PREWARM_EXCLUDED_TOOLS = frozenset(
+    {"scope_check", "custom_poc", "web_interact", "ai_triage", "report_gen"}
+)
 
 # Exploit family gets no network access
 _FAMILY_NETWORK: dict[str, str] = {
@@ -71,6 +94,7 @@ _DEFAULT_CONTENT_PATHS = [
 _MODE_DEMO_SIMULATED = "demo_simulated"
 _MODE_CONTROLLED_LIVE_LOCAL = "controlled_live_local"
 _MODE_CONTROLLED_LIVE_SCOPED = "controlled_live_scoped"
+_MODE_CONTROLLED_LIVE_EXTERNAL = "controlled_live_external"
 
 
 @dataclass
@@ -85,6 +109,7 @@ class ContainerResult:
     execution_mode: str = _MODE_CONTROLLED_LIVE_LOCAL
     execution_provenance: str = "live"
     execution_reason: str | None = None
+    execution_class: str = "external_tool"
 
 
 @dataclass(frozen=True)
@@ -118,6 +143,67 @@ class ContainerRunner:
         self._docker = None
         self._web_runner = WebInteractionRunner()
 
+    def planned_prewarm_images(self, *, worker_family: str) -> list[str]:
+        """Return unique family-scoped Docker images worth warming on startup."""
+        images: list[str] = []
+        seen: set[str] = set()
+        for tool in get_tools_for_family(worker_family):
+            if tool.name not in LIVE_EXECUTION_TOOLS:
+                continue
+            if tool.name in _PREWARM_EXCLUDED_TOOLS:
+                continue
+            if tool.image in seen:
+                continue
+            seen.add(tool.image)
+            images.append(tool.image)
+        return images
+
+    async def prewarm_images(
+        self,
+        *,
+        worker_family: str,
+    ) -> dict[str, dict[str, str]]:
+        """Best-effort image prewarming for the worker family."""
+        images = self.planned_prewarm_images(worker_family=worker_family)
+        if not PREWARM_ENABLED or not images:
+            return {}
+
+        try:
+            docker = await self._get_docker(
+                execution_mode=_normalize_execution_mode(EXECUTION_MODE)
+            )
+        except RuntimeError as exc:
+            return {
+                image: {"status": "failed", "detail": str(exc)}
+                for image in images
+            }
+
+        if docker == "simulation":
+            return {
+                image: {"status": "skipped", "detail": "demo_simulated_mode"}
+                for image in images
+            }
+
+        semaphore = asyncio.Semaphore(max(PREWARM_MAX_CONCURRENCY, 1))
+
+        async def _prewarm_image(image: str) -> tuple[str, dict[str, str]]:
+            async with semaphore:
+                try:
+                    await asyncio.to_thread(docker.images.get, image)
+                    logger.info("Prewarm image cached: %s", image)
+                    return image, {"status": "cached", "detail": "already_present"}
+                except Exception:
+                    try:
+                        logger.info("Prewarm pulling image: %s", image)
+                        await asyncio.to_thread(docker.images.pull, image)
+                        return image, {"status": "pulled", "detail": "pulled_on_startup"}
+                    except Exception as exc:
+                        logger.warning("Prewarm failed for %s: %s", image, exc)
+                        return image, {"status": "failed", "detail": str(exc)}
+
+        results = await asyncio.gather(*[_prewarm_image(image) for image in images])
+        return {image: result for image, result in results}
+
     async def _get_docker(self, *, execution_mode: str):
         """Lazy-initialize Docker client."""
         if execution_mode == _MODE_DEMO_SIMULATED:
@@ -142,6 +228,8 @@ class ContainerRunner:
         *,
         image: str,
         command: list[str],
+        working_dir: str | None,
+        entrypoint: list[str] | None,
         tool_name: str,
         target: str,
         job_id: uuid.UUID,
@@ -150,6 +238,7 @@ class ContainerRunner:
         env_vars: dict[str, str] | None = None,
         input_refs: dict[str, str] | None = None,
         scan_config: dict[str, object] | None = None,
+        on_output_chunk: Callable[[str, str], Awaitable[None]] | None = None,
     ) -> ContainerResult:
         """Execute a tool inside a Docker container.
 
@@ -167,6 +256,17 @@ class ContainerRunner:
         if input_refs:
             for key, ref in input_refs.items():
                 (input_dir / f"{key}.ref").write_text(ref)
+
+            # Resolve .ref files → actual data files (JSON/TXT)
+            try:
+                from app.engine.artifact_resolver import ArtifactResolver
+                resolver = ArtifactResolver()
+                await resolver.resolve_input_refs(input_dir)
+            except Exception:
+                logger.warning(
+                    "Failed to resolve input refs for job %s — tools may miss upstream data",
+                    job_id,
+                )
 
         scan_config = scan_config or {}
         (work_dir / "config.json").write_text(json.dumps(scan_config, indent=2, default=str))
@@ -228,6 +328,22 @@ class ContainerRunner:
                 execution_mode=decision.mode,
             )
 
+        if tool_name == "dalfox":
+            dalfox_targets = _read_nonempty_lines(input_dir / "dalfox_urls.txt")
+            if not dalfox_targets:
+                (output_dir / "dalfox.json").write_text("[]\n")
+                return ContainerResult(
+                    exit_code=0,
+                    stdout="Skipped dalfox: no high-signal reflected-XSS candidates.\n",
+                    stderr="",
+                    output_dir=str(output_dir),
+                    timed_out=False,
+                    execution_mode=decision.mode,
+                    execution_provenance="live",
+                    execution_reason="no_candidate_targets",
+                    execution_class=classify_tool_execution(tool_name),
+                )
+
         docker = await self._get_docker(execution_mode=decision.mode)
         if docker == "simulation":
             return await self._simulate(
@@ -243,6 +359,8 @@ class ContainerRunner:
             docker=docker,
             image=image,
             command=command,
+            working_dir=working_dir,
+            entrypoint=entrypoint,
             work_dir=str(work_dir),
             output_dir=str(output_dir),
             worker_family=worker_family,
@@ -251,6 +369,9 @@ class ContainerRunner:
             job_id=job_id,
             target=target,
             execution_mode=decision.mode,
+            tool_name=tool_name,
+            scan_config=scan_config,
+            on_output_chunk=on_output_chunk,
         )
 
     async def _run_docker(
@@ -259,6 +380,8 @@ class ContainerRunner:
         docker,
         image: str,
         command: list[str],
+        working_dir: str | None,
+        entrypoint: list[str] | None,
         work_dir: str,
         output_dir: str,
         worker_family: str,
@@ -267,6 +390,9 @@ class ContainerRunner:
         job_id: uuid.UUID,
         target: str,
         execution_mode: str,
+        tool_name: str = "",
+        scan_config: dict[str, object] | None = None,
+        on_output_chunk: Callable[[str, str], Awaitable[None]] | None = None,
     ) -> ContainerResult:
         """Run inside a real Docker container."""
         network_mode = self._resolve_network_mode(
@@ -284,6 +410,22 @@ class ContainerRunner:
                 logger.info("Pulling image: %s", image)
                 await asyncio.to_thread(docker.images.pull, image)
 
+            # Reclaim stale container names left behind by interrupted runs.
+            try:
+                existing = await asyncio.to_thread(docker.containers.get, container_name)
+            except Exception:
+                existing = None
+            if existing is not None:
+                logger.warning("Removing stale container before reuse: %s", container_name)
+                try:
+                    await asyncio.to_thread(existing.remove, force=True)
+                except Exception:
+                    logger.warning(
+                        "Failed to remove stale container %s before execution",
+                        container_name,
+                        exc_info=True,
+                    )
+
             # Create and run container
             container = await asyncio.to_thread(
                 docker.containers.run,
@@ -294,7 +436,8 @@ class ContainerRunner:
                 volumes={
                     work_dir: {"bind": "/work", "mode": "rw"},
                 },
-                working_dir="/work/output",
+                working_dir=working_dir or "/work/output",
+                entrypoint=entrypoint,
                 environment=env_vars,
                 network_mode=network_mode,
                 mem_limit=MEMORY_LIMIT,
@@ -304,28 +447,81 @@ class ContainerRunner:
                 auto_remove=False,
             )
 
-            # Wait for completion with timeout
+            stdout = ""
+            stderr = ""
             timed_out = False
-            try:
-                result = await asyncio.wait_for(
-                    asyncio.to_thread(container.wait),
-                    timeout=timeout,
-                )
-                exit_code = result.get("StatusCode", -1)
-            except asyncio.TimeoutError:
-                logger.warning("Container %s timed out after %ds", container_name, timeout)
-                await asyncio.to_thread(container.kill)
-                exit_code = -1
-                timed_out = True
+            exit_code = -1
+            started_at = _time.monotonic()
 
-            # Capture logs
-            stdout = (await asyncio.to_thread(container.logs, stdout=True, stderr=False)).decode(
-                "utf-8", errors="replace"
-            )
-            stderr = (await asyncio.to_thread(container.logs, stdout=False, stderr=True)).decode(
-                "utf-8", errors="replace"
-            )
+            while True:
+                current_stdout = (
+                    await asyncio.to_thread(container.logs, stdout=True, stderr=False)
+                ).decode("utf-8", errors="replace")
+                current_stderr = (
+                    await asyncio.to_thread(container.logs, stdout=False, stderr=True)
+                ).decode("utf-8", errors="replace")
+
+                stdout_delta = (
+                    current_stdout[len(stdout) :]
+                    if current_stdout.startswith(stdout)
+                    else current_stdout
+                )
+                stderr_delta = (
+                    current_stderr[len(stderr) :]
+                    if current_stderr.startswith(stderr)
+                    else current_stderr
+                )
+                stdout = current_stdout
+                stderr = current_stderr
+
+                if on_output_chunk is not None:
+                    if stdout_delta:
+                        await on_output_chunk("stdout", stdout_delta)
+                    if stderr_delta:
+                        await on_output_chunk("stderr", stderr_delta)
+
+                await asyncio.to_thread(container.reload)
+                state = container.attrs.get("State") if isinstance(container.attrs, dict) else {}
+                state = state if isinstance(state, dict) else {}
+                status = str(state.get("Status") or "").strip().lower()
+                if status in {"exited", "dead"}:
+                    exit_code = int(state.get("ExitCode", -1) or -1)
+                    break
+
+                if _time.monotonic() - started_at >= timeout:
+                    logger.warning("Container %s timed out after %ds", container_name, timeout)
+                    await asyncio.to_thread(container.kill)
+                    exit_code = -1
+                    timed_out = True
+                    break
+
+                await asyncio.sleep(0.5)
+
+            final_stdout = (
+                await asyncio.to_thread(container.logs, stdout=True, stderr=False)
+            ).decode("utf-8", errors="replace")
+            final_stderr = (
+                await asyncio.to_thread(container.logs, stdout=False, stderr=True)
+            ).decode("utf-8", errors="replace")
+            if final_stdout.startswith(stdout):
+                stdout_delta = final_stdout[len(stdout) :]
+            else:
+                stdout_delta = final_stdout
+            if final_stderr.startswith(stderr):
+                stderr_delta = final_stderr[len(stderr) :]
+            else:
+                stderr_delta = final_stderr
+            stdout = final_stdout
+            stderr = final_stderr
+            if on_output_chunk is not None:
+                if stdout_delta:
+                    await on_output_chunk("stdout", stdout_delta)
+                if stderr_delta:
+                    await on_output_chunk("stderr", stderr_delta)
+
             self._write_container_logs(output_dir=output_dir, stdout=stdout, stderr=stderr)
+            if tool_name == "graphql_cop":
+                self._materialize_graphql_cop_output(output_dir=output_dir, stdout=stdout)
 
             # Cleanup container
             try:
@@ -338,14 +534,23 @@ class ContainerRunner:
                 container_name, exit_code, timed_out,
             )
 
+            # Write FULL stdout/stderr to files before truncating for event payload
+            stdout_file = Path(str(output_dir)) / "stdout.txt"
+            stderr_file = Path(str(output_dir)) / "stderr.txt"
+            if stdout:
+                stdout_file.write_text(stdout)
+            if stderr:
+                stderr_file.write_text(stderr)
+
             return ContainerResult(
                 exit_code=exit_code,
-                stdout=stdout[-10_000:],  # cap at 10KB
-                stderr=stderr[-5_000:],
+                stdout=stdout[-50_000:],  # 50KB for event payload (was 10KB)
+                stderr=stderr[-10_000:],
                 output_dir=output_dir,
                 timed_out=timed_out,
                 execution_mode=execution_mode,
                 execution_provenance="live",
+                execution_class=classify_tool_execution(tool_name),
             )
 
         except Exception as e:
@@ -359,7 +564,43 @@ class ContainerRunner:
                 execution_mode=execution_mode,
                 execution_provenance="live",
                 execution_reason="container_execution_error",
+                execution_class=classify_tool_execution(tool_name),
             )
+
+    def _write_execution_log(
+        self,
+        *,
+        output_dir: str,
+        tool_name: str,
+        phase: str,
+        command: list[str],
+        stdout: str,
+        stderr: str,
+        exit_code: int,
+        duration: float,
+    ) -> None:
+        """Append a tool execution log entry for terminal panel visibility."""
+        log_path = Path(output_dir) / "tool_execution_log.json"
+        logs: list[dict] = []
+        if log_path.exists():
+            try:
+                logs = json.loads(log_path.read_text())
+            except (json.JSONDecodeError, OSError):
+                logs = []
+
+        entry = ToolExecutionLog(
+            tool_id=tool_name,
+            phase=phase,
+            command=command,
+            stdout=stdout[-5_000:],
+            stderr=stderr[-2_000:],
+            exit_code=exit_code,
+            duration_seconds=round(duration, 2),
+            timestamp=_time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+            description=f"{tool_name} — {phase}",
+        )
+        logs.append(entry.to_dict())
+        log_path.write_text(json.dumps(logs, indent=2, default=str))
 
     def _resolve_execution_decision(
         self,
@@ -379,10 +620,13 @@ class ContainerRunner:
         allowed_tools = self._allowed_live_tools(scan_config)
         if tool_name not in allowed_tools:
             logger.info("Tool %s not in live allowlist; blocking live execution", tool_name)
+            reason = "not_supported"
+            if tool_name in self._approval_required_tools(scan_config):
+                reason = "approval_required"
             return ExecutionDecision(
                 mode=mode,
                 provenance="blocked",
-                reason="not_supported",
+                reason=reason,
             )
 
         if not self._target_allowed_for_live(target=target, scan_config=scan_config, mode=mode):
@@ -395,11 +639,54 @@ class ContainerRunner:
 
         return ExecutionDecision(mode=mode, provenance="live")
 
+    def resolve_execution_decision(
+        self,
+        *,
+        tool_name: str,
+        target: str,
+        scan_config: dict[str, object],
+    ) -> ExecutionDecision:
+        """Expose runtime execution planning without duplicating worker policy logic."""
+        return self._resolve_execution_decision(
+            tool_name=tool_name,
+            target=target,
+            scan_config=scan_config,
+        )
+
     def _execution_mode(self, scan_config: dict[str, object]) -> str:
         execution = scan_config.get("execution", {})
         if isinstance(execution, dict) and execution.get("mode"):
             return _normalize_execution_mode(str(execution["mode"]))
         return _normalize_execution_mode(EXECUTION_MODE)
+
+    def _build_command_context(self, scan_config: dict[str, object]) -> dict[str, str]:
+        """Build context variables for command template rendering."""
+        cmd_ctx = scan_config.get("command_context", {})
+        if not isinstance(cmd_ctx, dict):
+            cmd_ctx = {}
+        targeting = scan_config.get("targeting", {})
+        if not isinstance(targeting, dict):
+            targeting = {}
+        selected = scan_config.get("selected_checks", {})
+        if not isinstance(selected, dict):
+            selected = {}
+        rate_limits = scan_config.get("rate_limits", {})
+        if not isinstance(rate_limits, dict):
+            rate_limits = {}
+        sqlmap_cfg = selected.get("sqlmap", {})
+        if not isinstance(sqlmap_cfg, dict):
+            sqlmap_cfg = {}
+
+        return {
+            "base_url": str(cmd_ctx.get("base_url") or targeting.get("base_url") or ""),
+            "target_host": str(cmd_ctx.get("target_host") or targeting.get("host") or ""),
+            "scope_domain": str(cmd_ctx.get("scope_host") or targeting.get("scope_domain") or ""),
+            "nuclei_tags": str(cmd_ctx.get("nuclei_tags") or "exposure,misconfig,sqli,xss,rce,lfi,ssrf"),
+            "nuclei_rate_limit": str(rate_limits.get("nuclei_requests_per_minute", 35)),
+            "ffuf_rate_limit": str(rate_limits.get("ffuf_requests_per_minute", 60)),
+            "sqlmap_threads": str(rate_limits.get("sqlmap_threads", 1)),
+            "sqlmap_path": str(sqlmap_cfg.get("path", "/")),
+        }
 
     def _allowed_live_tools(self, scan_config: dict[str, object]) -> set[str]:
         execution = scan_config.get("execution", {})
@@ -412,6 +699,17 @@ class ContainerRunner:
 
         allowed = {str(tool).strip() for tool in configured if str(tool).strip()}
         return allowed or set(LIVE_EXECUTION_TOOLS)
+
+    def _approval_required_tools(self, scan_config: dict[str, object]) -> set[str]:
+        execution = scan_config.get("execution", {})
+        if not isinstance(execution, dict):
+            return set()
+
+        configured = execution.get("approval_required_tools", [])
+        if not isinstance(configured, list):
+            return set()
+
+        return {str(tool).strip() for tool in configured if str(tool).strip()}
 
     def _target_allowed_for_live(
         self,
@@ -435,7 +733,7 @@ class ContainerRunner:
         if policy == "local_only":
             return _is_local_host(host)
 
-        if policy == "in_scope":
+        if policy == "in_scope" or policy == "external_authorized":
             return _host_in_scope(host=host, scan_config=scan_config)
 
         return True
@@ -471,6 +769,14 @@ class ContainerRunner:
             ]
             bounded_entries = entries[:20]
             (input_dir / "ffuf_wordlist.txt").write_text("\n".join(bounded_entries) + "\n")
+
+        if tool_name == "dalfox":
+            dalfox_targets = _build_dalfox_targets(
+                base_url=base_url,
+                input_dir=input_dir,
+                selected_checks=selected_checks,
+            )
+            (input_dir / "dalfox_urls.txt").write_text("\n".join(dalfox_targets) + "\n")
 
         if tool_name == "nuclei":
             templates_dir = input_dir / "nuclei-templates"
@@ -523,6 +829,7 @@ class ContainerRunner:
             timed_out=False,
             execution_mode=execution_mode,
             execution_provenance="live",
+            execution_class=classify_tool_execution("scope_check"),
         )
 
     async def _run_custom_poc_verifier(
@@ -549,7 +856,14 @@ class ContainerRunner:
             verification_context = {}
 
         verify_type = str(verification_context.get("verify_type") or "custom_poc").strip().lower()
-        if verify_type != "idor_read":
+        if verify_type not in {
+            "idor_read",
+            "sensitive_config_exposure",
+            "sensitive_data_exposure",
+            "stack_trace_exposure",
+            "xss_reflect",
+            "xss_browser",
+        }:
             logger.info("custom_poc verify_type=%s is not supported for live mode", verify_type)
             return self._blocked(
                 tool_name="custom_poc",
@@ -564,56 +878,37 @@ class ContainerRunner:
             or verification_context.get("endpoint")
             or target
         ).strip()
-        sensitive_markers = [
-            str(marker).strip().lower()
-            for marker in verification_context.get("sensitive_markers", ["email", "salary"])
-            if str(marker).strip()
-        ]
         headers = {
             "User-Agent": "Pentra-Custom-POC/phase4",
-            "Accept": "application/json",
-            "X-Pentra-Verification": "idor_read",
+            "Accept": "application/json, text/html;q=0.9, */*;q=0.8",
+            "X-Pentra-Verification": verify_type,
         }
 
         try:
-            response = await asyncio.to_thread(
-                self._fetch_http_response,
-                request_url,
-                headers,
-            )
+            if verify_type == "xss_browser":
+                payload = await self._run_browser_xss_verifier(
+                    request_url=request_url,
+                    verification_context=verification_context,
+                    output_dir=output_dir,
+                )
+            else:
+                response = await asyncio.to_thread(
+                    self._fetch_http_response,
+                    request_url,
+                    headers,
+                )
+                payload = self._build_custom_poc_verification_payload(
+                    verify_type=verify_type,
+                    request_url=request_url,
+                    response=response,
+                    verification_context=verification_context,
+                )
         except (HTTPError, URLError) as exc:
             logger.warning("custom_poc verification failed for %s: %s", request_url, exc)
-            payload: list[dict[str, object]] = []
-        else:
-            status_code = int(response["status_code"])
-            body = str(response["body"])
-            matched_markers = [marker for marker in sensitive_markers if marker in body.lower()]
             payload = []
-            if status_code == 200 and matched_markers:
-                payload.append(
-                    {
-                        "target": request_url,
-                        "access_level": "unauthorized_object_read",
-                        "title": "Verified IDOR data access",
-                        "severity": "high",
-                        "confidence": 96,
-                        "description": (
-                            "Safe verification confirmed unauthorized object access returned "
-                            f"sensitive fields: {', '.join(matched_markers)}."
-                        ),
-                        "request": f"GET {request_url}",
-                        "response": f"HTTP/1.1 {status_code}\n\n{body[:4000]}",
-                        "exploit_result": (
-                            "Unauthorized object read verified with sensitive field exposure: "
-                            + ", ".join(matched_markers)
-                        ),
-                        "surface": "api" if "/api/" in request_url else "web",
-                        "route_group": verification_context.get("route_group"),
-                        "vulnerability_type": "idor",
-                        "exploitability": "high",
-                        "exploitability_score": 92,
-                    }
-                )
+        except Exception as exc:
+            logger.warning("browser-backed custom_poc verification failed for %s: %s", request_url, exc)
+            payload = []
 
         output_path = Path(output_dir) / "poc_result.json"
         output_path.write_text(json.dumps(payload, indent=2))
@@ -626,7 +921,50 @@ class ContainerRunner:
             timed_out=False,
             execution_mode=execution_mode,
             execution_provenance="live",
+            execution_class=classify_tool_execution("custom_poc"),
         )
+
+    async def _run_browser_xss_verifier(
+        self,
+        *,
+        request_url: str,
+        verification_context: dict[str, object],
+        output_dir: str,
+    ) -> list[dict[str, object]]:
+        probe_input = {
+            "request_url": request_url,
+            "verification_context": verification_context,
+            "chromium_path": os.getenv("PENTRA_CHROMIUM_PATH", "/usr/bin/chromium"),
+        }
+        helper_input_path = Path(output_dir) / "xss_browser_input.json"
+        helper_output_path = Path(output_dir) / "xss_browser_output.json"
+        helper_input_path.write_text(json.dumps(probe_input, indent=2))
+
+        helper_script = Path(__file__).with_name("browser_xss_probe.py")
+        helper_python = os.getenv("PENTRA_BROWSER_PYTHON", "python3")
+        process = await asyncio.create_subprocess_exec(
+            helper_python,
+            str(helper_script),
+            "--input",
+            str(helper_input_path),
+            "--output",
+            str(helper_output_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env={
+                **os.environ,
+                "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
+            },
+        )
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=45)
+        if process.returncode != 0:
+            stderr_text = stderr.decode("utf-8", errors="replace").strip()
+            stdout_text = stdout.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(stderr_text or stdout_text or "browser_xss_probe failed")
+        if not helper_output_path.exists():
+            return []
+        result = json.loads(helper_output_path.read_text())
+        return result if isinstance(result, list) else []
 
     async def _run_web_interact(
         self,
@@ -653,6 +991,7 @@ class ContainerRunner:
             timed_out=False,
             execution_mode=execution_mode,
             execution_provenance="live",
+            execution_class=classify_tool_execution("web_interact"),
         )
 
     async def _run_workflow_mutation_probe(
@@ -681,17 +1020,257 @@ class ContainerRunner:
             timed_out=False,
             execution_mode=execution_mode,
             execution_provenance="live",
+            execution_class=classify_tool_execution("custom_poc"),
         )
 
     def _fetch_http_response(self, request_url: str, headers: dict[str, str]) -> dict[str, object]:
         request = Request(request_url, headers=headers, method="GET")
-        with urlopen(request, timeout=10) as response:
-            body = response.read().decode("utf-8", errors="replace")
+        try:
+            with urlopen(request, timeout=10) as response:
+                body = response.read().decode("utf-8", errors="replace")
+                return {
+                    "status_code": response.getcode(),
+                    "body": body,
+                    "content_type": response.headers.get("Content-Type", ""),
+                }
+        except HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
             return {
-                "status_code": response.getcode(),
+                "status_code": int(exc.code or 0),
                 "body": body,
-                "content_type": response.headers.get("Content-Type", ""),
+                "content_type": exc.headers.get("Content-Type", ""),
             }
+
+    def _build_custom_poc_verification_payload(
+        self,
+        *,
+        verify_type: str,
+        request_url: str,
+        response: dict[str, object],
+        verification_context: dict[str, object],
+    ) -> list[dict[str, object]]:
+        status_code = int(response.get("status_code") or 0)
+        body = str(response.get("body") or "")
+        content_type = str(response.get("content_type") or "")
+
+        if verify_type == "idor_read":
+            sensitive_markers = [
+                str(marker).strip().lower()
+                for marker in verification_context.get("sensitive_markers", ["email", "salary"])
+                if str(marker).strip()
+            ]
+            matched_markers = [marker for marker in sensitive_markers if marker in body.lower()]
+            if status_code == 200 and matched_markers:
+                return [
+                    {
+                        "target": request_url,
+                        "access_level": "unauthorized_object_read",
+                        "title": "Verified IDOR data access",
+                        "severity": "high",
+                        "confidence": 96,
+                        "description": (
+                            "Safe verification confirmed unauthorized object access returned "
+                            f"sensitive fields: {', '.join(matched_markers)}."
+                        ),
+                        "request": f"GET {request_url}",
+                        "response": f"HTTP/1.1 {status_code}\n\n{body[:4000]}",
+                        "exploit_result": (
+                            "Unauthorized object read verified with sensitive field exposure: "
+                            + ", ".join(matched_markers)
+                        ),
+                        "surface": "api" if "/api/" in request_url else "web",
+                        "route_group": verification_context.get("route_group"),
+                        "vulnerability_type": "idor",
+                        "verification_state": "verified",
+                        "verification_confidence": 96,
+                        "exploitability": "high",
+                        "exploitability_score": 92,
+                    }
+                ]
+            return []
+
+        if verify_type in {"sensitive_config_exposure", "sensitive_data_exposure"}:
+            sensitive_markers = [
+                str(marker).strip().lower()
+                for marker in verification_context.get(
+                    "sensitive_markers",
+                    [
+                        "config",
+                        "baseurl",
+                        "showversionnumber",
+                        "localbackupenabled",
+                        "email",
+                        "password",
+                        "role",
+                        "totpsecret",
+                        "deluxetoken",
+                        "lastloginip",
+                    ],
+                )
+                if str(marker).strip()
+            ]
+            lowered_body = body.lower()
+            matched_markers = [marker for marker in sensitive_markers if marker in lowered_body]
+            if status_code in {200, 401, 403} and matched_markers:
+                marker_summary = ", ".join(matched_markers[:5])
+                critical_markers = {"password", "totpsecret", "deluxetoken", "lastloginip"}
+                exposes_user_records = any(marker in critical_markers for marker in matched_markers) or (
+                    "email" in matched_markers and "role" in matched_markers
+                )
+                unauthorized = status_code in {401, 403}
+                title = (
+                    "Verified sensitive API data exposure"
+                    if exposes_user_records
+                    else "Verified exposed application configuration"
+                )
+                if exposes_user_records and unauthorized:
+                    title = "Verified sensitive API data exposure despite authorization response"
+                return [
+                    {
+                        "target": request_url,
+                        "access_level": (
+                            "unauthorized_data_read"
+                            if exposes_user_records and unauthorized
+                            else "sensitive_api_read"
+                            if exposes_user_records
+                            else "public_config_read"
+                        ),
+                        "title": title,
+                        "severity": "critical" if exposes_user_records else "high",
+                        "confidence": 96 if exposes_user_records else 94,
+                        "description": (
+                            "Safe verification confirmed the endpoint returned sensitive "
+                            + (
+                                "user-account data "
+                                if exposes_user_records
+                                else "application configuration markers "
+                            )
+                            + (
+                                f"despite HTTP {status_code}: {marker_summary}."
+                                if unauthorized
+                                else f"{marker_summary}."
+                            )
+                        ),
+                        "request": f"GET {request_url}",
+                        "response": (
+                            f"HTTP/1.1 {status_code}\nContent-Type: {content_type}\n\n{body[:4000]}"
+                        ),
+                        "exploit_result": (
+                            (
+                                "Sensitive API response exposed internal account fields: "
+                                if exposes_user_records
+                                else "Public configuration response exposed internal markers: "
+                            )
+                            + marker_summary
+                        ),
+                        "surface": (
+                            "api" if "/api/" in request_url or "/rest/" in request_url else "web"
+                        ),
+                        "route_group": verification_context.get("route_group"),
+                        "vulnerability_type": "sensitive_data_exposure",
+                        "verification_state": "verified",
+                        "verification_confidence": 96 if exposes_user_records else 94,
+                        "exploitability": "high" if exposes_user_records else "medium",
+                        "exploitability_score": 90 if exposes_user_records else 76,
+                    }
+                ]
+            return []
+
+        if verify_type == "stack_trace_exposure":
+            lowered_body = body.lower()
+            stack_trace_markers = [
+                marker
+                for marker in (
+                    "<ul id=\"stacktrace\">",
+                    "error: unexpected path:",
+                    "error: blocked illegal activity by",
+                    "at /juice-shop/build/",
+                    "/node_modules/express/lib/router/",
+                    "router.process_params",
+                    "express ^",
+                    "unauthorizederror: no authorization header was found",
+                )
+                if marker in lowered_body
+            ]
+            if status_code in {401, 403, 500} and stack_trace_markers:
+                marker_summary = ", ".join(stack_trace_markers[:4])
+                return [
+                    {
+                        "target": request_url,
+                        "access_level": "verbose_error_page",
+                        "title": "Verified stack trace exposure",
+                        "severity": "high",
+                        "confidence": 94,
+                        "description": (
+                            "Safe verification confirmed a public verbose error page exposed "
+                            f"internal framework details: {marker_summary}."
+                        ),
+                        "request": f"GET {request_url}",
+                        "response": (
+                            f"HTTP/1.1 {status_code}\nContent-Type: {content_type}\n\n{body[:4000]}"
+                        ),
+                        "exploit_result": (
+                            "Verbose error response exposed internal stack-trace markers: "
+                            + marker_summary
+                        ),
+                        "surface": (
+                            "api" if "/api/" in request_url or "/rest/" in request_url else "web"
+                        ),
+                        "route_group": verification_context.get("route_group"),
+                        "vulnerability_type": "stack_trace_exposure",
+                        "verification_state": "verified",
+                        "verification_confidence": 94,
+                        "exploitability": "medium",
+                        "exploitability_score": 66,
+                    }
+                ]
+            return []
+
+        if verify_type == "xss_reflect":
+            probe_payload = "<svg id=pentra-xss>"
+            probe_url = self._inject_reflection_probe(request_url, payload=probe_payload)
+            if probe_url is None or (content_type and "html" not in content_type.lower()):
+                return []
+            if status_code == 200 and probe_payload.lower() in body.lower():
+                return [
+                    {
+                        "target": probe_url,
+                        "access_level": "reflected_script_injection",
+                        "title": "Verified reflected XSS",
+                        "severity": "high",
+                        "confidence": 93,
+                        "description": (
+                            "Safe verification confirmed unescaped script-tag-like input was "
+                            "reflected in an HTML response."
+                        ),
+                        "request": f"GET {probe_url}",
+                        "response": (
+                            f"HTTP/1.1 {status_code}\nContent-Type: {content_type}\n\n{body[:4000]}"
+                        ),
+                        "exploit_result": (
+                            "Unescaped HTML reflection confirmed with Pentra marker payload."
+                        ),
+                        "surface": "web",
+                        "route_group": verification_context.get("route_group"),
+                        "vulnerability_type": "xss",
+                        "verification_state": "verified",
+                        "verification_confidence": 93,
+                        "exploitability": "high",
+                        "exploitability_score": 88,
+                    }
+                ]
+            return []
+
+        return []
+
+    def _inject_reflection_probe(self, request_url: str, *, payload: str) -> str | None:
+        parsed = urlparse(request_url)
+        query = list(parse_qsl(parsed.query, keep_blank_values=True))
+        if not query:
+            return None
+        key, _ = query[0]
+        query[0] = (key, payload)
+        return urlunparse(parsed._replace(query=urlencode(query)))
 
     def _resolve_network_mode(
         self,
@@ -714,6 +1293,32 @@ class ContainerRunner:
             (output_path / "_stdout.log").write_text(stdout[-50_000:])
         if stderr.strip():
             (output_path / "_stderr.log").write_text(stderr[-20_000:])
+
+    def _materialize_graphql_cop_output(self, *, output_dir: str, stdout: str) -> None:
+        output_path = Path(output_dir)
+        if any(output_path.glob("*.json")):
+            return
+
+        payload: Any = []
+        for line in reversed(stdout.splitlines()):
+            candidate = line.strip()
+            if not candidate:
+                continue
+            try:
+                parsed = json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, list):
+                payload = parsed
+            elif isinstance(parsed, dict):
+                payload = [parsed]
+            else:
+                payload = []
+            break
+
+        (output_path / "graphql_cop.json").write_text(
+            json.dumps(payload, indent=2, default=str) + "\n"
+        )
 
     async def _simulate(
         self,
@@ -759,6 +1364,7 @@ class ContainerRunner:
             execution_mode=execution_mode,
             execution_provenance="simulated",
             execution_reason=reason or "demo_simulated_mode",
+            execution_class=classify_tool_execution(tool_name),
         )
 
     def _blocked(
@@ -793,6 +1399,7 @@ class ContainerRunner:
             execution_mode=execution_mode,
             execution_provenance="blocked",
             execution_reason=reason,
+            execution_class=classify_tool_execution(tool_name),
         )
 
     def _write_simulated_output(
@@ -1370,7 +1977,13 @@ def _simulation_nmap_xml(host: str, services: list[tuple[int, str, str]]) -> str
     ).strip()
 
 
-def _simulation_http_request(url: str, *, method: str = "GET", body: str | None = None) -> str:
+def _simulation_http_request(
+    url: str,
+    *,
+    method: str = "GET",
+    body: str | None = None,
+    headers: dict[str, str] | None = None,
+) -> str:
     path = "/" + url.split("://", 1)[1].split("/", 1)[1] if "/" in url.split("://", 1)[1] else "/"
     host = url.split("://", 1)[1].split("/", 1)[0]
     lines = [
@@ -1380,6 +1993,9 @@ def _simulation_http_request(url: str, *, method: str = "GET", body: str | None 
         "X-Pentra-Profile: external_web_api_v1",
         "Accept: application/json",
     ]
+    if headers:
+        for key, value in headers.items():
+            lines.append(f"{key}: {value}")
     if body is not None:
         lines.extend(
             [
@@ -1424,7 +2040,241 @@ def _base_url_from_target(target: str) -> str:
     parsed = urlparse(raw if "://" in raw else f"https://{raw}")
     scheme = parsed.scheme or "https"
     netloc = parsed.netloc or parsed.path.split("/", 1)[0]
-    return f"{scheme}://{netloc}".rstrip("/")
+    path_prefix = (parsed.path or "").rstrip("/")
+    return f"{scheme}://{netloc}{path_prefix}".rstrip("/")
+
+
+def _build_dalfox_targets(
+    *,
+    base_url: str,
+    input_dir: Path,
+    selected_checks: dict[str, object],
+) -> list[str]:
+    dalfox_config = selected_checks.get("dalfox", {})
+    if not isinstance(dalfox_config, dict):
+        dalfox_config = {}
+
+    max_targets = _bounded_int(
+        dalfox_config.get("max_targets"),
+        default=4,
+        minimum=1,
+        maximum=12,
+    )
+    allow_path_only = bool(dalfox_config.get("allow_path_only"))
+
+    targets: set[str] = set()
+
+    endpoints_path = input_dir / "endpoints.json"
+    if endpoints_path.exists():
+        try:
+            payload = json.loads(endpoints_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            payload = []
+        if isinstance(payload, list):
+            for item in payload:
+                if not isinstance(item, dict):
+                    continue
+                url = str(item.get("url") or "").strip()
+                if url:
+                    targets.add(url)
+
+    for collection_key in ("http_probe_paths", "content_paths"):
+        values = selected_checks.get(collection_key, [])
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            raw_value = str(value or "").strip()
+            if not raw_value:
+                continue
+            if raw_value.startswith("http://") or raw_value.startswith("https://"):
+                targets.add(raw_value)
+            else:
+                normalized = _normalize_wordlist_entry(raw_value)
+                if normalized:
+                    targets.add(_join_url(base_url, normalized))
+
+    for value in _string_list(dalfox_config.get("include_urls")):
+        if value.startswith("http://") or value.startswith("https://"):
+            targets.add(value)
+        else:
+            normalized = _normalize_wordlist_entry(value)
+            if normalized:
+                targets.add(_join_url(base_url, normalized))
+
+    enriched_targets = set(targets)
+    for url in list(targets):
+        lowered = url.lower()
+        if "?" in url:
+            continue
+        if "search" in lowered:
+            separator = "&" if "?" in url else "?"
+            enriched_targets.add(f"{url}{separator}q=test")
+        if lowered.endswith("/login") or lowered.endswith("/login.php"):
+            enriched_targets.add(f"{url}?next=/")
+
+    candidate_targets = {
+        target
+        for target in enriched_targets
+        if _is_dalfox_candidate_target(target, allow_path_only=allow_path_only)
+    }
+    ranked_targets = sorted(
+        (target for target in candidate_targets if target),
+        key=lambda target: (-_score_dalfox_target(target), len(target), target),
+    )
+    return ranked_targets[:max_targets]
+
+
+def _is_dalfox_candidate_target(target: str, *, allow_path_only: bool = False) -> bool:
+    normalized = str(target or "").strip()
+    if not normalized:
+        return False
+    lowered = normalized.lower()
+    if "?" in normalized:
+        return True
+    if not allow_path_only:
+        return False
+    candidate_markers = (
+        "search",
+        "query",
+        "redirect",
+        "return",
+        "callback",
+        "next",
+        "continue",
+        "message",
+        "comment",
+        "feedback",
+        "keyword",
+    )
+    return any(marker in lowered for marker in candidate_markers)
+
+
+def _score_dalfox_target(target: str) -> int:
+    lowered = str(target or "").lower()
+    score = 0
+    if "?" in lowered:
+        score += 100
+    if any(marker in lowered for marker in ("q=", "query=", "search", "keyword", "lang=", "redirect=", "next=")):
+        score += 40
+    if "/rest/products/search" in lowered:
+        score += 50
+    if any(marker in lowered for marker in ("message", "comment", "feedback", "return", "callback", "continue")):
+        score += 20
+    return score
+
+
+def _read_nonempty_lines(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+    try:
+        return [line.strip() for line in path.read_text().splitlines() if line.strip()]
+    except OSError:
+        return []
+
+
+def _command_flag_value(command: list[str], *flags: str) -> str:
+    for index, part in enumerate(command[:-1]):
+        if part in flags:
+            return str(command[index + 1]).strip()
+    return ""
+
+
+def _command_headers(command: list[str]) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    index = 0
+    while index < len(command):
+        part = str(command[index]).strip()
+        if part not in {"-H", "--header"}:
+            index += 1
+            continue
+        if index + 1 >= len(command):
+            break
+        raw_value = str(command[index + 1]).strip()
+        if not raw_value:
+            index += 2
+            continue
+        try:
+            parsed = json.loads(raw_value)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            for key, value in parsed.items():
+                headers[str(key)] = str(value)
+        elif ":" in raw_value:
+            key, value = raw_value.split(":", 1)
+            headers[key.strip()] = value.strip()
+        index += 2
+    return headers
+
+
+def _graphql_probe_request(
+    target_url: str,
+    headers: dict[str, str],
+    query: str,
+) -> dict[str, Any]:
+    request_headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "Pentra-GraphQL-Probe/phase10",
+        **headers,
+    }
+    body = json.dumps({"query": query}).encode("utf-8")
+    request = Request(target_url, data=body, headers=request_headers, method="POST")
+    try:
+        with urlopen(request, timeout=15) as response:
+            raw_body = response.read().decode("utf-8", errors="replace")
+            status = getattr(response, "status", 200)
+            content_type = response.headers.get("Content-Type", "application/json")
+    except HTTPError as exc:
+        raw_body = exc.read().decode("utf-8", errors="replace")
+        status = exc.code
+        content_type = exc.headers.get("Content-Type", "application/json") if exc.headers else "application/json"
+    except URLError as exc:
+        return {
+            "status": None,
+            "body": "",
+            "json": None,
+            "content_type": "application/json",
+            "error": str(exc),
+        }
+
+    parsed_json: Any = None
+    try:
+        parsed_json = json.loads(raw_body)
+    except json.JSONDecodeError:
+        parsed_json = None
+
+    return {
+        "status": status,
+        "body": raw_body,
+        "json": parsed_json,
+        "content_type": content_type,
+        "error": None,
+    }
+
+
+def _graphql_response_indicates_endpoint(response: dict[str, Any]) -> bool:
+    payload = response.get("json")
+    if not isinstance(payload, dict):
+        return False
+    if isinstance(payload.get("data"), dict):
+        return True
+    errors = payload.get("errors")
+    return isinstance(errors, list) and len(errors) > 0
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _bounded_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, min(parsed, maximum))
 
 
 def _normalize_execution_mode(value: str) -> str:

@@ -1,0 +1,42 @@
+key: owasp_logging_cheat_sheet
+title: OWASP Logging Cheat Sheet normalized source summary
+source_key: owasp_logging_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's logging guidance gives Pentra the distinction between useful security
+  telemetry and harmful disclosure: stack traces, secrets, and raw error data
+  should not be treated as acceptable observability.
+facts:
+  - fact_key: owasp_logging_security_event_design
+    title: Security-event logging design
+    fact_type: observability_summary
+    summary: >
+      Logging should capture meaningful security events while minimizing
+      sensitive data exposure and preventing logs from becoming a disclosure
+      channel.
+    tags:
+      - logging
+      - observability
+      - disclosure
+    data:
+      high_signal_logging_controls:
+        - security_relevant_event_selection
+        - sensitive_data_minimization
+        - consistent_error_handling
+        - log_integrity_and_review
+      replay_implications:
+        - Distinguish stack-trace disclosure from benign error handling.
+        - Preserve HTTP status, body markers, and log-signal context separately.
+    citations:
+      - fact_key: owasp_logging_security_event_design
+        title: OWASP Logging Cheat Sheet
+        source_key: owasp_logging_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - observability_failure_guidance
+          - error_and_event_logging_guidance
+          - security_signal_logging

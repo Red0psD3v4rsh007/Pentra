@@ -1,0 +1,30 @@
+{
+  "key": "crapi_local",
+  "enabled": false,
+  "asset_name": "Phase 9 crAPI",
+  "asset_type": "api",
+  "target": "http://127.0.0.1:3004",
+  "healthcheck_url": "http://127.0.0.1:3004/",
+  "launch_mode": "docker_script",
+  "ground_truth_source": "pentra_core/dev_targets/capability_benchmarks/crapi.json",
+  "notes": "Pinned crAPI image is available, but the benchmark remains disabled until a full multi-service launch recipe and explicit expectation subset are committed.",
+  "expectations": {
+    "expected_vulnerability_types": [
+      "idor",
+      "auth_bypass"
+    ],
+    "expected_verified_types": [],
+    "minimum_detected_recall": 0.5,
+    "minimum_verified_recall": 0.0,
+    "minimum_verified_share": 0.0
+  },
+  "scan_plans": [
+    {
+      "key": "crapi_full",
+      "label": "crAPI / full",
+      "scan_type": "full",
+      "config_template": "stateful_full",
+      "timeout_seconds": 420
+    }
+  ]
+}

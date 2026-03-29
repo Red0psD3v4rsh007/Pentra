@@ -1,0 +1,40 @@
+key: mitre_attack_enterprise_phase1
+phase: 1
+source_key: mitre_attack_enterprise
+title: MITRE ATT&CK Enterprise acquisition manifest
+acquisition_scope: >
+  Capture the enterprise tactic scaffold and the web-relevant technique seed
+  set that Pentra can use for planner taxonomy, capability-family alignment,
+  and attack-path framing.
+parser_key: manual_structured_summary
+normalization_units:
+  - tactic_index
+  - web_relevant_technique_seed_list
+  - planner_taxonomy_summary
+target_outputs:
+  - normalized/source_summaries/mitre_attack_enterprise.yaml
+focus_areas:
+  - reconnaissance
+  - resource_development
+  - initial_access
+  - discovery
+  - collection
+  - active_scanning
+  - vulnerability_scanning
+  - wordlist_scanning
+  - exploit_public_facing_application
+usage_notes: >
+  Use MITRE ATT&CK as a taxonomy source and technique seed source. Do not use
+  it as direct exploit-proof truth for web findings.
+citations:
+  - fact_key: mitre_attack_enterprise_source
+    title: MITRE ATT&CK Enterprise Matrix
+    source_key: mitre_attack_enterprise
+    source_url: https://attack.mitre.org/matrices/enterprise/
+    trust_tier: official_public
+    retrieved_at: "2026-03-24T12:00:00+05:30"
+    extraction_mode: browse
+    authority_for:
+      - attack_taxonomy
+      - planner_action_taxonomy
+      - capability_family_taxonomy

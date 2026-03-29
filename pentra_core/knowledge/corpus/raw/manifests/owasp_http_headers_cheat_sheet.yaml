@@ -1,0 +1,32 @@
+key: owasp_http_headers_cheat_sheet_phase1
+phase: 1
+source_key: owasp_http_headers_cheat_sheet
+title: OWASP HTTP Headers Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official browser-facing response-header guidance that shapes
+  misconfiguration, transport-hardening, and header-baseline reasoning for
+  disclosure-focused packs.
+parser_key: manual_structured_summary
+normalization_units:
+  - header_security_summary
+target_outputs:
+  - normalized/source_summaries/owasp_http_headers_cheat_sheet.yaml
+focus_areas:
+  - csp_and_frame_controls
+  - transport_security_headers
+  - header_baseline_gaps
+usage_notes: >
+  Preserve hardening baseline guidance and header-evidence constraints. Do not
+  add bypass playbooks or browser-specific exploitation chains.
+citations:
+  - fact_key: owasp_http_headers_cheat_sheet_source
+    title: OWASP HTTP Headers Cheat Sheet
+    source_key: owasp_http_headers_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-27T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - header_misconfiguration_guidance
+      - transport_header_guidance
+      - browser_security_header_baselines

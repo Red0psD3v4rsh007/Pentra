@@ -1,7 +1,8 @@
 """Redis Streams publisher for durable inter-service events.
 
 Replaces Redis Pub/Sub for events that require acknowledgement and
-replay guarantees (scan.created, job.completed, job.failed, scan.completed).
+replay guarantees (scan.created, scan.cancelled, job.completed, job.failed,
+scan.completed).
 
 Events are published via ``XADD`` to named streams with automatic
 trimming (``MAXLEN ~``).  Consumer groups on the receiving side use
@@ -166,6 +167,54 @@ class StreamPublisher:
             "asset_type": asset_type,
             "config": config or {},
             "created_by": str(created_by) if created_by else None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        return await self.xadd(STREAM_SCAN_EVENTS, self._serialize(payload))
+
+    # ── scan.cancelled ───────────────────────────────────────────
+
+    async def publish_scan_cancelled(
+        self,
+        *,
+        scan_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        old_status: str,
+        new_status: str = "cancelled",
+        cancelled_by: uuid.UUID | None = None,
+    ) -> str:
+        """Publish ``scan.cancelled`` event — consumed by orchestrator."""
+        payload = {
+            "event_type": "scan.cancelled",
+            "event_id": str(uuid.uuid4()),
+            "scan_id": str(scan_id),
+            "tenant_id": str(tenant_id),
+            "old_status": old_status,
+            "new_status": new_status,
+            "cancelled_by": str(cancelled_by) if cancelled_by else None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        return await self.xadd(STREAM_SCAN_EVENTS, self._serialize(payload))
+
+    async def publish_scan_resumed(
+        self,
+        *,
+        scan_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        old_status: str,
+        new_status: str = "running",
+        resume_mode: str = "continue",
+        resumed_by: uuid.UUID | None = None,
+    ) -> str:
+        """Publish ``scan.resumed`` event — consumed by the orchestrator."""
+        payload = {
+            "event_type": "scan.resumed",
+            "event_id": str(uuid.uuid4()),
+            "scan_id": str(scan_id),
+            "tenant_id": str(tenant_id),
+            "old_status": old_status,
+            "new_status": new_status,
+            "resume_mode": resume_mode,
+            "resumed_by": str(resumed_by) if resumed_by else None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         return await self.xadd(STREAM_SCAN_EVENTS, self._serialize(payload))

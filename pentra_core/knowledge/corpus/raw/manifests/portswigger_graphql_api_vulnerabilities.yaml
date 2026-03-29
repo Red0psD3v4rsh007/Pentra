@@ -1,0 +1,34 @@
+key: portswigger_graphql_api_vulnerabilities_phase1
+phase: 1
+source_key: portswigger_graphql_api_vulnerabilities
+title: PortSwigger GraphQL API vulnerabilities acquisition manifest
+acquisition_scope: >
+  Capture official GraphQL endpoint-discovery, introspection, and probing
+  methodology that can support route discovery and candidate ranking on
+  GraphQL-heavy targets.
+parser_key: manual_structured_summary
+normalization_units:
+  - graphql_endpoint_discovery_patterns
+  - graphql_probe_methodology
+target_outputs:
+  - normalized/source_summaries/portswigger_graphql_api_vulnerabilities.yaml
+focus_areas:
+  - endpoint_discovery
+  - introspection
+  - suggestions
+  - batching
+usage_notes: >
+  Store compact methodology facts for discovery and replay. Do not copy lab
+  content or exploitation walkthroughs.
+citations:
+  - fact_key: portswigger_graphql_api_vulnerabilities_source
+    title: GraphQL API vulnerabilities
+    source_key: portswigger_graphql_api_vulnerabilities
+    source_url: https://portswigger.net/web-security/graphql
+    trust_tier: official_public
+    retrieved_at: "2026-03-26T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - graphql_endpoint_discovery
+      - graphql_attack_surface_guidance
+      - replayable_graphql_probe_patterns

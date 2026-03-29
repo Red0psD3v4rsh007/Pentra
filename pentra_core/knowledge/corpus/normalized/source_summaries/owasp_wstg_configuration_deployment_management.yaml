@@ -1,0 +1,43 @@
+key: owasp_wstg_configuration_deployment_management
+title: OWASP WSTG Configuration and Deployment Management Testing normalized source summary
+source_key: owasp_wstg_configuration_deployment_management
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's configuration and deployment testing guidance gives Pentra the route
+  and artifact methodology for exposed backups, debug/admin surfaces, and
+  deployment leakage that should not be reachable in production.
+facts:
+  - fact_key: owasp_wstg_config_deployment_surface_review
+    title: Configuration and deployment surface review
+    fact_type: misconfiguration_summary
+    summary: >
+      Deployment review should focus on replayable evidence from backup files,
+      debug interfaces, default artifacts, and exposed documentation or admin
+      surfaces.
+    tags:
+      - deployment
+      - misconfiguration
+      - hidden_assets
+    data:
+      high_signal_config_surfaces:
+        - backup_and_unreferenced_files
+        - debug_and_admin_interfaces
+        - default_installation_artifacts
+        - exposed_api_and_documentation_surfaces
+        - deployment_specific_information_leakage
+      replay_implications:
+        - Keep exact path, response, and reachability evidence for exposed deployment surfaces.
+        - Route names alone are insufficient without replayable artifact capture.
+    citations:
+      - fact_key: owasp_wstg_config_deployment_surface_review
+        title: OWASP WSTG Configuration and Deployment Management Testing
+        source_key: owasp_wstg_configuration_deployment_management
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/README
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - deployment_misconfiguration_methodology
+          - hidden_asset_testing_methodology
+          - config_surface_testing_guidance

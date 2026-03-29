@@ -1,0 +1,35 @@
+key: juice_shop_official_guide_phase1
+phase: 1
+source_key: juice_shop_official_guide
+title: OWASP Juice Shop official guide acquisition manifest
+acquisition_scope: >
+  Capture official challenge-hunting and challenge-family context from the
+  public guide so Pentra can align benchmark context and challenge-family
+  mapping without copying walkthrough bodies.
+parser_key: manual_structured_summary
+normalization_units:
+  - challenge_guide_summary
+  - challenge_family_index
+  - benchmark_context_summary
+target_outputs:
+  - normalized/source_summaries/juice_shop_official_guide.yaml
+focus_areas:
+  - challenge_tracking
+  - challenge_families
+  - category_navigation
+  - benchmark_context
+usage_notes: >
+  Use the official guide to understand challenge-family organization and
+  public benchmark context. Avoid storing long walkthrough text.
+citations:
+  - fact_key: juice_shop_official_guide_source
+    title: OWASP Juice Shop Official Guide
+    source_key: juice_shop_official_guide
+    source_url: https://help.owasp-juice.shop/part1/challenges.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-24T12:00:00+05:30"
+    extraction_mode: browse
+    authority_for:
+      - challenge_family_mapping
+      - benchmark_context
+      - feature_to_challenge_hints

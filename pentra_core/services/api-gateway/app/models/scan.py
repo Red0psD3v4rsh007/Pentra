@@ -151,6 +151,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
     String,
@@ -167,6 +168,18 @@ class Scan(Base, TenantMixin, TimestampMixin):
     """Pentest scan targeting a single asset."""
 
     __tablename__ = "scans"
+    __table_args__ = (
+        Index(
+            "uq_scans_idempotency_key",
+            "tenant_id",
+            "created_by",
+            "asset_id",
+            "scan_type",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -207,6 +220,12 @@ class Scan(Base, TenantMixin, TimestampMixin):
         server_default=text("'normal'"),
     )
 
+    idempotency_key: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+        index=True,
+    )
+
     config: Mapped[dict] = mapped_column(
         JSONB,
         nullable=False,
@@ -217,6 +236,12 @@ class Scan(Base, TenantMixin, TimestampMixin):
         SmallInteger,
         nullable=False,
         server_default=text("0"),
+    )
+
+    scheduled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
     )
 
     started_at: Mapped[datetime | None] = mapped_column(
@@ -325,6 +350,16 @@ class ScanJob(Base, TenantMixin, TimestampMixin):
     input_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     output_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    scheduled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    claimed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),

@@ -1,0 +1,31 @@
+key: owasp_vulnerable_dependency_management_cheat_sheet_phase1
+phase: 1
+source_key: owasp_vulnerable_dependency_management_cheat_sheet
+title: OWASP Vulnerable Dependency Management Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official dependency-management guidance that shapes component-truth
+  handling, patch-state reasoning, and inventory-driven disclosure workflows.
+parser_key: manual_structured_summary
+normalization_units:
+  - dependency_management_summary
+target_outputs:
+  - normalized/source_summaries/owasp_vulnerable_dependency_management_cheat_sheet.yaml
+focus_areas:
+  - asset_inventory
+  - patch_state
+  - sbom_and_component_truth
+usage_notes: >
+  Preserve component-truth and remediation workflow facts. Do not add exploit
+  chains for specific component CVEs.
+citations:
+  - fact_key: owasp_vulnerable_dependency_management_cheat_sheet_source
+    title: OWASP Vulnerable Dependency Management Cheat Sheet
+    source_key: owasp_vulnerable_dependency_management_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/Vulnerable_Dependency_Management_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-27T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - vulnerable_component_guidance
+      - dependency_risk_handling
+      - component_truth_constraints

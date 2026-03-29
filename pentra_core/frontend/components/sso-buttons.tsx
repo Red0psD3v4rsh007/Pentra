@@ -2,9 +2,18 @@
 
 interface SSOButtonsProps {
   disabled?: boolean
+  googleHref?: string | null
+  googleAvailable?: boolean
 }
 
-export function SSOButtons({ disabled }: SSOButtonsProps) {
+export function SSOButtons({
+  disabled,
+  googleHref = null,
+  googleAvailable = false,
+}: SSOButtonsProps) {
+  const googleDisabled = disabled || !googleAvailable || !googleHref
+  const unsupportedSsoDisabled = true
+
   return (
     <div className="flex flex-col gap-4 mt-8">
       {/* Divider */}
@@ -19,7 +28,12 @@ export function SSOButtons({ disabled }: SSOButtonsProps) {
         {/* Google SSO */}
         <button
           type="button"
-          disabled={disabled}
+          disabled={googleDisabled}
+          onClick={() => {
+            if (!googleDisabled && googleHref) {
+              window.location.href = googleHref
+            }
+          }}
           className="group relative h-12 flex items-center justify-center gap-2.5 bg-background/30 border border-border/40 rounded-lg text-sm text-foreground overflow-hidden transition-all duration-300 hover:border-border hover:bg-background/50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {/* Hover gradient */}
@@ -37,7 +51,7 @@ export function SSOButtons({ disabled }: SSOButtonsProps) {
         {/* GitHub SSO */}
         <button
           type="button"
-          disabled={disabled}
+          disabled={unsupportedSsoDisabled}
           className="group relative h-12 flex items-center justify-center gap-2.5 bg-background/30 border border-border/40 rounded-lg text-sm text-foreground overflow-hidden transition-all duration-300 hover:border-border hover:bg-background/50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {/* Hover gradient */}
@@ -51,11 +65,11 @@ export function SSOButtons({ disabled }: SSOButtonsProps) {
       </div>
 
       {/* SAML SSO */}
-      <button
-        type="button"
-        disabled={disabled}
-        className="group relative h-12 flex items-center justify-center gap-2.5 bg-background/30 border border-border/40 rounded-lg text-sm text-foreground overflow-hidden transition-all duration-300 hover:border-border hover:bg-background/50 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
+        <button
+          type="button"
+          disabled={unsupportedSsoDisabled}
+          className="group relative h-12 flex items-center justify-center gap-2.5 bg-background/30 border border-border/40 rounded-lg text-sm text-foreground overflow-hidden transition-all duration-300 hover:border-border hover:bg-background/50 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
         {/* Hover gradient */}
         <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         
@@ -65,6 +79,10 @@ export function SSOButtons({ disabled }: SSOButtonsProps) {
         </svg>
         <span className="relative font-medium">Continue with SSO</span>
       </button>
+
+      <p className="text-xs text-muted-foreground/70 text-center">
+        Google sign-in is live when configured. GitHub and enterprise SSO are not wired in this deployment yet.
+      </p>
     </div>
   )
 }

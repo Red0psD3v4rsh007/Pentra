@@ -309,6 +309,7 @@ async def graphql(request: Request) -> JSONResponse:
     return JSONResponse(
         {
             "data": {
+                "__typename": "Query",
                 "__schema": {
                     "types": [{"name": "Query"}, {"name": "User"}, {"name": "Mutation"}]
                 }

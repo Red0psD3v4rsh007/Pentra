@@ -9,7 +9,22 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from jose import JWTError, jwt
+try:
+    from jose import JWTError, jwt
+except ModuleNotFoundError:  # pragma: no cover - minimal test env fallback
+    class JWTError(Exception):
+        """Fallback JWT error when python-jose is unavailable."""
+
+    class _MissingJWTModule:
+        @staticmethod
+        def encode(*args, **kwargs):
+            raise RuntimeError("python-jose is required for JWT encoding")
+
+        @staticmethod
+        def decode(*args, **kwargs):
+            raise RuntimeError("python-jose is required for JWT decoding")
+
+    jwt = _MissingJWTModule()
 
 from pentra_common.config.settings import get_settings
 

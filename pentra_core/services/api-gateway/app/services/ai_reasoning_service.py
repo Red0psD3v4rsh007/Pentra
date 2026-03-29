@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -20,7 +21,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from pentra_common.ai.bounded_agent import BoundedAgentClient, BoundedAgentRequest
 from pentra_common.config.settings import get_settings
+from pentra_common.ai.prompt_contracts import (
+    advisory_prompt_contract,
+    build_json_user_prompt,
+)
+from pentra_common.ai.provider_router import (
+    ResolvedAIProvider,
+    normalize_provider,
+    provider_priority_from_settings,
+    resolve_provider_chain,
+    resolve_provider_config,
+)
 from pentra_common.storage.artifacts import (
     read_json_artifact,
     sha256_json,
@@ -37,7 +50,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 AIAdvisoryMode = Literal["advisory_only", "deep_advisory"]
-AIReasoningProvider = Literal["anthropic", "openai", "fallback"]
+AIReasoningProvider = Literal["anthropic", "openai", "groq", "ollama", "gemini", "fallback"]
 
 _DEFAULT_ADVISORY_MODE: AIAdvisoryMode = "advisory_only"
 _DEEP_ADVISORY_MODE: AIAdvisoryMode = "deep_advisory"
@@ -56,6 +69,14 @@ _DEEP_CONTEXT_LIMITS = {
     "nodes": 40,
     "edges": 56,
 }
+_DIAGNOSTICS_PREVIEW_CHARS = 180
+_DIAGNOSTICS_SYSTEM_PROMPT = (
+    "You are Pentra AI provider diagnostics. "
+    "Return compact JSON only."
+)
+_DIAGNOSTICS_USER_PROMPT = (
+    '{"status":"ok","provider_check":"healthy","summary":"Return this object unchanged."}'
+)
 
 _BASE_SYSTEM_PROMPT = """You are Pentra AI Advisory.
 
@@ -77,12 +98,21 @@ Return this JSON object:
     "next_steps": [
       {"title": "string", "rationale": "string", "confidence": 0}
     ],
+    "exploitation_paths": [
+      {
+        "chain": ["step 1 description", "step 2 description"],
+        "impact": "string",
+        "likelihood": "high|medium|low",
+        "mitre_techniques": ["T1190", "T1059"]
+      }
+    ],
     "confidence": 0
   },
   "report": {
     "draft_summary": "string",
     "prioritization_notes": "string",
     "remediation_focus": ["string"],
+    "attack_surface_assessment": "string",
     "confidence": 0
   },
   "findings": [
@@ -92,6 +122,8 @@ Return this JSON object:
       "why_it_matters": "string",
       "business_impact": "string",
       "exploitability_assessment": "string",
+      "exploitation_techniques": ["string"],
+      "lateral_movement_potential": "string",
       "triage_priority": "immediate|high|medium|low",
       "next_steps": ["string"],
       "confidence": 0
@@ -107,6 +139,11 @@ Deep Advisory mode instructions:
 - Prioritize cross-finding remediation sequencing, not just single-issue severity.
 - Highlight where evidence is strong enough to justify human offensive review next.
 - Stay bounded to the supplied evidence and keep every next step safe and reviewable.
+- Map findings to MITRE ATT&CK techniques where applicable.
+- Identify potential lateral movement paths from confirmed vulnerabilities.
+- Assess chained exploitation scenarios (e.g., XSS → session theft → privilege escalation).
+- Evaluate the full attack surface including API endpoints, authentication boundaries, and data flows.
+- Consider supply-chain and dependency vulnerabilities when present.
 """
 
 
@@ -121,6 +158,8 @@ class AIReasoningConfig:
     base_url: str
     anthropic_version: str | None
     reasoning_effort: str | None
+    request_surface: str
+    requires_api_key: bool
     timeout_seconds: float
     max_retries: int
     max_tokens: int
@@ -133,45 +172,38 @@ class AIReasoningConfig:
         advisory_mode: str = _DEFAULT_ADVISORY_MODE,
     ) -> "AIReasoningConfig":
         normalized_mode = _normalize_advisory_mode(advisory_mode)
-        normalized_provider = _normalize_provider(provider) or "anthropic"
-        default_model = _FALLBACK_MODEL
-        deep_model = _FALLBACK_MODEL
-        api_key = ""
-        base_url = ""
-        anthropic_version: str | None = None
-        reasoning_effort: str | None = None
-
-        if normalized_provider == "openai":
-            default_model = settings.openai_default_model.strip() or "gpt-5-mini"
-            deep_model = settings.openai_deep_model.strip() or "gpt-5.4"
-            api_key = settings.openai_api_key
-            base_url = settings.openai_base_url.rstrip("/")
-            reasoning_effort = (
-                settings.openai_deep_reasoning_effort.strip()
-                if normalized_mode == _DEEP_ADVISORY_MODE
-                else settings.openai_standard_reasoning_effort.strip()
-            ) or None
-        else:
-            default_model = (
-                settings.anthropic_default_model.strip()
-                or settings.anthropic_model.strip()
-                or "claude-sonnet-4-20250514"
+        normalized_provider = normalize_provider(provider) or "anthropic"
+        model_tier = "deep" if normalized_mode == _DEEP_ADVISORY_MODE else "default"
+        resolved = resolve_provider_config(
+            settings,
+            provider=normalized_provider,
+            task_type="advisory",
+            model_tier=model_tier,
+        )
+        if resolved is None:
+            resolved = ResolvedAIProvider(
+                provider=normalized_provider,
+                task_type="advisory",
+                model_tier=model_tier,
+                model=_FALLBACK_MODEL,
+                api_key="",
+                base_url="",
+                request_surface="anthropic_messages",
+                requires_api_key=True,
             )
-            deep_model = settings.anthropic_deep_model.strip() or default_model
-            api_key = settings.anthropic_api_key
-            base_url = settings.anthropic_base_url.rstrip("/")
-            anthropic_version = settings.anthropic_version
 
         return cls(
-            provider=normalized_provider,
+            provider=resolved.provider,
             enabled=bool(settings.ai_reasoning_enabled),
-            api_key=api_key,
-            model=deep_model if normalized_mode == _DEEP_ADVISORY_MODE else default_model,
+            api_key=resolved.api_key,
+            model=resolved.model,
             advisory_mode=normalized_mode,
             prompt_version=_prompt_version_for_mode(normalized_mode),
-            base_url=base_url,
-            anthropic_version=anthropic_version,
-            reasoning_effort=reasoning_effort,
+            base_url=resolved.base_url,
+            anthropic_version=resolved.anthropic_version,
+            reasoning_effort=resolved.reasoning_effort,
+            request_surface=resolved.request_surface,
+            requires_api_key=resolved.requires_api_key,
             timeout_seconds=float(settings.ai_reasoning_timeout_seconds),
             max_retries=max(int(settings.ai_reasoning_max_retries), 0),
             max_tokens=max(int(settings.ai_reasoning_max_tokens), 256),
@@ -220,7 +252,7 @@ class AnthropicReasoningClient:
                 reason="AI advisory disabled by configuration.",
             )
 
-        if not self._config.api_key.strip():
+        if self._config.requires_api_key and not self._config.api_key.strip():
             return _build_fallback_run(
                 context=context,
                 generated_at=generated_at,
@@ -382,7 +414,7 @@ class OpenAIReasoningClient:
                 reason="AI advisory disabled by configuration.",
             )
 
-        if not self._config.api_key.strip():
+        if self._config.requires_api_key and not self._config.api_key.strip():
             return _build_fallback_run(
                 context=context,
                 generated_at=generated_at,
@@ -439,6 +471,12 @@ class OpenAIReasoningClient:
 
         for attempt in range(self._config.max_retries + 1):
             try:
+                request_payload = _build_openai_responses_request_payload(
+                    self._config,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                )
+
                 async with httpx.AsyncClient(
                     base_url=self._config.base_url,
                     timeout=self._config.timeout_seconds,
@@ -480,6 +518,141 @@ class OpenAIReasoningClient:
             raise last_error
 
         raise RuntimeError("OpenAI advisory request failed without an explicit provider error.")
+
+
+class OpenAICompatibleReasoningClient:
+    """Chat-completions client for Groq, Ollama, Gemini, and similar APIs."""
+
+    def __init__(self, config: AIReasoningConfig) -> None:
+        self._config = config
+
+    async def generate(self, context: dict[str, Any]) -> AIReasoningRun:
+        generated_at = datetime.now(timezone.utc)
+        system_prompt = _build_system_prompt(self._config.advisory_mode)
+        user_prompt = _build_user_prompt(
+            context,
+            advisory_mode=self._config.advisory_mode,
+            prompt_version=self._config.prompt_version,
+        )
+
+        if not self._config.enabled:
+            return _build_fallback_run(
+                context=context,
+                generated_at=generated_at,
+                advisory_mode=self._config.advisory_mode,
+                prompt_version=self._config.prompt_version,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                reason="AI advisory disabled by configuration.",
+            )
+
+        if self._config.requires_api_key and not self._config.api_key.strip():
+            return _build_fallback_run(
+                context=context,
+                generated_at=generated_at,
+                advisory_mode=self._config.advisory_mode,
+                prompt_version=self._config.prompt_version,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                reason=f"{self._config.provider} API key not configured.",
+            )
+
+        raw_text = ""
+        try:
+            raw_text = await self._call_chat_completions_api(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+            )
+            parsed = _normalize_reasoning_output(
+                raw=_extract_json_payload(raw_text),
+                context=context,
+            )
+            return AIReasoningRun(
+                generated_at=generated_at,
+                provider=self._config.provider,
+                model=self._config.model,
+                advisory_mode=self._config.advisory_mode,
+                prompt_version=self._config.prompt_version,
+                status="generated",
+                fallback_reason=None,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                raw_text=raw_text,
+                parsed=parsed,
+            )
+        except Exception as exc:  # noqa: BLE001 - deliberate fallback boundary
+            logger.warning("%s advisory fallback engaged: %s", self._config.provider, exc)
+            return _build_fallback_run(
+                context=context,
+                generated_at=generated_at,
+                advisory_mode=self._config.advisory_mode,
+                prompt_version=self._config.prompt_version,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                reason=_describe_provider_error(self._config.provider.capitalize(), exc),
+                raw_text=raw_text,
+            )
+
+    async def _call_chat_completions_api(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> str:
+        last_error: Exception | None = None
+
+        for attempt in range(self._config.max_retries + 1):
+            try:
+                headers = {"content-type": "application/json"}
+                if self._config.api_key.strip():
+                    headers["authorization"] = f"Bearer {self._config.api_key}"
+
+                async with httpx.AsyncClient(
+                    base_url=self._config.base_url,
+                    timeout=self._config.timeout_seconds,
+                ) as client:
+                    response = await client.post(
+                        "/chat/completions",
+                        headers=headers,
+                        json={
+                            "model": self._config.model,
+                            "max_tokens": self._config.max_tokens,
+                            "temperature": self._config.temperature,
+                            "messages": [
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": user_prompt},
+                            ],
+                        },
+                    )
+
+                if (
+                    response.status_code in {408, 409, 429, 500, 502, 503, 504}
+                    and attempt < self._config.max_retries
+                ):
+                    await asyncio.sleep(min(2 ** attempt, 4))
+                    continue
+
+                response.raise_for_status()
+                payload = response.json()
+                result = _extract_openai_chat_completion_text(payload)
+                if not result:
+                    raise ValueError("OpenAI-compatible response did not include text content.")
+                return result
+            except (
+                httpx.TimeoutException,
+                httpx.TransportError,
+                httpx.HTTPStatusError,
+                ValueError,
+            ) as exc:
+                last_error = exc
+                if attempt >= self._config.max_retries:
+                    break
+                await asyncio.sleep(min(2 ** attempt, 4))
+
+        if last_error is not None:
+            raise last_error
+
+        raise RuntimeError("OpenAI-compatible advisory request failed without an explicit provider error.")
 
 
 def _describe_provider_error(provider_label: str, exc: Exception) -> str:
@@ -541,6 +714,66 @@ def _extract_openai_output_text(payload: dict[str, Any]) -> str:
     return "\n".join(text_parts).strip()
 
 
+def _extract_openai_chat_completion_text(payload: dict[str, Any]) -> str:
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return ""
+    first = choices[0]
+    if not isinstance(first, dict):
+        return ""
+    message = first.get("message")
+    if not isinstance(message, dict):
+        return ""
+    content = message.get("content")
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        text_parts: list[str] = []
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            text = part.get("text")
+            if isinstance(text, str) and text.strip():
+                text_parts.append(text.strip())
+        return "\n".join(text_parts).strip()
+    return ""
+
+
+def _openai_model_supports_reasoning_effort(model: str) -> bool:
+    normalized = model.strip().lower()
+    return normalized.startswith(("gpt-5", "o1", "o3", "o4"))
+
+
+def _build_openai_responses_request_payload(
+    config: AIReasoningConfig,
+    *,
+    system_prompt: str,
+    user_prompt: str,
+) -> dict[str, Any]:
+    request_payload: dict[str, Any] = {
+        "model": config.model,
+        "instructions": system_prompt,
+        "input": user_prompt,
+        "max_output_tokens": config.max_tokens,
+        "temperature": config.temperature,
+        "store": False,
+        "text": {"format": {"type": "text"}},
+        "metadata": {
+            "app": "pentra",
+            "advisory_mode": config.advisory_mode,
+            "prompt_version": config.prompt_version,
+        },
+    }
+    if (
+        config.reasoning_effort
+        and _openai_model_supports_reasoning_effort(config.model)
+    ):
+        request_payload["reasoning"] = {
+            "effort": config.reasoning_effort,
+        }
+    return request_payload
+
+
 def _normalize_advisory_mode(advisory_mode: str | None) -> AIAdvisoryMode:
     if advisory_mode == _DEEP_ADVISORY_MODE:
         return _DEEP_ADVISORY_MODE
@@ -548,28 +781,236 @@ def _normalize_advisory_mode(advisory_mode: str | None) -> AIAdvisoryMode:
 
 
 def _normalize_provider(provider: str | None) -> AIReasoningProvider | None:
-    normalized = str(provider or "").strip().lower()
-    if normalized == "openai":
-        return "openai"
-    if normalized == "anthropic":
-        return "anthropic"
+    normalized = normalize_provider(provider)
+    if normalized in {"anthropic", "openai", "groq", "ollama", "gemini"}:
+        return normalized
     return None
 
 
 def _provider_chain_from_settings() -> list[AIReasoningProvider]:
-    chain: list[AIReasoningProvider] = []
-    primary = _normalize_provider(settings.ai_reasoning_primary_provider) or "anthropic"
-    fallback = _normalize_provider(settings.ai_reasoning_fallback_provider)
-
-    for candidate in (primary, fallback):
-        if candidate and candidate not in chain:
-            chain.append(candidate)
-
+    resolved = resolve_provider_chain(
+        settings,
+        task_type="advisory",
+        model_tier="default",
+    )
+    chain = [config.provider for config in resolved]
     return chain or ["anthropic"]
 
 
+async def get_ai_provider_diagnostics(*, live: bool = False) -> dict[str, Any]:
+    """Return configured AI provider routing and optional live probe results."""
+    generated_at = datetime.now(timezone.utc).isoformat()
+    priority = provider_priority_from_settings(settings)
+    effective_priority = provider_priority_from_settings(
+        settings,
+        primary_fallback_only=True,
+    )
+    tasks: dict[str, list[dict[str, Any]]] = {}
+
+    for task_type, model_tier in (("advisory", "default"), ("strategy", "deep")):
+        provider_entries: list[dict[str, Any]] = []
+        for provider in priority:
+            resolved = resolve_provider_config(
+                settings,
+                provider=provider,
+                task_type=task_type,  # type: ignore[arg-type]
+                model_tier=model_tier,  # type: ignore[arg-type]
+            )
+            entry: dict[str, Any] = {
+                "provider": provider,
+                "task_type": task_type,
+                "model_tier": model_tier,
+                "configured": resolved is not None,
+                "model": resolved.model if resolved is not None else "",
+                "base_url": resolved.base_url if resolved is not None else "",
+                "request_surface": resolved.request_surface if resolved is not None else "",
+                "requires_api_key": (
+                    resolved.requires_api_key if resolved is not None else True
+                ),
+                "api_key_configured": (
+                    bool(resolved.api_key.strip()) if resolved is not None else False
+                ),
+            }
+            if live:
+                if resolved is None:
+                    entry["probe"] = {
+                        "status": "skipped",
+                        "error": "Provider is not fully configured.",
+                    }
+                else:
+                    entry["probe"] = await _probe_resolved_provider(resolved)
+            entry["operator_state"] = _provider_operator_state(
+                enabled=bool(settings.ai_reasoning_enabled),
+                configured=bool(entry["configured"]),
+                api_key_configured=bool(entry["api_key_configured"]),
+                probe=entry.get("probe"),
+            )
+            provider_entries.append(entry)
+        tasks[task_type] = provider_entries
+
+    summary = summarize_ai_provider_diagnostics(
+        {
+            "generated_at": generated_at,
+            "enabled": bool(settings.ai_reasoning_enabled),
+            "provider_priority": priority,
+            "effective_provider_priority": effective_priority,
+            "tasks": tasks,
+        }
+    )
+    return {
+        "generated_at": generated_at,
+        "enabled": bool(settings.ai_reasoning_enabled),
+        "provider_priority": priority,
+        "effective_provider_priority": effective_priority,
+        "tasks": tasks,
+        **summary,
+    }
+
+
+def summarize_ai_provider_diagnostics(payload: dict[str, Any]) -> dict[str, Any]:
+    enabled = bool(payload.get("enabled"))
+    tasks = payload.get("tasks") or {}
+    provider_entries = [
+        entry
+        for task_entries in tasks.values()
+        if isinstance(task_entries, list)
+        for entry in task_entries
+        if isinstance(entry, dict)
+    ]
+    configured_entries = [
+        entry
+        for entry in provider_entries
+        if bool(entry.get("configured"))
+        and (
+            not bool(entry.get("requires_api_key"))
+            or bool(entry.get("api_key_configured"))
+        )
+    ]
+    healthy_entries = [
+        entry
+        for entry in configured_entries
+        if isinstance(entry.get("probe"), dict) and entry["probe"].get("status") == "generated"
+    ]
+    fallback_entries = [
+        entry
+        for entry in configured_entries
+        if isinstance(entry.get("probe"), dict) and entry["probe"].get("status") == "fallback"
+    ]
+    last_failure = next(
+        (
+            str(entry["probe"].get("error"))
+            for entry in fallback_entries
+            if isinstance(entry.get("probe"), dict) and str(entry["probe"].get("error") or "").strip()
+        ),
+        None,
+    )
+
+    if not enabled:
+        operator_state = "disabled_by_config"
+    elif not configured_entries:
+        operator_state = "missing_api_key"
+    elif healthy_entries:
+        operator_state = "configured_and_healthy"
+    elif fallback_entries:
+        operator_state = "provider_unreachable"
+    else:
+        operator_state = "configured_but_fallback"
+
+    return {
+        "operator_state": operator_state,
+        "configuration_ready": operator_state in {"configured_and_healthy", "configured_but_fallback"},
+        "configured_provider_count": len(configured_entries),
+        "healthy_provider_count": len(healthy_entries),
+        "fallback_provider_count": len(fallback_entries),
+        "last_failure": last_failure,
+    }
+
+
+def _provider_operator_state(
+    *,
+    enabled: bool,
+    configured: bool,
+    api_key_configured: bool,
+    probe: dict[str, Any] | None,
+) -> str:
+    if not enabled:
+        return "disabled_by_config"
+    if not configured or not api_key_configured:
+        return "missing_api_key"
+    if isinstance(probe, dict) and probe.get("status") == "generated":
+        return "configured_and_healthy"
+    if isinstance(probe, dict) and probe.get("status") == "fallback":
+        return "provider_unreachable"
+    return "configured_but_fallback"
+
+
+def _diagnostic_config_from_resolved(resolved: ResolvedAIProvider) -> AIReasoningConfig:
+    advisory_mode = (
+        _DEEP_ADVISORY_MODE if resolved.model_tier == "deep" else _DEFAULT_ADVISORY_MODE
+    )
+    return AIReasoningConfig(
+        provider=resolved.provider,
+        enabled=bool(settings.ai_reasoning_enabled),
+        api_key=resolved.api_key,
+        model=resolved.model,
+        advisory_mode=advisory_mode,
+        prompt_version=_prompt_version_for_mode(advisory_mode),
+        base_url=resolved.base_url,
+        anthropic_version=resolved.anthropic_version,
+        reasoning_effort=resolved.reasoning_effort,
+        request_surface=resolved.request_surface,
+        requires_api_key=resolved.requires_api_key,
+        timeout_seconds=float(settings.ai_reasoning_timeout_seconds),
+        max_retries=0,
+        max_tokens=160,
+        temperature=0.0,
+    )
+
+
+async def _probe_resolved_provider(resolved: ResolvedAIProvider) -> dict[str, Any]:
+    config = _diagnostic_config_from_resolved(resolved)
+    started = time.monotonic()
+    try:
+        raw_text = (
+            await BoundedAgentClient().generate(
+                BoundedAgentRequest(
+                    provider=resolved.provider,
+                    task_type="advisory",
+                    model=resolved.model,
+                    api_key=resolved.api_key,
+                    base_url=resolved.base_url,
+                    request_surface=resolved.request_surface,
+                    system_prompt=_DIAGNOSTICS_SYSTEM_PROMPT,
+                    user_prompt=_DIAGNOSTICS_USER_PROMPT,
+                    prompt_contract="pentra.ai.diagnostics",
+                    context_bundle={"diagnostics": True},
+                    anthropic_version=resolved.anthropic_version,
+                    reasoning_effort=resolved.reasoning_effort,
+                    timeout_seconds=float(settings.ai_reasoning_timeout_seconds),
+                    max_tokens=160,
+                    temperature=0.0,
+                    response_format="json_object",
+                )
+            )
+        ).output_text
+
+        latency_ms = int((time.monotonic() - started) * 1000)
+        return {
+            "status": "generated",
+            "latency_ms": latency_ms,
+            "preview": _truncate(raw_text, _DIAGNOSTICS_PREVIEW_CHARS),
+        }
+    except Exception as exc:  # noqa: BLE001 - diagnostics must not hard-fail
+        latency_ms = int((time.monotonic() - started) * 1000)
+        return {
+            "status": "fallback",
+            "latency_ms": latency_ms,
+            "error": _describe_provider_error(resolved.provider.capitalize(), exc),
+        }
+
+
 def _prompt_version_for_mode(advisory_mode: AIAdvisoryMode) -> str:
-    return f"{_PROMPT_VERSION_BASE}.{advisory_mode}"
+    return advisory_prompt_contract(advisory_mode).prompt_version
 
 
 def _build_system_prompt(advisory_mode: AIAdvisoryMode) -> str:
@@ -582,6 +1023,12 @@ def _context_limits_for_mode(advisory_mode: AIAdvisoryMode) -> dict[str, int]:
     if advisory_mode == _DEEP_ADVISORY_MODE:
         return _DEEP_CONTEXT_LIMITS
     return _DEFAULT_CONTEXT_LIMITS
+
+
+async def _release_read_transaction(session: AsyncSession) -> None:
+    """End the current read transaction before slow external provider calls."""
+    if session.in_transaction():
+        await session.commit()
 
 
 async def get_scan_ai_reasoning(
@@ -638,6 +1085,7 @@ async def get_scan_ai_reasoning(
         if cached is not None:
             return cached
 
+    await _release_read_transaction(session)
     run = await _generate_reasoning_run(
         context=context,
         advisory_mode=normalized_mode,
@@ -696,8 +1144,11 @@ async def _generate_reasoning_run(
     failure_reasons: list[str] = []
     for provider in _provider_chain_from_settings():
         config = AIReasoningConfig.from_settings(provider, advisory_mode)
-        client = _build_provider_client(config)
-        run = await client.generate(context)
+        run = await _generate_provider_run_with_bounded_client(
+            context=context,
+            advisory_mode=advisory_mode,
+            config=config,
+        )
         if run.status == "generated":
             return run
         if run.fallback_reason:
@@ -714,11 +1165,102 @@ async def _generate_reasoning_run(
     )
 
 
+async def _generate_provider_run_with_bounded_client(
+    *,
+    context: dict[str, Any],
+    advisory_mode: AIAdvisoryMode,
+    config: AIReasoningConfig,
+) -> AIReasoningRun:
+    generated_at = datetime.now(timezone.utc)
+    system_prompt = _build_system_prompt(config.advisory_mode)
+    user_prompt = _build_user_prompt(
+        context,
+        advisory_mode=advisory_mode,
+        prompt_version=config.prompt_version,
+    )
+
+    if not config.enabled:
+        return _build_fallback_run(
+            context=context,
+            generated_at=generated_at,
+            advisory_mode=config.advisory_mode,
+            prompt_version=config.prompt_version,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            reason="AI advisory disabled by configuration.",
+        )
+
+    if config.requires_api_key and not config.api_key.strip():
+        return _build_fallback_run(
+            context=context,
+            generated_at=generated_at,
+            advisory_mode=config.advisory_mode,
+            prompt_version=config.prompt_version,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            reason=f"{config.provider.capitalize()} API key not configured.",
+        )
+
+    raw_text = ""
+    try:
+        response = await BoundedAgentClient().generate(
+            BoundedAgentRequest(
+                provider=config.provider if config.provider != "fallback" else "openai",
+                task_type="advisory",
+                model=config.model,
+                api_key=config.api_key,
+                base_url=config.base_url,
+                request_surface=config.request_surface,  # type: ignore[arg-type]
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                prompt_contract=config.prompt_version,
+                context_bundle=context,
+                anthropic_version=config.anthropic_version,
+                reasoning_effort=config.reasoning_effort,
+                timeout_seconds=config.timeout_seconds,
+                max_tokens=config.max_tokens,
+                temperature=config.temperature,
+                response_format="json_object",
+            )
+        )
+        raw_text = response.output_text
+        parsed = _normalize_reasoning_output(
+            raw=_extract_json_payload(raw_text),
+            context=context,
+        )
+        return AIReasoningRun(
+            generated_at=generated_at,
+            provider=config.provider,
+            model=config.model,
+            advisory_mode=config.advisory_mode,
+            prompt_version=config.prompt_version,
+            status="generated",
+            fallback_reason=None,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            raw_text=raw_text,
+            parsed=parsed,
+        )
+    except Exception as exc:  # noqa: BLE001 - deliberate fallback boundary
+        return _build_fallback_run(
+            context=context,
+            generated_at=generated_at,
+            advisory_mode=config.advisory_mode,
+            prompt_version=config.prompt_version,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            reason=_describe_provider_error(config.provider.capitalize(), exc),
+            raw_text=raw_text,
+        )
+
+
 def _build_provider_client(
     config: AIReasoningConfig,
-) -> AnthropicReasoningClient | OpenAIReasoningClient:
-    if config.provider == "openai":
+) -> AnthropicReasoningClient | OpenAIReasoningClient | OpenAICompatibleReasoningClient:
+    if config.request_surface == "openai_responses":
         return OpenAIReasoningClient(config)
+    if config.request_surface == "openai_chat_completions":
+        return OpenAICompatibleReasoningClient(config)
     return AnthropicReasoningClient(config)
 
 
@@ -728,12 +1270,21 @@ def _build_user_prompt(
     advisory_mode: AIAdvisoryMode,
     prompt_version: str,
 ) -> str:
-    return (
-        "Generate advisory reasoning for this Pentra scan context. "
-        "Keep recommendations bounded, evidence-based, and safe.\n\n"
-        f"Advisory mode: {advisory_mode}\n"
-        f"Prompt version: {prompt_version}\n"
-        f"Context JSON:\n{json.dumps(context, indent=2, sort_keys=True, default=str)}"
+    contract = advisory_prompt_contract(advisory_mode)
+    if contract.prompt_version != prompt_version:
+        contract = type(contract)(
+            contract_id=contract.contract_id,
+            prompt_version=prompt_version,
+            task_type=contract.task_type,
+            response_format=contract.response_format,
+        )
+    return build_json_user_prompt(
+        contract,
+        context=context,
+        preamble=(
+            "Generate advisory reasoning for this Pentra scan context. "
+            "Keep recommendations bounded, evidence-based, and safe."
+        ),
     )
 
 
@@ -1463,3 +2014,652 @@ def _truncate(value: Any, limit: int) -> str | None:
     if len(cleaned) <= limit:
         return cleaned
     return f"{cleaned[: limit - 3]}..."
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Phase 5 — AI-Driven Intelligence Methods
+# ═══════════════════════════════════════════════════════════════════════
+
+_EXPLOITATION_PATHS_PROMPT = """You are Pentra Offensive AI Advisor.
+
+Analyze the provided scan findings and attack graph to suggest exploitation paths.
+
+For each path, provide:
+1. A step-by-step attack chain (ordered exploitation steps)
+2. The impact if the chain succeeds (data breach, RCE, privilege escalation, etc.)
+3. Likelihood assessment (high/medium/low) based on evidence quality
+4. MITRE ATT&CK technique IDs for each step
+5. Required tools and conditions for each step
+6. Estimated difficulty (trivial/moderate/difficult/expert)
+
+Return valid JSON only:
+{
+  "exploitation_paths": [
+    {
+      "id": "path-1",
+      "name": "string",
+      "chain": [
+        {
+          "step": 1,
+          "action": "string",
+          "finding_id": "uuid-or-null",
+          "tool": "string",
+          "mitre_technique": "T1190",
+          "prereqs": ["string"]
+        }
+      ],
+      "impact": "string",
+      "likelihood": "high|medium|low",
+      "difficulty": "trivial|moderate|difficult|expert",
+      "business_risk": "string",
+      "evidence_quality": "confirmed|probable|theoretical"
+    }
+  ],
+  "cross_finding_patterns": [
+    {
+      "pattern": "string",
+      "related_findings": ["uuid"],
+      "combined_severity": "critical|high|medium|low",
+      "recommendation": "string"
+    }
+  ],
+  "lateral_movement_opportunities": [
+    {
+      "from": "string",
+      "to": "string",
+      "technique": "string",
+      "mitre_id": "T1021"
+    }
+  ],
+  "overall_risk_score": 0,
+  "confidence": 0
+}
+"""
+
+_VECTOR_PRIORITIZATION_PROMPT = """You are Pentra Attack Vector Prioritizer.
+
+Given the scan findings, target profile, and available attack vectors, rank which
+attack vectors should be tested next and in what order.
+
+Consider:
+1. Already-confirmed vulnerabilities that enable further testing
+2. Target technology stack (detected frameworks, services, APIs)
+3. Attack surface breadth (number of endpoints, subdomains, services)
+4. Historical success rate of each vector against similar targets
+5. Risk-to-effort ratio for the pentest team
+
+Return valid JSON only:
+{
+  "prioritized_vectors": [
+    {
+      "vector_id": "string",
+      "name": "string",
+      "priority": 1,
+      "rationale": "string",
+      "estimated_success_probability": 0.0,
+      "required_tools": ["string"],
+      "depends_on_findings": ["uuid"],
+      "estimated_time_minutes": 0
+    }
+  ],
+  "recommended_tool_sequence": ["tool_id_1", "tool_id_2"],
+  "skip_vectors": [
+    {
+      "vector_id": "string",
+      "reason": "string"
+    }
+  ],
+  "confidence": 0
+}
+"""
+
+_REMEDIATION_REPORT_PROMPT = """You are Pentra Remediation Advisor.
+
+Generate actionable remediation recommendations for the provided scan findings.
+Group by priority and provide specific fix instructions.
+
+For each finding:
+1. Root cause analysis
+2. Specific fix instructions (code-level when possible)
+3. Verification steps to confirm the fix
+4. Related CWE and compliance frameworks (PCI-DSS, SOC2, HIPAA, GDPR)
+5. Estimated remediation effort (hours)
+6. Quick win vs long-term fix distinction
+
+Return valid JSON only:
+{
+  "executive_summary": "string",
+  "overall_risk_rating": "critical|high|medium|low",
+  "remediation_items": [
+    {
+      "finding_id": "uuid-or-null",
+      "title": "string",
+      "severity": "critical|high|medium|low",
+      "root_cause": "string",
+      "fix_instructions": ["string"],
+      "quick_win": "string or null",
+      "long_term_fix": "string",
+      "verification_steps": ["string"],
+      "estimated_hours": 0,
+      "cwe_id": "CWE-XXX",
+      "compliance_impact": ["PCI-DSS 6.5.1", "SOC2 CC6.1"]
+    }
+  ],
+  "grouped_recommendations": [
+    {
+      "group": "string",
+      "description": "string",
+      "items": ["finding_id"],
+      "shared_fix": "string"
+    }
+  ],
+  "priority_order": ["finding_id_1", "finding_id_2"],
+  "total_estimated_hours": 0,
+  "confidence": 0
+}
+"""
+
+_REALTIME_TOOL_ANALYSIS_PROMPT = """You are Pentra Real-Time Intelligence Engine.
+
+A security tool just completed execution during a live scan. Analyze its output
+and provide immediate intelligence:
+
+1. Key findings extracted from the tool output
+2. Whether additional tools should run based on discoveries
+3. Attack vector implications of the results
+4. Severity assessment of any discovered issues
+
+Return valid JSON only:
+{
+  "key_discoveries": [
+    {
+      "type": "string",
+      "detail": "string",
+      "severity": "critical|high|medium|low|info",
+      "confidence": 0
+    }
+  ],
+  "suggested_next_tools": [
+    {
+      "tool_id": "string",
+      "reason": "string",
+      "priority": "immediate|next|optional"
+    }
+  ],
+  "attack_surface_updates": [
+    {
+      "type": "new_endpoint|new_service|new_technology|credential_found",
+      "detail": "string"
+    }
+  ],
+  "risk_indicators": ["string"],
+  "confidence": 0
+}
+"""
+
+
+async def suggest_exploitation_paths(
+    *,
+    scan_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    session: AsyncSession,
+) -> dict[str, Any]:
+    """Analyze findings and suggest exploitation chains with MITRE mapping.
+
+    Uses AI to connect individual findings into credible multi-step attack
+    chains, assess lateral movement opportunities, and identify cross-finding
+    patterns that indicate systemic weaknesses.
+    """
+    stmt = (
+        select(Scan)
+        .where(Scan.id == scan_id, Scan.tenant_id == tenant_id)
+        .options(selectinload(Scan.asset), selectinload(Scan.findings))
+    )
+    scan = (await session.execute(stmt)).scalar_one_or_none()
+    if scan is None:
+        return {"error": "Scan not found"}
+
+    graph = await scan_service.get_attack_graph(
+        scan_id=scan_id, tenant_id=tenant_id, session=session,
+    )
+    evidence = await scan_service.list_evidence_references(
+        scan_id=scan_id, tenant_id=tenant_id, session=session,
+    )
+
+    context = _build_reasoning_context(
+        scan=scan, graph=graph, report=None,
+        evidence=evidence, advisory_mode=_DEEP_ADVISORY_MODE,
+    )
+
+    system_prompt = _EXPLOITATION_PATHS_PROMPT
+    user_prompt = (
+        "Analyze these scan results and suggest exploitation paths.\n\n"
+        f"Context JSON:\n{json.dumps(context, indent=2, sort_keys=True, default=str)}"
+    )
+
+    await _release_read_transaction(session)
+    result = await _run_specialized_prompt(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        advisory_mode=_DEEP_ADVISORY_MODE,
+        fallback_key="exploitation_paths",
+    )
+
+    # If AI couldn't run, generate deterministic exploitation paths
+    if result.get("_is_fallback"):
+        result = _build_deterministic_exploitation_paths(context)
+
+    return {
+        "scan_id": str(scan_id),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        **result,
+    }
+
+
+async def prioritize_attack_vectors(
+    *,
+    scan_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    session: AsyncSession,
+    available_vectors: list[str] | None = None,
+) -> dict[str, Any]:
+    """Rank attack vectors by likelihood and impact for the target.
+
+    AI evaluates the target's technology stack, discovered endpoints, and
+    existing findings to determine which attack vectors to test next and
+    in what order, optimizing the pentester's time.
+    """
+    stmt = (
+        select(Scan)
+        .where(Scan.id == scan_id, Scan.tenant_id == tenant_id)
+        .options(selectinload(Scan.asset), selectinload(Scan.findings))
+    )
+    scan = (await session.execute(stmt)).scalar_one_or_none()
+    if scan is None:
+        return {"error": "Scan not found"}
+
+    context = _build_reasoning_context(
+        scan=scan, graph=None, report=None,
+        evidence=[], advisory_mode=_DEFAULT_ADVISORY_MODE,
+    )
+
+    if available_vectors:
+        context["available_vectors"] = available_vectors
+
+    system_prompt = _VECTOR_PRIORITIZATION_PROMPT
+    user_prompt = (
+        "Prioritize attack vectors for this target based on scan results.\n\n"
+        f"Context JSON:\n{json.dumps(context, indent=2, sort_keys=True, default=str)}"
+    )
+
+    await _release_read_transaction(session)
+    result = await _run_specialized_prompt(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        advisory_mode=_DEFAULT_ADVISORY_MODE,
+        fallback_key="prioritized_vectors",
+    )
+
+    if result.get("_is_fallback"):
+        result = _build_deterministic_vector_priorities(context, available_vectors)
+
+    return {
+        "scan_id": str(scan_id),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        **result,
+    }
+
+
+async def generate_remediation_report(
+    *,
+    scan_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    session: AsyncSession,
+) -> dict[str, Any]:
+    """Generate actionable remediation recommendations for scan findings.
+
+    Produces grouped fix instructions with effort estimates, compliance
+    mapping, quick wins, and verification steps. Groups related findings
+    for efficient batch remediation.
+    """
+    stmt = (
+        select(Scan)
+        .where(Scan.id == scan_id, Scan.tenant_id == tenant_id)
+        .options(selectinload(Scan.asset), selectinload(Scan.findings))
+    )
+    scan = (await session.execute(stmt)).scalar_one_or_none()
+    if scan is None:
+        return {"error": "Scan not found"}
+
+    report = await scan_service.get_scan_report(
+        scan_id=scan_id, tenant_id=tenant_id, session=session,
+    )
+    context = _build_reasoning_context(
+        scan=scan, graph=None, report=report,
+        evidence=[], advisory_mode=_DEEP_ADVISORY_MODE,
+    )
+
+    system_prompt = _REMEDIATION_REPORT_PROMPT
+    user_prompt = (
+        "Generate a remediation report with actionable fix instructions.\n\n"
+        f"Context JSON:\n{json.dumps(context, indent=2, sort_keys=True, default=str)}"
+    )
+
+    await _release_read_transaction(session)
+    result = await _run_specialized_prompt(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        advisory_mode=_DEEP_ADVISORY_MODE,
+        fallback_key="remediation_items",
+    )
+
+    if result.get("_is_fallback"):
+        result = _build_deterministic_remediation(context)
+
+    return {
+        "scan_id": str(scan_id),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        **result,
+    }
+
+
+async def analyze_tool_output_realtime(
+    *,
+    tool_id: str,
+    tool_output: str,
+    scan_context: dict[str, Any],
+) -> dict[str, Any]:
+    """Analyze a tool's output in real-time during an active scan.
+
+    Called by the orchestrator after each tool completes. Returns
+    intelligence about discoveries, suggested follow-up tools, and
+    attack surface updates without blocking the scan pipeline.
+    """
+    context = {
+        "tool_id": tool_id,
+        "tool_output_preview": tool_output[:4000],  # Limit context size
+        "scan_type": scan_context.get("scan_type", "unknown"),
+        "asset_target": scan_context.get("asset_target", "unknown"),
+        "findings_so_far": scan_context.get("findings_count", 0),
+    }
+
+    system_prompt = _REALTIME_TOOL_ANALYSIS_PROMPT
+    user_prompt = (
+        f"A '{tool_id}' tool just completed during a live scan. "
+        "Analyze the output and provide real-time intelligence.\n\n"
+        f"Context JSON:\n{json.dumps(context, indent=2, default=str)}"
+    )
+
+    result = await _run_specialized_prompt(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        advisory_mode=_DEFAULT_ADVISORY_MODE,
+        fallback_key="key_discoveries",
+    )
+
+    if result.get("_is_fallback"):
+        result = _build_deterministic_tool_analysis(tool_id, tool_output)
+
+    return {
+        "tool_id": tool_id,
+        "analyzed_at": datetime.now(timezone.utc).isoformat(),
+        **result,
+    }
+
+
+# ── Shared prompt execution ─────────────────────────────────────────
+
+async def _run_specialized_prompt(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    advisory_mode: AIAdvisoryMode,
+    fallback_key: str,
+) -> dict[str, Any]:
+    """Execute a specialized prompt through the provider chain."""
+    if not settings.ai_reasoning_enabled:
+        return {"_is_fallback": True}
+
+    for provider in _provider_chain_from_settings():
+        config = AIReasoningConfig.from_settings(provider, advisory_mode)
+        if config.requires_api_key and not config.api_key.strip():
+            continue
+
+        try:
+            client = _build_provider_client(config)
+            # Build a minimal context for the client
+            run = AIReasoningRun(
+                generated_at=datetime.now(timezone.utc),
+                provider=config.provider,
+                model=config.model,
+                advisory_mode=advisory_mode,
+                prompt_version=_prompt_version_for_mode(advisory_mode),
+                status="pending",
+                fallback_reason=None,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                raw_text="",
+                parsed={},
+            )
+
+            # Call the API directly
+            client = _build_provider_client(config)
+            if config.request_surface == "openai_responses":
+                raw_text = await OpenAIReasoningClient(config)._call_responses_api(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                )
+            elif config.request_surface == "openai_chat_completions":
+                raw_text = await OpenAICompatibleReasoningClient(config)._call_chat_completions_api(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                )
+            else:
+                raw_text = await AnthropicReasoningClient(config)._call_messages_api(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                )
+
+            parsed = _extract_json_payload(raw_text)
+            if isinstance(parsed, dict) and parsed.get(fallback_key):
+                return parsed
+
+        except Exception as exc:
+            logger.warning("Specialized prompt failed via %s: %s", provider, exc)
+            continue
+
+    return {"_is_fallback": True}
+
+
+# ── Deterministic fallbacks ──────────────────────────────────────────
+
+def _build_deterministic_exploitation_paths(
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    """Build exploitation paths without AI, using finding severity and type."""
+    findings = context.get("findings", [])
+    paths = []
+
+    # Group critical/high findings into potential chains
+    critical_findings = [f for f in findings if f.get("severity") in ("critical", "high")]
+    if critical_findings:
+        chain = []
+        for i, finding in enumerate(critical_findings[:4]):
+            chain.append({
+                "step": i + 1,
+                "action": f"Exploit {finding.get('title', 'finding')}",
+                "finding_id": finding.get("finding_id"),
+                "tool": finding.get("tool_source", "unknown"),
+                "mitre_technique": "T1190",
+                "prereqs": [] if i == 0 else [f"Step {i}"],
+            })
+
+        paths.append({
+            "id": "path-1",
+            "name": "Primary exploitation chain via critical findings",
+            "chain": chain,
+            "impact": "Potential full system compromise via chained critical vulnerabilities",
+            "likelihood": "high" if any(f.get("verification_state") == "verified" for f in critical_findings) else "medium",
+            "difficulty": "moderate",
+            "business_risk": f"{len(critical_findings)} critical/high findings affect {context.get('scan', {}).get('asset_target', 'target')}",
+            "evidence_quality": "confirmed" if any(f.get("verification_state") == "verified" for f in critical_findings) else "probable",
+        })
+
+    return {
+        "exploitation_paths": paths,
+        "cross_finding_patterns": [],
+        "lateral_movement_opportunities": [],
+        "overall_risk_score": min(len(critical_findings) * 20, 100) if critical_findings else 20,
+        "confidence": 65,
+    }
+
+
+def _build_deterministic_vector_priorities(
+    context: dict[str, Any],
+    available_vectors: list[str] | None,
+) -> dict[str, Any]:
+    """Prioritize vectors deterministically by severity frequency."""
+    findings = context.get("findings", [])
+    severity_scores = {"critical": 100, "high": 75, "medium": 50, "low": 25, "info": 10}
+
+    # Default vector priority based on general effectiveness
+    default_vectors = [
+        ("sqli", "SQL Injection", 90, ["sqlmap", "nuclei"]),
+        ("xss_reflected", "Reflected XSS", 85, ["dalfox", "nuclei"]),
+        ("command_injection", "Command Injection", 95, ["nuclei"]),
+        ("ssrf", "Server-Side Request Forgery", 80, ["nuclei"]),
+        ("broken_auth", "Broken Authentication", 88, ["nuclei", "web_interact"]),
+        ("path_traversal", "Path Traversal", 75, ["nuclei", "ffuf"]),
+        ("cors_misconfig", "CORS Misconfiguration", 70, ["cors_scanner"]),
+        ("jwt_none_algo", "JWT None Algorithm", 85, ["jwt_tool"]),
+        ("graphql_introspection", "GraphQL Introspection", 65, ["graphql_cop"]),
+    ]
+
+    prioritized = []
+    for i, (vid, name, score, tools) in enumerate(default_vectors):
+        if available_vectors and vid not in available_vectors:
+            continue
+        prioritized.append({
+            "vector_id": vid,
+            "name": name,
+            "priority": i + 1,
+            "rationale": f"Standard priority based on general effectiveness and target type",
+            "estimated_success_probability": score / 100.0,
+            "required_tools": tools,
+            "depends_on_findings": [],
+            "estimated_time_minutes": 15,
+        })
+
+    return {
+        "prioritized_vectors": prioritized,
+        "recommended_tool_sequence": ["nuclei", "sqlmap", "dalfox", "ffuf", "jwt_tool"],
+        "skip_vectors": [],
+        "confidence": 60,
+    }
+
+
+def _build_deterministic_remediation(
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    """Build remediation report without AI."""
+    findings = context.get("findings", [])
+    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+    sorted_findings = sorted(findings, key=lambda f: severity_order.get(f.get("severity", "info"), 4))
+
+    items = []
+    total_hours = 0
+    for finding in sorted_findings[:8]:
+        severity = finding.get("severity", "info")
+        title = finding.get("title", "Finding")
+        remediation = finding.get("remediation") or ""
+        hours = {"critical": 8, "high": 4, "medium": 2, "low": 1, "info": 0.5}.get(severity, 2)
+        total_hours += hours
+
+        items.append({
+            "finding_id": finding.get("finding_id"),
+            "title": title,
+            "severity": severity,
+            "root_cause": f"Vulnerability detected in {finding.get('target', 'target')}",
+            "fix_instructions": [remediation] if remediation else [f"Review and remediate {title}"],
+            "quick_win": f"Add input validation/sanitization for {title}" if severity in ("critical", "high") else None,
+            "long_term_fix": f"Implement defense-in-depth controls for {title}",
+            "verification_steps": [f"Re-run scan to verify {title} is resolved"],
+            "estimated_hours": hours,
+            "cwe_id": "",
+            "compliance_impact": [],
+        })
+
+    critical_count = sum(1 for f in findings if f.get("severity") == "critical")
+    high_count = sum(1 for f in findings if f.get("severity") == "high")
+
+    return {
+        "executive_summary": (
+            f"Scan identified {len(findings)} findings ({critical_count} critical, "
+            f"{high_count} high). Immediate attention required for critical issues."
+        ),
+        "overall_risk_rating": "critical" if critical_count else ("high" if high_count else "medium"),
+        "remediation_items": items,
+        "grouped_recommendations": [],
+        "priority_order": [f.get("finding_id") for f in sorted_findings[:8] if f.get("finding_id")],
+        "total_estimated_hours": total_hours,
+        "confidence": 70,
+    }
+
+
+def _build_deterministic_tool_analysis(
+    tool_id: str,
+    tool_output: str,
+) -> dict[str, Any]:
+    """Extract basic intelligence from tool output without AI."""
+    discoveries = []
+    output_lower = tool_output.lower()
+
+    # Pattern-based extraction
+    severity_patterns = {
+        "critical": ["rce", "remote code execution", "sql injection", "command injection"],
+        "high": ["xss", "cross-site", "path traversal", "lfi", "ssrf", "xxe"],
+        "medium": ["cors", "open redirect", "csrf", "missing header"],
+        "low": ["information disclosure", "directory listing", "verbose error"],
+    }
+
+    for severity, patterns in severity_patterns.items():
+        for pattern in patterns:
+            if pattern in output_lower:
+                discoveries.append({
+                    "type": pattern.replace(" ", "_"),
+                    "detail": f"Detected {pattern} indicator in {tool_id} output",
+                    "severity": severity,
+                    "confidence": 70,
+                })
+
+    # Suggest follow-up tools based on what was found
+    suggested = []
+    if any(d["severity"] in ("critical", "high") for d in discoveries):
+        if tool_id not in ("sqlmap",):
+            suggested.append({
+                "tool_id": "sqlmap",
+                "reason": "High-severity finding detected, verify with dedicated scanner",
+                "priority": "immediate",
+            })
+        if tool_id not in ("nuclei",):
+            suggested.append({
+                "tool_id": "nuclei",
+                "reason": "Run targeted templates against discovered vulnerabilities",
+                "priority": "next",
+            })
+
+    return {
+        "key_discoveries": discoveries or [{
+            "type": "scan_complete",
+            "detail": f"{tool_id} completed without notable findings",
+            "severity": "info",
+            "confidence": 90,
+        }],
+        "suggested_next_tools": suggested,
+        "attack_surface_updates": [],
+        "risk_indicators": [d["detail"] for d in discoveries if d["severity"] in ("critical", "high")],
+        "confidence": 65 if discoveries else 85,
+    }

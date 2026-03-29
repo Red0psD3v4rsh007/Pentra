@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pentra_common.schemas import PaginatedResponse, ProjectCreate, ProjectResponse, ProjectUpdate
@@ -151,7 +151,9 @@ async def update_project(
 
 @router.delete(
     "/{project_id}",
+    response_model=None,
     status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
     summary="Delete a project",
 )
 async def delete_project(

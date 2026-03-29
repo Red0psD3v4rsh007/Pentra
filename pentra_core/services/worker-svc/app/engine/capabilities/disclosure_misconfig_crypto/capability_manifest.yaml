@@ -1,0 +1,85 @@
+pack_key: p3a_disclosure_misconfig_crypto
+name: Disclosure, misconfiguration, crypto, and components capability pack
+phase: 3
+description: >
+  Disclosure and misconfiguration capability pack for config/debug/component
+  surface discovery, replay-aware candidate generation, component-truth
+  separation, and negative evidence without direct exploit execution.
+ontology_family_keys:
+  - sensitive_data_exposure
+  - observability_failures
+  - security_misconfiguration
+  - vulnerable_components
+  - cryptographic_issues
+attack_primitive_keys:
+  - stack_trace_and_log_disclosure_probe
+  - weak_crypto_material_inspection
+  - component_and_asset_fingerprint_probe
+  - misconfiguration_surface_probe
+proof_contract_keys:
+  - sensitive_data_exposure_replay
+  - stack_trace_disclosure_contract
+  - weak_crypto_material_contract
+  - component_truth_contract
+  - misconfiguration_surface_contract
+planner_action_keys:
+  - inspect_error_and_log_disclosure
+  - inspect_config_and_secret_exposure
+  - fingerprint_components_and_hidden_assets
+target_profile_keys:
+  - spa_rest_api
+  - traditional_server_rendered
+  - auth_heavy_admin_portal
+  - upload_parser_heavy
+pack_dependency_keys: []
+knowledge_dependencies:
+  ontology_index_path: pentra_core/knowledge/ontology/index.yaml
+  source_profile: public_source_first
+  cheatsheet_category_keys:
+    - disclosure_misconfig_components
+  source_registry_keys:
+    - owasp_wstg_stable
+    - owasp_secrets_management_cheat_sheet
+    - owasp_cryptographic_storage_cheat_sheet
+    - owasp_logging_cheat_sheet
+    - owasp_http_headers_cheat_sheet
+    - owasp_wstg_configuration_deployment_management
+    - owasp_wstg_error_handling
+    - owasp_wstg_weak_cryptography
+    - owasp_vulnerable_dependency_management_cheat_sheet
+  corpus_dependency_notes:
+    - Consume official secrets, logging, headers, weak-crypto, component-truth, and deployment-testing guidance from the Phase 0 to 2 registries.
+    - Keep component truth and disclosure proof separate from exploit proof and never promote from route names or token-shaped strings alone.
+subphases:
+  - key: p3a_6a
+    name: ontology_and_corpus_binding
+  - key: p3a_6b
+    name: discovery
+  - key: p3a_6c
+    name: candidate_generation
+  - key: p3a_6d
+    name: proof_and_negative_evidence
+  - key: p3a_6e
+    name: benchmark_and_regression
+runtime_dependencies:
+  - web_interact
+  - httpx_probe
+  - custom_poc
+candidate_generators:
+  - disclosure_route_candidate
+  - debug_error_candidate
+  - component_truth_candidate
+  - weak_crypto_material_candidate
+verifier_entrypoints:
+  - response_truth_replay
+ai_advisory:
+  enabled: true
+  advisory_mode: disclosure_truth_focus
+  prompt_contract_id: pentra.ai.advisory
+  trust_boundary: advisor_only
+negative_evidence_behavior:
+  - token-shaped values without route, config, or secret-context evidence remain advisory-only
+  - admin, debug, or component-looking route names do not promote without replayable route or artifact evidence
+benchmark_target_keys:
+  - repo_demo_api
+  - juice_shop_local

@@ -1,6 +1,6 @@
 "use client"
 
-export type UiScanStatus = "queued" | "running" | "completed" | "failed"
+export type UiScanStatus = "queued" | "running" | "completed" | "failed" | "cancelled"
 export type ScanType = "recon" | "vuln" | "full" | "exploit_verify"
 export type ScanPriority = "critical" | "high" | "normal" | "low"
 export type RawScanStatus =
@@ -17,6 +17,7 @@ export type RawScanStatus =
   | "failed"
   | "rejected"
   | "checkpointed"
+  | "cancelled"
 
 export interface PaginatedResponse<T> {
   items: T[]
@@ -61,6 +62,7 @@ export interface ApiScan {
   priority: ScanPriority
   progress: number
   config: Record<string, unknown>
+  scheduled_at: string | null
   started_at: string | null
   completed_at: string | null
   error_message: string | null
@@ -72,6 +74,7 @@ export interface ApiScan {
 export interface ApiScanJob {
   id: string
   scan_id: string
+  node_id: string | null
   phase: number
   tool: string
   status:
@@ -86,14 +89,101 @@ export interface ApiScanJob {
     | "blocked"
   priority: string
   worker_id: string | null
+  scheduled_at: string | null
+  claimed_at: string | null
   started_at: string | null
   completed_at: string | null
   error_message: string | null
   retry_count: number
+  queue_delay_seconds: number | null
+  claim_to_start_seconds: number | null
+  execution_duration_seconds: number | null
+  end_to_end_seconds: number | null
   execution_mode: string | null
-  execution_provenance: "live" | "simulated" | "blocked" | "inferred" | null
+  execution_provenance: "live" | "simulated" | "blocked" | "inferred" | "derived" | null
   execution_reason: string | null
+  execution_class: "external_tool" | "pentra_native" | string | null
+  policy_state: "auto_live" | "approval_required" | "approved" | "blocked" | "derived" | "unsupported" | null
+  output_ref: string | null
   created_at: string
+}
+
+export type FindingTruthState =
+  | "observed"
+  | "suspected"
+  | "reproduced"
+  | "verified"
+  | "rejected"
+  | "expired"
+
+export interface ApiFindingTruthSummary {
+  state: FindingTruthState
+  promoted: boolean
+  provenance_complete: boolean
+  replayable: boolean
+  evidence_reference_count: number
+  raw_evidence_present: boolean
+  scan_job_bound: boolean
+  notes: string[]
+}
+
+export type VerificationPipelineStage =
+  | "verified"
+  | "reproduced"
+  | "queued"
+  | "needs_evidence"
+  | "rejected"
+  | "expired"
+
+export interface ApiVerificationPipelineTypeSummary {
+  vulnerability_type: string
+  total_findings: number
+  verified: number
+  reproduced: number
+  queued: number
+  needs_evidence: number
+  rejected: number
+  expired: number
+  highest_severity: string
+  verified_share: number
+  proof_ready_share: number
+}
+
+export interface ApiVerificationPipelineQueueItem {
+  finding_id: string
+  title: string
+  vulnerability_type: string
+  target: string
+  route_group: string | null
+  severity: string
+  verification_state: string | null
+  truth_state: FindingTruthState
+  queue_state: VerificationPipelineStage
+  readiness_reason: string
+  required_actions: string[]
+  provenance_complete: boolean
+  replayable: boolean
+  evidence_reference_count: number
+  raw_evidence_present: boolean
+  scan_job_bound: boolean
+}
+
+export interface ApiVerificationPipelineSummary {
+  profile_id: string | null
+  scan_type: string
+  overall: {
+    total_findings: number
+    verified: number
+    reproduced: number
+    queued: number
+    needs_evidence: number
+    rejected: number
+    expired: number
+    verified_share: number
+    proof_ready_share: number
+  }
+  by_type: ApiVerificationPipelineTypeSummary[]
+  queue: ApiVerificationPipelineQueueItem[]
 }
 
 export interface ApiFinding {
@@ -114,11 +204,13 @@ export interface ApiFinding {
   exploitability: string | null
   surface: string | null
   execution_mode: string | null
-  execution_provenance: "live" | "simulated" | "blocked" | "inferred" | null
+  execution_provenance: "live" | "simulated" | "blocked" | "inferred" | "derived" | null
   execution_reason: string | null
   verification_state: "detected" | "suspected" | "verified" | null
   verification_confidence: number | null
   verified_at: string | null
+  truth_state: FindingTruthState
+  truth_summary: ApiFindingTruthSummary
   is_false_positive: boolean
   fp_probability: number | null
   created_at: string
@@ -140,7 +232,7 @@ export interface ApiArtifactSummary {
   severity_counts: Record<string, number>
   summary: Record<string, unknown>
   execution_mode: string | null
-  execution_provenance: "live" | "simulated" | "blocked" | "inferred" | null
+  execution_provenance: "live" | "simulated" | "blocked" | "inferred" | "derived" | null
   execution_reason: string | null
   created_at: string
 }
@@ -172,6 +264,122 @@ export interface ApiAttackGraph {
   edges: ApiAttackGraphEdge[]
 }
 
+export interface ApiTargetModelOverview {
+  endpoint_count: number
+  authenticated_endpoint_count: number
+  api_endpoint_count: number
+  route_group_count: number
+  workflow_edge_count: number
+  technology_count: number
+  parameter_count: number
+  auth_surface_count: number
+  finding_count: number
+  source_artifact_types: string[]
+  truth_counts: Record<string, number>
+  severity_counts: Record<string, number>
+}
+
+export interface ApiTargetModelEndpoint {
+  url: string
+  host: string | null
+  path: string
+  route_group: string
+  surface: string
+  requires_auth: boolean
+  auth_variants: string[]
+  methods: string[]
+  parameter_names: string[]
+  hidden_parameter_names: string[]
+  technologies: string[]
+  finding_count: number
+  vulnerability_types: string[]
+  truth_counts: Record<string, number>
+  severity_counts: Record<string, number>
+  has_csrf: boolean
+  safe_replay: boolean
+  origin: "observed" | "seeded_probe" | "finding_derived" | "workflow_derived" | string
+  origins: string[]
+}
+
+export interface ApiTargetModelRouteGroup {
+  route_group: string
+  endpoint_count: number
+  requires_auth: boolean
+  auth_variants: string[]
+  methods: string[]
+  parameter_names: string[]
+  technologies: string[]
+  finding_count: number
+  vulnerability_types: string[]
+  truth_counts: Record<string, number>
+  severity_counts: Record<string, number>
+  focus_score: number
+  origin: "observed" | "seeded_probe" | "finding_derived" | "workflow_derived" | string
+  origins: string[]
+}
+
+export interface ApiTargetModelTechnology {
+  technology: string
+  endpoint_count: number
+  route_groups: string[]
+  surfaces: string[]
+}
+
+export interface ApiTargetModelParameter {
+  name: string
+  locations: string[]
+  endpoint_count: number
+  route_groups: string[]
+  related_vulnerability_types: string[]
+  related_truth_states: string[]
+  likely_sensitive: boolean
+}
+
+export interface ApiTargetModelAuthSurface {
+  label: string
+  auth_state: string
+  endpoint_count: number
+  route_groups: string[]
+  csrf_form_count: number
+  safe_replay_count: number
+}
+
+export interface ApiTargetModelWorkflowEdge {
+  source_url: string
+  target_url: string
+  action: string
+  source_route_group: string
+  target_route_group: string
+  requires_auth: boolean
+}
+
+export interface ApiTargetModelPlannerFocus {
+  route_group: string
+  objective: string
+  reason: string
+  requires_auth: boolean
+  focus_score: number
+  vulnerability_types: string[]
+  parameter_names: string[]
+}
+
+export interface ApiScanTargetModel {
+  scan_id: string
+  tenant_id: string
+  asset_id: string
+  asset_name: string
+  target: string
+  generated_at: string
+  overview: ApiTargetModelOverview
+  endpoints: ApiTargetModelEndpoint[]
+  route_groups: ApiTargetModelRouteGroup[]
+  technologies: ApiTargetModelTechnology[]
+  parameters: ApiTargetModelParameter[]
+  auth_surfaces: ApiTargetModelAuthSurface[]
+  workflows: ApiTargetModelWorkflowEdge[]
+  planner_focus: ApiTargetModelPlannerFocus[]
+}
+
 export interface ApiTimelineEvent {
   id: string
   timestamp: string
@@ -201,6 +409,47 @@ export interface ApiEvidenceReference {
   metadata: Record<string, unknown>
 }
 
+function mergeEvidenceReference(
+  current: ApiEvidenceReference,
+  incoming: ApiEvidenceReference
+): ApiEvidenceReference {
+  const currentContent = current.content ?? ""
+  const incomingContent = incoming.content ?? ""
+  const currentPreview = current.content_preview ?? ""
+  const incomingPreview = incoming.content_preview ?? ""
+
+  return {
+    ...current,
+    ...incoming,
+    finding_id: current.finding_id ?? incoming.finding_id,
+    finding_title: current.finding_title ?? incoming.finding_title,
+    tool_source: current.tool_source ?? incoming.tool_source,
+    content: currentContent.length >= incomingContent.length ? current.content : incoming.content,
+    content_preview:
+      currentPreview.length >= incomingPreview.length ? current.content_preview : incoming.content_preview,
+    storage_ref: current.storage_ref ?? incoming.storage_ref,
+    metadata: {
+      ...(incoming.metadata ?? {}),
+      ...(current.metadata ?? {}),
+    },
+  }
+}
+
+function dedupeEvidenceReferences(evidence: ApiEvidenceReference[]): ApiEvidenceReference[] {
+  const merged = new Map<string, ApiEvidenceReference>()
+
+  for (const item of evidence) {
+    const existing = merged.get(item.id)
+    if (!existing) {
+      merged.set(item.id, item)
+      continue
+    }
+    merged.set(item.id, mergeEvidenceReference(existing, item))
+  }
+
+  return Array.from(merged.values())
+}
+
 export interface ApiScanReport {
   asset: {
     id: string
@@ -217,6 +466,7 @@ export interface ApiScanReport {
   executive_summary: string
   severity_counts: Record<string, number>
   verification_counts: Record<string, number>
+  verification_pipeline: ApiVerificationPipelineSummary
   execution_summary: Record<string, number>
   vulnerability_count: number
   evidence_count: number
@@ -258,6 +508,8 @@ export interface ApiScanReport {
       route_group: string | null
       verification_state: string | null
       verification_confidence: number | null
+      truth_state?: FindingTruthState
+      truth_summary?: ApiFindingTruthSummary
       exploitability: string | null
       surface: string | null
       cvss_score: number | null
@@ -299,7 +551,7 @@ export interface ApiScanReport {
     compare_against_scan_id: string | null
     launch_endpoint: string
   } | null
-  export_formats: Array<"markdown" | "json" | "csv">
+  export_formats: Array<"markdown" | "json" | "csv" | "html">
   top_findings: Array<{
     id: string
     title: string
@@ -307,6 +559,8 @@ export interface ApiScanReport {
     vulnerability_type?: string | null
     verification_state: string | null
     verification_confidence: number | null
+    truth_state?: FindingTruthState
+    truth_summary?: ApiFindingTruthSummary
     cvss_score: number | null
     description: string | null
     remediation: string | null
@@ -314,7 +568,7 @@ export interface ApiScanReport {
   markdown: string
 }
 
-export type ReportExportFormat = "markdown" | "json" | "csv"
+export type ReportExportFormat = "markdown" | "json" | "csv" | "html"
 
 export interface ApiAiAdvisoryNextStep {
   title: string
@@ -371,6 +625,445 @@ export interface ApiScanAiReasoning {
   audit: ApiAiReasoningAudit
 }
 
+export interface ApiAiProviderProbe {
+  status: string
+  latency_ms?: number
+  preview?: string
+  error?: string
+}
+
+export interface ApiAiProviderDiagnosticsEntry {
+  provider: string
+  task_type: string
+  model_tier: string
+  configured: boolean
+  model: string
+  base_url: string
+  request_surface: string
+  requires_api_key: boolean
+  api_key_configured: boolean
+  operator_state: string
+  probe?: ApiAiProviderProbe
+}
+
+export interface ApiAiProviderDiagnostics {
+  generated_at: string
+  enabled: boolean
+  provider_priority: string[]
+  effective_provider_priority: string[]
+  operator_state: string
+  configuration_ready: boolean
+  configured_provider_count: number
+  healthy_provider_count: number
+  fallback_provider_count: number
+  last_failure: string | null
+  tasks: Record<string, ApiAiProviderDiagnosticsEntry[]>
+}
+
+export interface ApiSystemStatus {
+  status: "ok" | "degraded"
+  version: string
+  uptime_seconds: number
+  services: Record<string, string>
+}
+
+export interface ApiAuthRuntime {
+  dev_auth_bypass_enabled: boolean
+  google_oauth_configured: boolean
+  auth_methods: string[]
+}
+
+export interface ApiCurrentUser {
+  id: string
+  tenant_id: string
+  email: string
+  full_name: string | null
+  avatar_url: string | null
+  is_active: boolean
+  roles: string[]
+  created_at: string
+}
+
+export interface ApiTokenResponse {
+  access_token: string
+  refresh_token: string
+  token_type: string
+  expires_in: number
+}
+
+export interface ApiTargetProfileHypothesis {
+  key: string
+  confidence: number
+  evidence: string[]
+  preferred_capability_pack_keys: string[]
+  planner_bias_rules: string[]
+  benchmark_target_keys: string[]
+}
+
+export interface ApiCapabilityPressure {
+  pack_key: string
+  pressure_score: number
+  target_profile?: string | null
+  target_profile_keys: string[]
+  challenge_family_keys: string[]
+  planner_action_keys: string[]
+  proof_contract_keys: string[]
+  top_route_groups: string[]
+  advisory_ready: boolean
+  advisory_mode?: string | null
+  negative_evidence_count: number
+  advisory_artifact_ref?: string | null
+  graph_keys?: string[]
+  graph_target_profile_keys?: string[]
+  graph_planner_action_keys?: string[]
+  graph_proof_contract_keys?: string[]
+  graph_rationale?: string[]
+}
+
+export interface ApiScanPlannerContext {
+  scan_id: string
+  target_profile_hypotheses: ApiTargetProfileHypothesis[]
+  capability_pressures: ApiCapabilityPressure[]
+  advisory_artifact_refs: Array<{ pack_key: string; storage_ref: string }>
+  planner_decision: string | null
+  strategic_plan: Record<string, unknown> | null
+  tactical_plan: Record<string, unknown> | null
+  planner_effect: Record<string, unknown> | null
+  capability_advisories: Record<string, unknown>[]
+}
+
+export interface ApiAgentTranscriptEntry {
+  id: string
+  timestamp: string
+  kind: "capability_advisory" | "planner_effect" | "ai_strategy" | "ai_reasoning" | "timeline_event"
+  pack_key: string | null
+  provider: string | null
+  model: string | null
+  transport: string | null
+  fallback_status: "healthy" | "fallback" | "error" | "deterministic" | "unknown"
+  summary: string
+  raw_payload: Record<string, unknown> | unknown[] | null
+  artifact_ref: string | null
+}
+
+export interface ApiAgentTranscriptResponse {
+  scan_id: string
+  generated_at: string
+  entries: ApiAgentTranscriptEntry[]
+}
+
+export interface ApiToolExecutionLogEntry {
+  node_id: string
+  tool: string
+  worker_family: string
+  phase_number: number
+  phase_name: string
+  status: string
+  job_id: string | null
+  job_status: string | null
+  started_at: string | null
+  completed_at: string | null
+  duration_ms: number
+  execution_mode: string
+  execution_provenance: "live" | "simulated" | "blocked" | "inferred" | "derived" | string
+  execution_reason: string | null
+  execution_class: "external_tool" | "pentra_native" | string | null
+  policy_state: "auto_live" | "approval_required" | "approved" | "blocked" | "derived" | "unsupported" | null
+  runtime_stage:
+    | "queued"
+    | "container_starting"
+    | "command_resolved"
+    | "streaming"
+    | "completed"
+    | "failed"
+    | "blocked"
+    | "stalled"
+    | null
+  last_chunk_at: string | null
+  stream_complete: boolean
+  error_message: string | null
+  item_count: number
+  finding_count: number
+  storage_ref: string | null
+  command: string[]
+  display_command: string
+  tool_binary: string | null
+  container_image: string | null
+  entrypoint: string[]
+  working_dir: string | null
+  canonical_command: ApiCanonicalCommandRecord | null
+  stdout_preview: string
+  stderr_preview: string
+  exit_code: number | null
+  full_stdout_artifact_ref: string | null
+  full_stderr_artifact_ref: string | null
+  command_artifact_ref: string | null
+  session_artifact_ref: string | null
+}
+
+export interface ApiCanonicalCommandRecord {
+  argv: string[]
+  display_command: string
+  tool_binary: string | null
+  container_image: string | null
+  entrypoint: string[]
+  working_dir: string | null
+  channel: "container" | "native" | "unknown" | string
+  execution_class: "external_tool" | "pentra_native" | string
+  policy_state:
+    | "auto_live"
+    | "approval_required"
+    | "approved"
+    | "blocked"
+    | "derived"
+    | "unsupported"
+    | null
+}
+
+export interface ApiToolExecutionLogResponse {
+  scan_id: string
+  total: number
+  logs: ApiToolExecutionLogEntry[]
+}
+
+export interface ApiToolExecutionLogContentResponse {
+  scan_id: string
+  storage_ref: string
+  content_type: "stdout" | "stderr" | "command"
+  content: string
+}
+
+export interface ApiJobSessionFrame {
+  channel: "command" | "stdout" | "stderr" | "system"
+  chunk_seq: number
+  chunk_text: string
+  timestamp: string | null
+  artifact_ref: string | null
+}
+
+export interface ApiJobSessionResponse {
+  scan_id: string
+  job_id: string
+  node_id: string | null
+  tool: string
+  status: string
+  policy_state: "auto_live" | "approval_required" | "approved" | "blocked" | "derived" | "unsupported"
+  execution_provenance: string | null
+  execution_reason: string | null
+  execution_class: "external_tool" | "pentra_native" | string | null
+  runtime_stage:
+    | "queued"
+    | "container_starting"
+    | "command_resolved"
+    | "streaming"
+    | "completed"
+    | "failed"
+    | "blocked"
+    | "stalled"
+    | null
+  last_chunk_at: string | null
+  stream_complete: boolean
+  started_at: string | null
+  completed_at: string | null
+  exit_code: number | null
+  command: string[]
+  display_command: string
+  tool_binary: string | null
+  container_image: string | null
+  entrypoint: string[]
+  working_dir: string | null
+  canonical_command: ApiCanonicalCommandRecord | null
+  command_artifact_ref: string | null
+  full_stdout_artifact_ref: string | null
+  full_stderr_artifact_ref: string | null
+  session_artifact_ref: string | null
+  frames: ApiJobSessionFrame[]
+}
+
+export interface ApiScanStreamEvent {
+  event_type:
+    | "ws.connected"
+    | "ws.heartbeat"
+    | "ws.closing"
+    | "scan.progress"
+    | "scan.phase"
+    | "scan.node"
+    | "scan.job"
+    | "scan.command"
+    | "scan.advisory"
+    | "scan.status"
+    | "scan.finding"
+  scan_id?: string | null
+  timestamp?: string | null
+  message?: string | null
+  reason?: string | null
+  progress?: number | null
+  phase?: string | null
+  phase_number?: number | null
+  phase_name?: string | null
+  phase_status?: string | null
+  node_id?: string | null
+  job_id?: string | null
+  tool?: string | null
+  status?: string | null
+  execution_provenance?: string | null
+  execution_reason?: string | null
+  execution_class?: string | null
+  policy_state?: "auto_live" | "approval_required" | "approved" | "blocked" | "derived" | "unsupported" | null
+  runtime_stage?:
+    | "queued"
+    | "container_starting"
+    | "command_resolved"
+    | "streaming"
+    | "completed"
+    | "failed"
+    | "blocked"
+    | "stalled"
+    | null
+  last_chunk_at?: string | null
+  stream_complete?: boolean | null
+  command?: string[]
+  display_command?: string | null
+  tool_binary?: string | null
+  container_image?: string | null
+  entrypoint?: string[]
+  working_dir?: string | null
+  channel?: "command" | "stdout" | "stderr" | "system" | null
+  chunk_text?: string | null
+  chunk_seq?: number | null
+  stdout_preview?: string | null
+  stderr_preview?: string | null
+  exit_code?: number | null
+  duration_ms?: number | null
+  artifact_ref?: string | null
+  full_stdout_artifact_ref?: string | null
+  full_stderr_artifact_ref?: string | null
+  command_artifact_ref?: string | null
+  session_artifact_ref?: string | null
+  pack_key?: string | null
+  provider?: string | null
+  model?: string | null
+  transport?: string | null
+  fallback_status?: string | null
+  summary?: Record<string, unknown>
+  old_status?: string | null
+  new_status?: string | null
+  severity?: string | null
+  title?: string | null
+  count?: number | null
+}
+
+export interface ApiFieldValidationAssessment {
+  generated_at: string
+  scan_id: string
+  asset_id?: string | null
+  asset_name?: string | null
+  target: string
+  status: string
+  profile_id?: string | null
+  profile_variant: string
+  operating_mode: "field_validation" | "benchmark" | "standard"
+  benchmark_inputs_enabled: boolean
+  benchmark_inputs_disabled_confirmed: boolean
+  target_profile_guess?: string | null
+  target_profile_hypotheses: ApiTargetProfileHypothesis[]
+  selected_capability_packs: string[]
+  approved_live_tools: string[]
+  approval_required_tools: string[]
+  approval_pending_tools: string[]
+  tool_policy_states: Array<{
+    tool: string
+    policy_state: string
+  }>
+  blocked_tools: Array<{
+    tool: string
+    reason: string
+    provenance: string
+    policy_state?: string
+  }>
+  proof_ready_attempts: number
+  heuristic_only_attempts: number
+  verification_outcomes: Record<string, number>
+  evidence_gaps: string[]
+  ai_policy_state: string
+  ai_provider?: string | null
+  ai_model?: string | null
+  ai_transport?: string | null
+  ai_fallback_active: boolean
+  ai_failure_reason?: string | null
+  assessment_state: "verified" | "reproduced" | "detected" | "needs_evidence" | "no_findings"
+  summary: string
+}
+
+export interface ApiFieldValidationSummaryItem {
+  scan_id: string
+  asset_name?: string | null
+  target: string
+  status: string
+  target_profile_guess?: string | null
+  selected_capability_packs: string[]
+  verified: number
+  reproduced: number
+  detected: number
+  needs_evidence: number
+  assessment_state: "verified" | "reproduced" | "detected" | "needs_evidence" | "no_findings"
+  benchmark_inputs_disabled_confirmed: boolean
+  generated_at: string
+}
+
+export interface ApiFieldValidationSummary {
+  generated_at: string
+  total_scans: number
+  by_state: Record<string, number>
+  items: ApiFieldValidationSummaryItem[]
+}
+
+export interface ApiToolApprovalResult {
+  tool: string
+  disposition: "approved" | "already_approved" | "requeued" | "skipped" | "error"
+  message: string
+  node_id: string | null
+  job_id: string | null
+}
+
+export interface ApiToolApprovalResponse {
+  scan_id: string
+  approved_tools: string[]
+  generated_at: string
+  results: ApiToolApprovalResult[]
+}
+
+export interface ApiScanProfilePreflightResponse {
+  contract: ApiScanProfileContract
+  target_context: Record<string, unknown>
+  target_profile_hypotheses: ApiTargetProfileHypothesis[]
+  execution_contract: Record<string, unknown>
+  scope_authorization: Record<string, unknown>
+  auth_material: Record<string, unknown>
+  repository_context: Record<string, unknown>
+  rate_limit_policy: Record<string, unknown>
+  safe_replay_policy: Record<string, unknown>
+  ai_provider_readiness: Record<string, unknown>
+  benchmark_inputs_enabled: boolean
+  approved_live_tools: string[]
+  warnings: string[]
+  blocking_issues: string[]
+  can_launch: boolean
+}
+
+export interface ScanProfilePreflightInput {
+  assetType: ApiAsset["asset_type"]
+  target: string
+  contractId: string
+  scanMode: string
+  methodology?: string | null
+  authorizationAcknowledged: boolean
+  approvedLiveTools?: string[]
+  credentials?: Record<string, unknown>
+  repository?: Record<string, unknown>
+  scope?: Record<string, unknown>
+}
+
 export interface ApiIntelligenceOverview {
   total_scans: number
   completed_scans: number
@@ -380,6 +1073,8 @@ export interface ApiIntelligenceOverview {
   recurring_patterns: number
   technology_clusters: number
   route_groups: number
+  trending_patterns: number
+  tracked_assets: number
 }
 
 export interface ApiIntelligencePatternMatch {
@@ -461,6 +1156,28 @@ export interface ApiIntelligenceAdvisorySummary {
   remediation_focus: string[]
 }
 
+export interface ApiIntelligenceTrendingPattern {
+  vulnerability_type: string
+  recent_count: number
+  previous_count: number
+  direction: "new" | "increasing" | "decreasing" | "stable"
+  delta: number
+}
+
+export interface ApiIntelligenceTargetKnowledge {
+  asset_id: string
+  asset_name: string
+  target: string
+  scan_count: number
+  known_endpoints: number
+  known_forms: number
+  known_technologies: string[]
+  known_auth_surfaces: string[]
+  known_vulnerability_types: string[]
+  first_seen: string | null
+  last_seen: string | null
+}
+
 export interface ApiIntelligenceSummary {
   generated_at: string
   definition: string
@@ -472,6 +1189,67 @@ export interface ApiIntelligenceSummary {
   exploit_trends: ApiIntelligenceExploitTrend[]
   retest_deltas: ApiIntelligenceRetestDelta[]
   advisory_summaries: ApiIntelligenceAdvisorySummary[]
+  trending_patterns: ApiIntelligenceTrendingPattern[]
+  target_knowledge: ApiIntelligenceTargetKnowledge[]
+}
+
+export interface ApiAssetHistoryEntry {
+  scan_id: string
+  scan_type: ScanType
+  status: RawScanStatus
+  priority: ScanPriority
+  generated_at: string | null
+  started_at: string | null
+  completed_at: string | null
+  severity_counts: Record<string, number>
+  verification_counts: Record<string, number>
+  total_findings: number
+  comparison_summary: string | null
+  comparison_counts: Record<string, number>
+  baseline_scan_id: string | null
+}
+
+export interface ApiAssetHistory {
+  asset_id: string
+  asset_name: string
+  target: string
+  generated_at: string
+  total_scans: number
+  known_technologies: string[]
+  tracked_vulnerability_types: string[]
+  entries: ApiAssetHistoryEntry[]
+}
+
+export interface ApiHistoricalFindingOccurrence {
+  id: string
+  scan_id: string
+  finding_id: string | null
+  severity: string
+  verification_state: string | null
+  source_type: string
+  observed_at: string
+}
+
+export interface ApiHistoricalFinding {
+  id: string
+  asset_id: string
+  lineage_key: string
+  fingerprint: string
+  title: string
+  vulnerability_type: string | null
+  route_group: string | null
+  target: string
+  latest_severity: string
+  latest_verification_state: string | null
+  latest_source_type: string
+  first_seen_scan_id: string | null
+  first_seen_at: string
+  last_seen_scan_id: string | null
+  last_seen_at: string
+  latest_finding_id: string | null
+  occurrence_count: number
+  status: "active" | "resolved"
+  recent_occurrences: ApiHistoricalFindingOccurrence[]
 }
 
 export interface SeverityCounts {
@@ -493,11 +1271,14 @@ export interface ExecutionSummary {
   simulated: number
   blocked: number
   inferred: number
+  derived: number
 }
 
 export interface ApiScanProfileContract {
+  contract_id: string
   scan_type: ScanType
   profile_id: string
+  profile_variant: string
   name: string
   description: string
   duration: string
@@ -505,8 +1286,12 @@ export interface ApiScanProfileContract {
   execution_mode: string
   target_policy: string
   scope_summary: string
+  target_profile_keys: string[]
+  requires_preflight: boolean
+  benchmark_inputs_enabled: boolean
   scheduled_tools: string[]
   live_tools: string[]
+  approval_required_tools: string[]
   conditional_live_tools: string[]
   derived_tools: string[]
   unsupported_tools: string[]
@@ -523,6 +1308,7 @@ export interface Scan {
   rawStatus: RawScanStatus
   statusLabel: string
   startedAt: string
+  scheduledAt: string
   completedAt: string
   createdAt: string
   updatedAt: string
@@ -537,6 +1323,17 @@ export interface Scan {
   resultSummary: Record<string, unknown> | null
   executionContract: ApiScanProfileContract | null
   findings: Omit<SeverityCounts, "info">
+  executionLogs?: Array<{
+    tool_id: string
+    phase: string
+    command: string[]
+    stdout: string
+    stderr: string
+    exit_code: number
+    duration_seconds: number
+    timestamp: string
+    description: string
+  }>
 }
 
 export interface ScanAsset extends ApiAsset {
@@ -547,8 +1344,14 @@ export interface ScanDetail {
   scan: Scan
   asset?: ScanAsset
   jobs: ApiScanJob[]
+  toolLogs: ApiToolExecutionLogEntry[]
+  liveJobSessions: Record<string, ApiJobSessionResponse>
   findings: ApiFinding[]
   artifacts: ApiArtifactSummary[]
+  targetModel: ApiScanTargetModel | null
+  plannerContext: ApiScanPlannerContext | null
+  agentTranscript: ApiAgentTranscriptEntry[]
+  fieldValidation: ApiFieldValidationAssessment | null
   attackGraph: ApiAttackGraph | null
   timeline: ApiTimelineEvent[]
   evidence: ApiEvidenceReference[]
@@ -563,6 +1366,7 @@ export interface CreateScanInput {
   assetId: string
   scanType: ScanType
   priority?: ScanPriority
+  scheduledAt?: string | null
   config?: Record<string, unknown>
 }
 
@@ -606,9 +1410,14 @@ export interface ScanProfileOption {
 const DEFAULT_API_BASE_URL = "http://localhost:8000"
 const DEV_AUTH_MODE = process.env.NEXT_PUBLIC_PENTRA_DEV_AUTH_MODE ?? "bypass"
 const DEV_AUTH_TOKEN = process.env.NEXT_PUBLIC_PENTRA_DEV_AUTH_TOKEN ?? ""
+const ACCESS_TOKEN_STORAGE_KEY = "pentra.auth.access_token"
+const REFRESH_TOKEN_STORAGE_KEY = "pentra.auth.refresh_token"
+const TOKEN_TYPE_STORAGE_KEY = "pentra.auth.token_type"
+const EXPIRES_IN_STORAGE_KEY = "pentra.auth.expires_in"
 
 const assetCache = new Map<string, ApiAsset>()
 const projectCache = new Map<string, ApiProject>()
+let refreshRequest: Promise<string | null> | null = null
 
 export const scanProfiles: ScanProfileOption[] = [
   {
@@ -657,25 +1466,172 @@ const scanTypePhaseMap: Record<ScanType, number[]> = {
 export function getApiBaseUrl(): string {
   const value =
     process.env.NEXT_PUBLIC_PENTRA_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL
-  return value.replace(/\/+$/, "")
+  const normalized = value.replace(/\/+$/, "")
+
+  if (typeof window === "undefined") {
+    return normalized
+  }
+
+  try {
+    const parsed = new URL(normalized)
+    const browserHost = window.location.hostname
+    const loopbackHosts = new Set(["localhost", "127.0.0.1"])
+
+    if (
+      loopbackHosts.has(parsed.hostname) &&
+      loopbackHosts.has(browserHost) &&
+      parsed.hostname !== browserHost
+    ) {
+      parsed.hostname = browserHost
+      return parsed.toString().replace(/\/+$/, "")
+    }
+  } catch {
+    return normalized
+  }
+
+  return normalized
+}
+
+export function getScanStreamUrl(scanId: string): string {
+  const base = getApiBaseUrl()
+  const wsBase = base.startsWith("https://")
+    ? `wss://${base.slice("https://".length)}`
+    : base.startsWith("http://")
+      ? `ws://${base.slice("http://".length)}`
+      : base
+  const url = new URL(`${wsBase}/ws/scans/${scanId}`)
+  const accessToken = getStoredAccessToken()
+  const devToken = getDevAuthToken()
+  const token = accessToken || devToken
+  if (token) {
+    url.searchParams.set("token", token)
+  }
+  return url.toString()
 }
 
 export function isDevAuthBypassEnabled(): boolean {
   return DEV_AUTH_MODE === "bypass"
 }
 
-function buildHeaders(initHeaders?: HeadersInit): Headers {
+export function getDevAuthToken(): string {
+  return DEV_AUTH_TOKEN
+}
+
+function canUseBrowserStorage(): boolean {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined"
+}
+
+export function getStoredAccessToken(): string {
+  if (!canUseBrowserStorage()) {
+    return ""
+  }
+  return window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY) ?? ""
+}
+
+export function getStoredRefreshToken(): string {
+  if (!canUseBrowserStorage()) {
+    return ""
+  }
+  return window.localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY) ?? ""
+}
+
+export function clearStoredAuthTokens(): void {
+  if (!canUseBrowserStorage()) {
+    return
+  }
+  window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
+  window.localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY)
+  window.localStorage.removeItem(TOKEN_TYPE_STORAGE_KEY)
+  window.localStorage.removeItem(EXPIRES_IN_STORAGE_KEY)
+}
+
+export function storeAuthTokens(tokens: ApiTokenResponse): void {
+  if (!canUseBrowserStorage()) {
+    return
+  }
+  window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, tokens.access_token)
+  window.localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, tokens.refresh_token)
+  window.localStorage.setItem(TOKEN_TYPE_STORAGE_KEY, tokens.token_type)
+  window.localStorage.setItem(EXPIRES_IN_STORAGE_KEY, String(tokens.expires_in))
+}
+
+export function completeFrontendGoogleAuthFromHash(hash: string): boolean {
+  const fragment = hash.startsWith("#") ? hash.slice(1) : hash
+  const params = new URLSearchParams(fragment)
+  const accessToken = params.get("access_token")?.trim() ?? ""
+  const refreshToken = params.get("refresh_token")?.trim() ?? ""
+  if (!accessToken || !refreshToken) {
+    return false
+  }
+
+  storeAuthTokens({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    token_type: params.get("token_type")?.trim() || "bearer",
+    expires_in: Number(params.get("expires_in") || "0") || 0,
+  })
+  return true
+}
+
+export function getGoogleLoginUrl(): string {
+  return `${getApiBaseUrl()}/auth/google?mode=frontend`
+}
+
+export function buildApiHeaders(initHeaders?: HeadersInit): Headers {
   const headers = new Headers(initHeaders)
 
-  if (DEV_AUTH_TOKEN && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${DEV_AUTH_TOKEN}`)
+  if (!headers.has("Authorization")) {
+    const accessToken = getStoredAccessToken()
+    if (accessToken) {
+      headers.set("Authorization", `Bearer ${accessToken}`)
+    } else if (DEV_AUTH_TOKEN) {
+      headers.set("Authorization", `Bearer ${DEV_AUTH_TOKEN}`)
+    }
   }
 
   return headers
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = buildHeaders(init?.headers)
+async function refreshStoredAuthTokens(): Promise<string | null> {
+  const refreshToken = getStoredRefreshToken()
+  if (!refreshToken) {
+    clearStoredAuthTokens()
+    return null
+  }
+
+  if (refreshRequest) {
+    return refreshRequest
+  }
+
+  refreshRequest = (async () => {
+    const response = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+      cache: "no-store",
+    })
+
+    if (!response.ok) {
+      clearStoredAuthTokens()
+      return null
+    }
+
+    const payload = (await response.json()) as ApiTokenResponse
+    storeAuthTokens(payload)
+    return payload.access_token
+  })()
+
+  try {
+    return await refreshRequest
+  } finally {
+    refreshRequest = null
+  }
+}
+
+async function apiFetch<T>(path: string, init?: RequestInit, allowRefresh: boolean = true): Promise<T> {
+  const headers = buildApiHeaders(init?.headers)
 
   if (init?.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json")
@@ -686,6 +1642,16 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     headers,
     cache: "no-store",
   })
+
+  if (response.status === 401 && allowRefresh) {
+    const refreshedAccessToken = await refreshStoredAuthTokens()
+    if (refreshedAccessToken) {
+      return apiFetch<T>(path, init, false)
+    }
+    if (isDevAuthBypassEnabled() && !getStoredAccessToken()) {
+      return apiFetch<T>(path, init, false)
+    }
+  }
 
   const contentType = response.headers.get("content-type") ?? ""
   const payload = contentType.includes("application/json")
@@ -706,20 +1672,46 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return payload as T
 }
 
-async function apiFetchOptional<T>(path: string, fallback: T, init?: RequestInit): Promise<T> {
-  const headers = buildHeaders(init?.headers)
+async function apiFetchOptional<T>(
+  path: string,
+  fallback: T,
+  init?: RequestInit,
+  allowRefresh: boolean = true
+): Promise<T> {
+  const headers = buildApiHeaders(init?.headers)
 
   if (init?.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json")
   }
 
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...init,
-    headers,
-    cache: "no-store",
-  })
+  let response: Response
+  try {
+    response = await fetch(`${getApiBaseUrl()}${path}`, {
+      ...init,
+      headers,
+      cache: "no-store",
+    })
+  } catch (error) {
+    console.warn(`Optional API request failed for ${path}`, error)
+    return fallback
+  }
+
+  if (response.status === 401 && allowRefresh) {
+    const refreshedAccessToken = await refreshStoredAuthTokens()
+    if (refreshedAccessToken) {
+      return apiFetchOptional<T>(path, fallback, init, false)
+    }
+    if (isDevAuthBypassEnabled() && !getStoredAccessToken()) {
+      return apiFetchOptional<T>(path, fallback, init, false)
+    }
+  }
 
   if (response.status === 404) {
+    return fallback
+  }
+
+  if (!response.ok) {
+    console.warn(`Optional API request returned ${response.status} for ${path}`)
     return fallback
   }
 
@@ -727,17 +1719,6 @@ async function apiFetchOptional<T>(path: string, fallback: T, init?: RequestInit
   const payload = contentType.includes("application/json")
     ? await response.json()
     : await response.text()
-
-  if (!response.ok) {
-    const detail =
-      typeof payload === "object" &&
-      payload !== null &&
-      "detail" in payload &&
-      typeof payload.detail === "string"
-        ? payload.detail
-        : `Request failed (${response.status})`
-    throw new Error(detail)
-  }
 
   return payload as T
 }
@@ -813,6 +1794,8 @@ export function normalizeScanStatus(rawStatus: RawScanStatus): UiScanStatus {
     case "failed":
     case "rejected":
       return "failed"
+    case "cancelled":
+      return "cancelled"
     case "queued":
     case "priority_queued":
     case "validating":
@@ -826,7 +1809,7 @@ export function normalizeScanStatus(rawStatus: RawScanStatus): UiScanStatus {
 }
 
 export function isTerminalScanStatus(rawStatus: RawScanStatus): boolean {
-  return rawStatus === "completed" || rawStatus === "failed" || rawStatus === "rejected"
+  return rawStatus === "completed" || rawStatus === "failed" || rawStatus === "rejected" || rawStatus === "cancelled"
 }
 
 export function isActiveScanStatus(rawStatus: RawScanStatus): boolean {
@@ -853,6 +1836,16 @@ export function getScanStatusMeta(rawStatus: RawScanStatus): ScanStatusMeta {
       textClass: "text-critical",
       dotClass: "bg-critical",
       bgClass: "bg-critical/10",
+    }
+  }
+
+  if (rawStatus === "cancelled") {
+    return {
+      status,
+      label: "Cancelled",
+      textClass: "text-muted-foreground",
+      dotClass: "bg-muted-foreground",
+      bgClass: "bg-muted/50",
     }
   }
 
@@ -951,19 +1944,113 @@ export function formatRelativeTime(timestamp?: string | null): string {
 }
 
 export function formatExecutionProvenance(
-  provenance?: "live" | "simulated" | "blocked" | "inferred" | null
+  provenance?: "live" | "simulated" | "blocked" | "inferred" | "derived" | null
 ): string {
   switch (provenance) {
     case "live":
       return "Live"
     case "simulated":
       return "Simulated"
+    case "derived":
+      return "Derived"
     case "blocked":
       return "Blocked"
     case "inferred":
       return "Inferred"
     default:
       return "Unknown"
+  }
+}
+
+export function inferExecutionClass(tool?: string | null): "external_tool" | "pentra_native" {
+  switch ((tool ?? "").trim().toLowerCase()) {
+    case "scope_check":
+    case "custom_poc":
+    case "web_interact":
+      return "pentra_native"
+    default:
+      return "external_tool"
+  }
+}
+
+export function formatExecutionClass(
+  executionClass?: "external_tool" | "pentra_native" | string | null
+): string {
+  switch ((executionClass ?? "").trim().toLowerCase()) {
+    case "external_tool":
+      return "External Tool"
+    case "pentra_native":
+      return "Pentra Native"
+    default:
+      return "Unknown"
+  }
+}
+
+export function formatPolicyState(policyState?: string | null): string {
+  switch ((policyState ?? "").trim().toLowerCase()) {
+    case "auto_live":
+      return "Auto Live"
+    case "approval_required":
+      return "Approval Required"
+    case "approved":
+      return "Approved"
+    case "blocked":
+      return "Blocked"
+    case "derived":
+      return "Derived"
+    case "unsupported":
+      return "Unsupported"
+    default:
+      return "Unknown"
+  }
+}
+
+export function formatRuntimeStage(runtimeStage?: string | null): string {
+  switch ((runtimeStage ?? "").trim().toLowerCase()) {
+    case "queued":
+      return "Queued"
+    case "container_starting":
+      return "Container Starting"
+    case "command_resolved":
+      return "Command Ready"
+    case "streaming":
+      return "Streaming"
+    case "completed":
+      return "Completed"
+    case "failed":
+      return "Failed"
+    case "blocked":
+      return "Blocked"
+    case "stalled":
+      return "Stalled"
+    default:
+      return "Unknown"
+  }
+}
+
+export function isLiveRuntimeStage(runtimeStage?: string | null): boolean {
+  switch ((runtimeStage ?? "").trim().toLowerCase()) {
+    case "container_starting":
+    case "command_resolved":
+    case "streaming":
+      return true
+    default:
+      return false
+  }
+}
+
+export function formatTargetModelOrigin(origin?: string | null): string {
+  switch ((origin ?? "").trim().toLowerCase()) {
+    case "observed":
+      return "Observed"
+    case "seeded_probe":
+      return "Seeded Probe"
+    case "finding_derived":
+      return "Finding Derived"
+    case "workflow_derived":
+      return "Workflow Derived"
+    default:
+      return origin?.trim() || "Unknown"
   }
 }
 
@@ -975,6 +2062,8 @@ export function formatExecutionReason(reason?: string | null): string {
       return "Blocked by target policy"
     case "demo_simulated_mode":
       return "Explicit demo simulation mode"
+    case "derived_phase":
+      return "Derived from persisted artifacts"
     case "container_execution_error":
       return "Container execution error"
     default:
@@ -1022,6 +2111,7 @@ function normalizeExecutionSummary(input?: Partial<ExecutionSummary>): Execution
     simulated: input?.simulated ?? 0,
     blocked: input?.blocked ?? 0,
     inferred: input?.inferred ?? 0,
+    derived: input?.derived ?? 0,
   }
 }
 
@@ -1090,17 +2180,23 @@ export function extractExecutionSummary(
       simulated: Number(values.simulated ?? 0),
       blocked: Number(values.blocked ?? 0),
       inferred: Number(values.inferred ?? 0),
+      derived: Number(values.derived ?? 0),
     })
   }
 
   return normalizeExecutionSummary()
 }
 
-function buildScanName(scan: ApiScan, asset?: ApiAsset): string {
+function buildScanName(
+  scan: ApiScan,
+  asset: ApiAsset | undefined,
+  executionContract: ApiScanProfileContract | null
+): string {
+  const label = executionContract?.name?.trim() || formatScanType(scan.scan_type)
   if (asset?.name) {
-    return `${formatScanType(scan.scan_type)} · ${asset.name}`
+    return `${label} · ${asset.name}`
   }
-  return `${formatScanType(scan.scan_type)} · Asset ${scan.asset_id.slice(0, 8)}`
+  return `${label} · Asset ${scan.asset_id.slice(0, 8)}`
 }
 
 function extractExecutionContract(
@@ -1132,8 +2228,10 @@ function extractExecutionContract(
   }
 
   return {
+    contract_id: String(payload["contract_id"] ?? ""),
     scan_type: scanType,
     profile_id: String(payload["profile_id"] ?? ""),
+    profile_variant: String(payload["profile_variant"] ?? "standard"),
     name: String(payload["name"] ?? ""),
     description: String(payload["description"] ?? ""),
     duration: String(payload["duration"] ?? ""),
@@ -1141,8 +2239,16 @@ function extractExecutionContract(
     execution_mode: String(payload["execution_mode"] ?? ""),
     target_policy: String(payload["target_policy"] ?? ""),
     scope_summary: String(payload["scope_summary"] ?? ""),
+    target_profile_keys: isStringArray(payload["target_profile_keys"])
+      ? payload["target_profile_keys"]
+      : [],
+    requires_preflight: Boolean(payload["requires_preflight"]),
+    benchmark_inputs_enabled: Boolean(payload["benchmark_inputs_enabled"]),
     scheduled_tools: isStringArray(payload["scheduled_tools"]) ? payload["scheduled_tools"] : [],
     live_tools: isStringArray(payload["live_tools"]) ? payload["live_tools"] : [],
+    approval_required_tools: isStringArray(payload["approval_required_tools"])
+      ? payload["approval_required_tools"]
+      : [],
     conditional_live_tools: isStringArray(payload["conditional_live_tools"])
       ? payload["conditional_live_tools"]
       : [],
@@ -1162,23 +2268,25 @@ export function toScanSummary(
   findings: SeverityCounts = extractSeverityCounts(scan.result_summary)
 ): Scan {
   const statusMeta = getScanStatusMeta(scan.status)
+  const executionContract = extractExecutionContract(scan.config)
   const inferredStartedAt =
     scan.started_at ??
     (statusMeta.status === "queued" ? null : scan.created_at)
 
   return {
     id: scan.id,
-    name: buildScanName(scan, asset),
+    name: buildScanName(scan, asset, executionContract),
     target: asset?.target ?? "Resolving target...",
     status: statusMeta.status,
     rawStatus: scan.status,
     statusLabel: statusMeta.label,
     startedAt: inferredStartedAt ?? "",
+    scheduledAt: scan.scheduled_at ?? "",
     completedAt: scan.completed_at ?? "",
     createdAt: scan.created_at,
     updatedAt: scan.updated_at,
     duration: formatDuration(inferredStartedAt, scan.completed_at),
-    profile: formatScanType(scan.scan_type),
+    profile: executionContract?.name?.trim() || formatScanType(scan.scan_type),
     scanType: scan.scan_type,
     priority: scan.priority,
     progress: scan.progress,
@@ -1186,7 +2294,7 @@ export function toScanSummary(
     assetName: asset?.name ?? "Unknown Asset",
     errorMessage: scan.error_message,
     resultSummary: scan.result_summary,
-    executionContract: extractExecutionContract(scan.config),
+    executionContract,
     findings: {
       critical: findings.critical,
       high: findings.high,
@@ -1340,6 +2448,7 @@ export async function createScan(input: CreateScanInput): Promise<Scan> {
       asset_id: input.assetId,
       scan_type: input.scanType,
       priority: input.priority ?? "normal",
+      scheduled_at: input.scheduledAt ?? null,
       config: input.config ?? {},
     }),
   })
@@ -1357,6 +2466,26 @@ export async function listScanProfiles(params: {
     target: params.target,
   })
   return apiFetch<ApiScanProfileContract[]>(`/api/v1/scan-profiles?${query.toString()}`)
+}
+
+export async function runScanProfilePreflight(
+  input: ScanProfilePreflightInput
+): Promise<ApiScanProfilePreflightResponse> {
+  return apiFetch<ApiScanProfilePreflightResponse>("/api/v1/scan-profiles/preflight", {
+    method: "POST",
+    body: JSON.stringify({
+      asset_type: input.assetType,
+      target: input.target,
+      contract_id: input.contractId,
+      scan_mode: input.scanMode,
+      methodology: input.methodology ?? null,
+      authorization_acknowledged: input.authorizationAcknowledged,
+      approved_live_tools: input.approvedLiveTools ?? [],
+      credentials: input.credentials ?? {},
+      repository: input.repository ?? {},
+      scope: input.scope ?? {},
+    }),
+  })
 }
 
 export async function listScanFindings(
@@ -1378,6 +2507,31 @@ export async function getIntelligenceSummary(scanLimit: number = 100): Promise<A
   return apiFetch<ApiIntelligenceSummary>(`/api/v1/intelligence/summary?scan_limit=${scanLimit}`)
 }
 
+export async function getAssetHistory(
+  assetId: string,
+  limit: number = 20
+): Promise<ApiAssetHistory> {
+  return apiFetch<ApiAssetHistory>(`/api/v1/intelligence/assets/${assetId}/history?limit=${limit}`)
+}
+
+export async function listAssetHistoricalFindings(options: {
+  assetId: string
+  page?: number
+  pageSize?: number
+  status?: "all" | "active" | "resolved"
+  occurrenceLimit?: number
+}): Promise<PaginatedResponse<ApiHistoricalFinding>> {
+  const params = new URLSearchParams({
+    page: String(options.page ?? 1),
+    page_size: String(options.pageSize ?? 20),
+    status_filter: options.status ?? "all",
+    occurrence_limit: String(options.occurrenceLimit ?? 3),
+  })
+  return apiFetch<PaginatedResponse<ApiHistoricalFinding>>(
+    `/api/v1/assets/${options.assetId}/historical-findings?${params.toString()}`
+  )
+}
+
 export async function createRetestScan(
   scanId: string,
   input?: CreateRetestInput
@@ -1394,11 +2548,19 @@ export async function createRetestScan(
   return toScanSummary(created, asset)
 }
 
+export async function cancelScan(scanId: string): Promise<Scan> {
+  const updated = await apiFetch<ApiScan>(`/api/v1/scans/${scanId}/cancel`, {
+    method: "POST",
+  })
+  const asset = await fetchAsset(updated.asset_id).catch(() => undefined)
+  return toScanSummary(updated, asset)
+}
+
 export async function downloadScanReportExport(
   scanId: string,
   format: ReportExportFormat
 ): Promise<void> {
-  const headers = buildHeaders()
+  const headers = buildApiHeaders()
   const response = await fetch(
     `${getApiBaseUrl()}/api/v1/scans/${scanId}/report/export?format=${format}`,
     {
@@ -1418,7 +2580,9 @@ export async function downloadScanReportExport(
   const disposition = response.headers.get("Content-Disposition") ?? ""
   const match = disposition.match(/filename=\"([^\"]+)\"/)
   anchor.href = url
-  anchor.download = match?.[1] ?? `pentra-report-${scanId}.${format === "markdown" ? "md" : format}`
+  anchor.download =
+    match?.[1] ??
+    `pentra-report-${scanId}.${format === "markdown" ? "md" : format === "html" ? "html" : format}`
   document.body.append(anchor)
   anchor.click()
   anchor.remove()
@@ -1444,18 +2608,122 @@ export async function getScanAiReasoning(
   )
 }
 
+export async function getAiProviderDiagnostics(
+  live: boolean = false
+): Promise<ApiAiProviderDiagnostics> {
+  const params = new URLSearchParams()
+  if (live) {
+    params.set("live", "true")
+  }
+  const suffix = params.size > 0 ? `?${params.toString()}` : ""
+  return apiFetch<ApiAiProviderDiagnostics>(`/api/v1/scans/ai/providers/diagnostics${suffix}`)
+}
+
+export async function getSystemStatus(): Promise<ApiSystemStatus> {
+  return apiFetch<ApiSystemStatus>("/api/v1/system/status")
+}
+
+export async function getAuthRuntime(): Promise<ApiAuthRuntime> {
+  return apiFetch<ApiAuthRuntime>("/auth/runtime")
+}
+
+export async function getCurrentUser(): Promise<ApiCurrentUser> {
+  return apiFetch<ApiCurrentUser>("/auth/me")
+}
+
+export async function getScanPlannerContext(
+  scanId: string
+): Promise<ApiScanPlannerContext | null> {
+  return apiFetchOptional<ApiScanPlannerContext | null>(
+    `/api/v1/scans/${scanId}/planner-context`,
+    null
+  )
+}
+
+export async function getScanAgentTranscript(
+  scanId: string
+): Promise<ApiAgentTranscriptResponse | null> {
+  return apiFetchOptional<ApiAgentTranscriptResponse | null>(
+    `/api/v1/scans/${scanId}/agent-transcript`,
+    null
+  )
+}
+
+export async function getScanFieldValidationAssessment(
+  scanId: string
+): Promise<ApiFieldValidationAssessment | null> {
+  return apiFetchOptional<ApiFieldValidationAssessment | null>(
+    `/api/v1/scans/${scanId}/field-validation`,
+    null
+  )
+}
+
+export async function getFieldValidationSummary(
+  limit: number = 10
+): Promise<ApiFieldValidationSummary> {
+  return apiFetch<ApiFieldValidationSummary>(
+    `/api/v1/scans/field-validation/summary?limit=${limit}`
+  )
+}
+
+export async function getScanToolLogs(
+  scanId: string
+): Promise<ApiToolExecutionLogResponse | null> {
+  return apiFetchOptional<ApiToolExecutionLogResponse | null>(
+    `/api/v1/scans/${scanId}/tool-logs`,
+    null
+  )
+}
+
+export async function getScanToolLogContent(
+  scanId: string,
+  storageRef: string
+): Promise<ApiToolExecutionLogContentResponse | null> {
+  const params = new URLSearchParams({ storage_ref: storageRef })
+  return apiFetchOptional<ApiToolExecutionLogContentResponse | null>(
+    `/api/v1/scans/${scanId}/tool-logs/content?${params.toString()}`,
+    null
+  )
+}
+
+export async function getScanJobSession(
+  scanId: string,
+  jobId: string
+): Promise<ApiJobSessionResponse | null> {
+  return apiFetchOptional<ApiJobSessionResponse | null>(
+    `/api/v1/scans/${scanId}/jobs/${jobId}/session`,
+    null
+  )
+}
+
+export async function approveScanTools(
+  scanId: string,
+  tools: string[]
+): Promise<ApiToolApprovalResponse> {
+  return apiFetch<ApiToolApprovalResponse>(`/api/v1/scans/${scanId}/tool-approvals`, {
+    method: "POST",
+    headers: buildApiHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ tools }),
+  })
+}
+
 export async function getScanDetail(
   scanId: string,
   options?: { advisoryMode?: AiAdvisoryMode }
 ): Promise<ScanDetail> {
   const scan = await apiFetch<ApiScan>(`/api/v1/scans/${scanId}`)
 
-  const [jobs, findingsResponse, artifacts, attackGraph, timeline, evidence, report] = await Promise.all([
+  const [jobs, toolLogResponse, findingsResponse, artifacts, targetModel, plannerContext, agentTranscript, fieldValidation, attackGraph, timeline, evidence, report] = await Promise.all([
     apiFetch<ApiScanJob[]>(`/api/v1/scans/${scanId}/jobs`),
+    apiFetchOptional<ApiToolExecutionLogResponse | null>(`/api/v1/scans/${scanId}/tool-logs`, null),
     apiFetch<PaginatedResponse<ApiFinding>>(
       `/api/v1/scans/${scanId}/findings?page=1&page_size=100`
     ),
     apiFetch<ApiArtifactSummary[]>(`/api/v1/scans/${scanId}/artifacts/summary`),
+    apiFetchOptional<ApiScanTargetModel | null>(`/api/v1/scans/${scanId}/target-model`, null),
+    apiFetchOptional<ApiScanPlannerContext | null>(`/api/v1/scans/${scanId}/planner-context`, null),
+    apiFetchOptional<ApiAgentTranscriptResponse | null>(`/api/v1/scans/${scanId}/agent-transcript`, null),
+    apiFetchOptional<ApiFieldValidationAssessment | null>(`/api/v1/scans/${scanId}/field-validation`, null),
     apiFetchOptional<ApiAttackGraph | null>(`/api/v1/scans/${scanId}/attack-graph`, null),
     apiFetch<ApiTimelineEvent[]>(`/api/v1/scans/${scanId}/timeline`),
     apiFetch<ApiEvidenceReference[]>(`/api/v1/scans/${scanId}/evidence`),
@@ -1472,9 +2740,23 @@ export async function getScanDetail(
       ? await fetchProject(asset.project_id).catch(() => undefined)
       : undefined
   const severityCounts = aggregateSeverityCounts(findingsResponse.items)
+  const toolLogs = toolLogResponse?.logs ?? []
 
   return {
-    scan: toScanSummary(scan, asset, severityCounts),
+    scan: {
+      ...toScanSummary(scan, asset, severityCounts),
+      executionLogs: toolLogs.map((entry) => ({
+        tool_id: entry.tool,
+        phase: entry.phase_name,
+        command: entry.command,
+        stdout: entry.stdout_preview,
+        stderr: entry.stderr_preview,
+        exit_code: entry.exit_code ?? -1,
+        duration_seconds: entry.duration_ms > 0 ? entry.duration_ms / 1000 : 0,
+        timestamp: entry.completed_at ?? entry.started_at ?? "",
+        description: `${formatExecutionClass(entry.execution_class ?? inferExecutionClass(entry.tool))} · ${entry.execution_provenance} · ${entry.execution_reason ?? entry.status}`,
+      })),
+    },
     asset: asset
       ? {
           ...asset,
@@ -1482,11 +2764,17 @@ export async function getScanDetail(
         }
       : undefined,
     jobs: jobs.sort((left, right) => left.phase - right.phase),
+    toolLogs,
+    liveJobSessions: {},
     findings: findingsResponse.items,
     artifacts,
+    targetModel,
+    plannerContext,
+    agentTranscript: agentTranscript?.entries ?? [],
+    fieldValidation,
     attackGraph,
     timeline,
-    evidence,
+    evidence: dedupeEvidenceReferences(evidence),
     report,
     aiReasoning,
     isTerminal: isTerminalScanStatus(scan.status),

@@ -1,0 +1,115 @@
+key: juice_shop_runtime_inventory_local_19_2_1
+title: Local Juice Shop runtime inventory normalized summary
+source_key: juice_shop_runtime_inventory_local_19_2_1
+document_type: runtime_inventory_summary
+generated_at: "2026-03-24T12:00:00+05:30"
+summary: >
+  This document is the authoritative normalized benchmark-truth summary for
+  the running local Juice Shop 19.2.1 target in this checkout.
+facts:
+  - fact_key: juice_shop_local_19_2_1_benchmark_truth
+    title: Local Juice Shop benchmark truth
+    fact_type: benchmark_truth_summary
+    summary: >
+      The local runtime inventory defines the authoritative challenge count and
+      target version for the active benchmark lane.
+    tags:
+      - benchmark_truth
+      - version_pinned
+    data:
+      target_key: juice_shop_local
+      target_version: "19.2.1"
+      total_challenges: 111
+      artifact_path: .local/pentra/phase9/juice_shop_challenge_inventory_latest.json
+      runtime_url: http://127.0.0.1:3001/api/Challenges
+    citations:
+      - fact_key: juice_shop_local_19_2_1_benchmark_truth
+        title: Local Juice Shop Runtime Inventory
+        source_key: juice_shop_runtime_inventory_local_19_2_1
+        source_url: http://127.0.0.1:3001/api/Challenges
+        trust_tier: runtime_truth
+        retrieved_at: "2026-03-24T12:00:00+05:30"
+        extraction_mode: runtime_api
+        authority_for:
+          - benchmark_truth
+          - challenge_inventory
+          - target_version_truth
+        target_key: juice_shop_local
+        target_version: "19.2.1"
+        artifact_path: .local/pentra/phase9/juice_shop_challenge_inventory_latest.json
+  - fact_key: juice_shop_local_19_2_1_category_counts
+    title: Local Juice Shop challenge category counts
+    fact_type: challenge_category_summary
+    summary: >
+      The runtime inventory currently exposes sixteen challenge families with
+      Sensitive Data Exposure, Improper Input Validation, Injection, and Broken
+      Access Control as the largest groups.
+    tags:
+      - challenge_inventory
+      - category_distribution
+    data:
+      category_count: 16
+      category_counts:
+        Broken Access Control: 11
+        Broken Anti Automation: 4
+        Broken Authentication: 9
+        Cryptographic Issues: 5
+        Improper Input Validation: 12
+        Injection: 11
+        Insecure Deserialization: 3
+        Miscellaneous: 7
+        Observability Failures: 4
+        Security Misconfiguration: 4
+        Security through Obscurity: 3
+        Sensitive Data Exposure: 16
+        Unvalidated Redirects: 2
+        Vulnerable Components: 9
+        XSS: 9
+        XXE: 2
+    citations:
+      - fact_key: juice_shop_local_19_2_1_category_counts
+        title: Local Juice Shop Runtime Inventory
+        source_key: juice_shop_runtime_inventory_local_19_2_1
+        source_url: http://127.0.0.1:3001/api/Challenges
+        trust_tier: runtime_truth
+        retrieved_at: "2026-03-24T12:00:00+05:30"
+        extraction_mode: runtime_api
+        authority_for:
+          - benchmark_truth
+          - challenge_inventory
+          - target_version_truth
+        target_key: juice_shop_local
+        target_version: "19.2.1"
+        artifact_path: .local/pentra/phase9/juice_shop_challenge_inventory_latest.json
+  - fact_key: juice_shop_local_19_2_1_difficulty_counts
+    title: Local Juice Shop difficulty distribution
+    fact_type: difficulty_distribution_summary
+    summary: >
+      The runtime inventory spans six difficulty bands, with the heaviest
+      density in difficulties three through five.
+    tags:
+      - challenge_inventory
+      - difficulty_distribution
+    data:
+      difficulty_counts:
+        "1": 14
+        "2": 16
+        "3": 24
+        "4": 25
+        "5": 20
+        "6": 12
+    citations:
+      - fact_key: juice_shop_local_19_2_1_difficulty_counts
+        title: Local Juice Shop Runtime Inventory
+        source_key: juice_shop_runtime_inventory_local_19_2_1
+        source_url: http://127.0.0.1:3001/api/Challenges
+        trust_tier: runtime_truth
+        retrieved_at: "2026-03-24T12:00:00+05:30"
+        extraction_mode: runtime_api
+        authority_for:
+          - benchmark_truth
+          - challenge_inventory
+          - target_version_truth
+        target_key: juice_shop_local
+        target_version: "19.2.1"
+        artifact_path: .local/pentra/phase9/juice_shop_challenge_inventory_latest.json

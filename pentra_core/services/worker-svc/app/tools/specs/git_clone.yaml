@@ -1,0 +1,13 @@
+name: git_clone
+worker_family: recon
+image: alpine/git:latest
+command:
+  - git
+  - clone
+  - --depth
+  - "1"
+  - "{target}"
+  - "{output_dir}/repo"
+output_parser: raw
+artifact_type: source_code
+default_timeout: 120

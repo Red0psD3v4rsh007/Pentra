@@ -1,0 +1,31 @@
+key: owasp_authorization_cheat_sheet_phase1
+phase: 1
+source_key: owasp_authorization_cheat_sheet
+title: OWASP Authorization Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official authorization design guidance that shapes role-differential
+  access testing and object-level proof constraints.
+parser_key: manual_structured_summary
+normalization_units:
+  - authorization_enforcement_summary
+target_outputs:
+  - normalized/source_summaries/owasp_authorization_cheat_sheet.yaml
+focus_areas:
+  - deny_by_default
+  - validate_permissions_per_request
+  - abac_rbac_models
+usage_notes: >
+  Preserve enforcement principles and per-request validation constraints.
+  Leave exploit promotion to runtime replay and proof contracts.
+citations:
+  - fact_key: owasp_authorization_cheat_sheet_source
+    title: OWASP Authorization Cheat Sheet
+    source_key: owasp_authorization_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-27T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - authorization_guidance
+      - object_access_validation_guidance
+      - role_and_attribute_modeling

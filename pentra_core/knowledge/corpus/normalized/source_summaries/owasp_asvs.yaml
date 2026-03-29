@@ -1,0 +1,63 @@
+key: owasp_asvs
+title: OWASP ASVS normalized source summary
+source_key: owasp_asvs
+document_type: source_summary
+generated_at: "2026-03-24T12:00:00+05:30"
+summary: >
+  OWASP ASVS supplies verification-standard structure and machine-readable
+  requirement formats that Pentra can reuse when designing proof contracts and
+  coverage scoring.
+facts:
+  - fact_key: owasp_asvs_standard_identity
+    title: ASVS current public standard identity
+    fact_type: verification_standard_summary
+    summary: >
+      The public ASVS project page presents version 5.0.0 and explicitly
+      exposes requirement content and machine-readable exports.
+    tags:
+      - verification_requirements
+      - standard_identity
+    data:
+      public_version: "5.0.0"
+      machine_readable_assets:
+        - JSON
+        - CSV
+        - OWASP Common Requirement Enumeration
+    citations:
+      - fact_key: owasp_asvs_standard_identity
+        title: OWASP Application Security Verification Standard
+        source_key: owasp_asvs
+        source_url: https://owasp.org/www-project-application-security-verification-standard/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_requirements
+          - control_taxonomy
+          - benchmark_truth_constraints
+  - fact_key: owasp_asvs_phase1_usage_boundary
+    title: ASVS Phase 1 usage boundary
+    fact_type: usage_boundary
+    summary: >
+      Pentra should use ASVS to shape proof and coverage language, not to
+      infer that a live target is vulnerable without target-specific evidence.
+    tags:
+      - verification_boundary
+    data:
+      use_cases:
+        - verifier_contract_design
+        - coverage_scoring_language
+        - evidence_requirement_alignment
+      prohibited_use_case:
+        - direct_live_vulnerability_inference_without_runtime_evidence
+    citations:
+      - fact_key: owasp_asvs_phase1_usage_boundary
+        title: OWASP Application Security Verification Standard
+        source_key: owasp_asvs
+        source_url: https://owasp.org/www-project-application-security-verification-standard/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T12:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_requirements
+          - benchmark_truth_constraints

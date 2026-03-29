@@ -1,0 +1,33 @@
+key: owasp_wstg_sql_injection_phase1
+phase: 1
+source_key: owasp_wstg_stable
+title: OWASP WSTG SQL injection testing acquisition manifest
+acquisition_scope: >
+  Capture the official SQL injection testing methodology section from WSTG,
+  including DB-specific branches and adjacent NoSQL / ORM injection coverage.
+parser_key: manual_structured_summary
+normalization_units:
+  - injection_testing_methodology
+  - db_specific_testing_branches
+target_outputs:
+  - normalized/source_summaries/owasp_wstg_sql_injection.yaml
+focus_areas:
+  - syntax_testing
+  - boolean_inference
+  - time_based_testing
+  - nosql_and_orm_branches
+usage_notes: >
+  Use WSTG as the methodology anchor for replayable injection testing. Keep the
+  summary short and structured.
+citations:
+  - fact_key: owasp_wstg_sql_injection_source
+    title: OWASP WSTG Testing for SQL Injection
+    source_key: owasp_wstg_stable
+    source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05-Testing_for_SQL_Injection
+    trust_tier: official_public
+    retrieved_at: "2026-03-26T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - testing_methodology
+      - verification_guidance
+      - attack_preconditions

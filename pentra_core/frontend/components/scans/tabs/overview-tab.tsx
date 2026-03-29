@@ -5,6 +5,7 @@ import { Shield, Target } from "lucide-react"
 import { motion } from "framer-motion"
 
 import {
+  formatExecutionClass,
   formatPhase,
   formatPriority,
   formatRelativeTime,
@@ -12,9 +13,12 @@ import {
   formatExecutionProvenance,
   formatExecutionReason,
   getExpectedPhases,
+  inferExecutionClass,
+  type ApiFieldValidationAssessment,
   type ApiFinding,
   type ApiScanJob,
   type ApiScanProfileContract,
+  type ApiScanTargetModel,
   type ScanAsset,
   type ScanType,
 } from "@/lib/scans-store"
@@ -24,7 +28,7 @@ interface OverviewTabProps {
   scan: {
     scanType: ScanType
     progress: number
-    status: "running" | "completed" | "failed" | "queued"
+    status: "running" | "completed" | "failed" | "queued" | "cancelled"
     statusLabel: string
     priority: "critical" | "high" | "normal" | "low"
     startedAt: string
@@ -43,6 +47,11 @@ interface OverviewTabProps {
   asset?: ScanAsset
   jobs: ApiScanJob[]
   findings: ApiFinding[]
+  targetModel: ApiScanTargetModel | null
+  fieldValidation: ApiFieldValidationAssessment | null
+  onApproveTools?: (tools: string[]) => Promise<unknown>
+  isApprovingTools?: boolean
+  toolApprovalError?: string | null
 }
 
 function phaseState(phase: number, jobs: ApiScanJob[]) {
@@ -70,7 +79,17 @@ function phaseState(phase: number, jobs: ApiScanJob[]) {
   return "pending"
 }
 
-export function OverviewTab({ scan, asset, jobs, findings }: OverviewTabProps) {
+export function OverviewTab({
+  scan,
+  asset,
+  jobs,
+  findings,
+  targetModel,
+  fieldValidation,
+  onApproveTools,
+  isApprovingTools = false,
+  toolApprovalError = null,
+}: OverviewTabProps) {
   const phases = getExpectedPhases(scan.scanType)
   const latestJobs = [...jobs]
     .sort((left, right) => {
@@ -82,6 +101,10 @@ export function OverviewTab({ scan, asset, jobs, findings }: OverviewTabProps) {
   const highlightedFindings = findings
     .slice()
     .sort((left, right) => {
+      const truthGap = truthWeight(right.truth_state) - truthWeight(left.truth_state)
+      if (truthGap !== 0) {
+        return truthGap
+      }
       const severityWeight = { critical: 4, high: 3, medium: 2, low: 1, info: 0 }
       const severityGap = severityWeight[right.severity] - severityWeight[left.severity]
       if (severityGap !== 0) {
@@ -213,15 +236,19 @@ export function OverviewTab({ scan, asset, jobs, findings }: OverviewTabProps) {
                               title={formatExecutionReason(job.execution_reason)}
                               className={cn(
                                 "rounded-full px-2 py-1 text-[11px] font-medium",
-                                job.execution_provenance === "live" && "bg-low/10 text-low",
-                                job.execution_provenance === "simulated" && "bg-amber-100 text-amber-800",
-                                job.execution_provenance === "blocked" && "bg-critical/10 text-critical",
-                                job.execution_provenance === "inferred" && "bg-primary/10 text-primary"
-                              )}
+                              job.execution_provenance === "live" && "bg-low/10 text-low",
+                              job.execution_provenance === "simulated" && "bg-amber-100 text-amber-800",
+                              job.execution_provenance === "derived" && "bg-primary/10 text-primary",
+                              job.execution_provenance === "blocked" && "bg-critical/10 text-critical",
+                              job.execution_provenance === "inferred" && "bg-primary/10 text-primary"
+                            )}
                             >
                               {formatExecutionProvenance(job.execution_provenance)}
                             </span>
                           ) : null}
+                          <span className="rounded-full border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                            {formatExecutionClass(job.execution_class ?? inferExecutionClass(job.tool))}
+                          </span>
                           {job.retry_count > 0 ? (
                             <span className="rounded-full bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-600" title={`Retried ${job.retry_count} time(s)`}>
                               ↻ {job.retry_count}
@@ -274,6 +301,13 @@ export function OverviewTab({ scan, asset, jobs, findings }: OverviewTabProps) {
             {scan.executionContract ? (
               <div className="mt-4 space-y-3 border-t border-border pt-4">
                 <ToolSection label="Live Tools" tone="live" tools={scan.executionContract.live_tools} />
+                {scan.executionContract.approval_required_tools.length > 0 ? (
+                  <ToolSection
+                    label="Approval Required"
+                    tone="conditional"
+                    tools={scan.executionContract.approval_required_tools}
+                  />
+                ) : null}
                 {scan.executionContract.conditional_live_tools.length > 0 ? (
                   <ToolSection
                     label="Conditional Verification"
@@ -303,6 +337,162 @@ export function OverviewTab({ scan, asset, jobs, findings }: OverviewTabProps) {
                 {scan.errorMessage}
               </div>
             ) : null}
+          </section>
+
+          <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <Shield className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Field Validation</h2>
+            </div>
+
+            {fieldValidation ? (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <SummaryPill
+                    label="Proof-ready"
+                    value={fieldValidation.proof_ready_attempts}
+                    tone="low"
+                  />
+                  <SummaryPill
+                    label="Needs evidence"
+                    value={fieldValidation.heuristic_only_attempts}
+                    tone="medium"
+                  />
+                </div>
+
+                <div className="mt-4 space-y-3 text-sm">
+                  <MetaRow label="Operating Mode">
+                    {fieldValidation.operating_mode.replaceAll("_", " ")}
+                  </MetaRow>
+                  <MetaRow label="Assessment State">
+                    {fieldValidation.assessment_state.replaceAll("_", " ")}
+                  </MetaRow>
+                  <MetaRow label="Top Profile">
+                    {fieldValidation.target_profile_guess
+                      ? formatTargetProfileKey(fieldValidation.target_profile_guess)
+                      : "Pending"}
+                  </MetaRow>
+                  <MetaRow label="Benchmark Inputs">
+                    {fieldValidation.benchmark_inputs_disabled_confirmed ? "Disabled" : "Enabled"}
+                  </MetaRow>
+                  <MetaRow label="AI Policy">
+                    {fieldValidation.ai_policy_state.replaceAll("_", " ")}
+                  </MetaRow>
+                  <MetaRow label="AI Runtime">
+                    {[fieldValidation.ai_provider, fieldValidation.ai_model, fieldValidation.ai_transport]
+                      .filter(Boolean)
+                      .join(" / ") || "Pending"}
+                  </MetaRow>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+                  {fieldValidation.summary}
+                </div>
+
+                {fieldValidation.selected_capability_packs.length > 0 ? (
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      Active Capability Packs
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {fieldValidation.selected_capability_packs.map((packKey) => (
+                        <span
+                          key={packKey}
+                          className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary"
+                        >
+                          {packKey}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {fieldValidation.approved_live_tools.length > 0 ? (
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      Approved Live Tools
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {fieldValidation.approved_live_tools.map((tool) => (
+                        <span
+                          key={tool}
+                          className="rounded-full border border-low/20 bg-low/10 px-2.5 py-1 text-[11px] font-medium text-low"
+                        >
+                          {tool}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {fieldValidation.approval_pending_tools.length > 0 ? (
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      Approval Pending
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {fieldValidation.approval_pending_tools.map((tool) => (
+                        <button
+                          key={tool}
+                          type="button"
+                          onClick={() => void onApproveTools?.([tool])}
+                          disabled={!onApproveTools || isApprovingTools}
+                          className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-700 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isApprovingTools ? `Approving ${tool}...` : `Approve ${tool}`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {fieldValidation.blocked_tools.length > 0 ? (
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      Blocked Tools
+                    </p>
+                    <div className="mt-2 space-y-2">
+                      {fieldValidation.blocked_tools.map((blocked) => (
+                        <div
+                          key={`${blocked.tool}:${blocked.reason}:${blocked.provenance}`}
+                          className="rounded-lg border border-critical/20 bg-critical/5 px-3 py-2 text-xs text-critical"
+                        >
+                          {blocked.tool} · {blocked.reason || blocked.provenance || "blocked"}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {fieldValidation.evidence_gaps.length > 0 ? (
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      Evidence Gaps
+                    </p>
+                    <div className="mt-2 space-y-2">
+                      {fieldValidation.evidence_gaps.map((gap) => (
+                        <div
+                          key={gap}
+                          className="rounded-lg border border-dashed border-medium/30 bg-medium/5 px-3 py-2 text-xs text-medium"
+                        >
+                          {gap}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {toolApprovalError ? (
+                  <div className="mt-4 rounded-lg border border-critical/30 bg-critical/5 px-3 py-2 text-xs text-critical">
+                    {toolApprovalError}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
+                This scan has no dedicated field-validation assessment yet.
+              </div>
+            )}
           </section>
 
           <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
@@ -346,6 +536,22 @@ export function OverviewTab({ scan, asset, jobs, findings }: OverviewTabProps) {
                       </span>
                     </div>
                     <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-1 font-medium capitalize",
+                          finding.truth_state === "verified" && "bg-low/10 text-low",
+                          finding.truth_state === "reproduced" && "bg-primary/10 text-primary",
+                          finding.truth_state === "suspected" && "bg-medium/15 text-medium",
+                          finding.truth_state === "observed" && "bg-muted text-muted-foreground",
+                          finding.truth_state === "rejected" && "bg-critical/10 text-critical",
+                          finding.truth_state === "expired" && "bg-amber-100 text-amber-800"
+                        )}
+                      >
+                        {finding.truth_state}
+                      </span>
+                      <span className="h-1 w-1 rounded-full bg-border" />
+                      <span>{finding.truth_summary.promoted ? "trusted" : "held back"}</span>
+                      <span className="h-1 w-1 rounded-full bg-border" />
                       <span>Confidence {finding.confidence}%</span>
                       <span className="h-1 w-1 rounded-full bg-border" />
                       <span>{finding.tool_source}</span>
@@ -355,10 +561,83 @@ export function OverviewTab({ scan, asset, jobs, findings }: OverviewTabProps) {
               )}
             </div>
           </section>
+
+          <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
+            <div className="mb-4 flex items-center gap-2">
+              <Target className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Target Model Pulse</h2>
+            </div>
+
+            {targetModel ? (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <SummaryPill label="Routes" value={targetModel.overview.route_group_count} tone="medium" />
+                  <SummaryPill
+                    label="Auth Surfaces"
+                    value={targetModel.overview.auth_surface_count}
+                    tone="low"
+                  />
+                  <SummaryPill
+                    label="Parameters"
+                    value={targetModel.overview.parameter_count}
+                    tone="high"
+                  />
+                  <SummaryPill
+                    label="Workflows"
+                    value={targetModel.overview.workflow_edge_count}
+                    tone="medium"
+                  />
+                </div>
+
+                <div className="mt-5 space-y-3">
+                  {targetModel.planner_focus.slice(0, 3).map((focus) => (
+                    <div key={focus.route_group} className="rounded-lg border border-border bg-background px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-foreground">{focus.route_group}</p>
+                        <span className="rounded-full bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">
+                          focus {focus.focus_score}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-muted-foreground">{focus.objective}</p>
+                    </div>
+                  ))}
+
+                  {targetModel.planner_focus.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
+                      No prioritized route groups yet. The target model exists, but pressure is still low.
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
+                The normalized target model has not been generated for this scan yet.
+              </div>
+            )}
+          </section>
         </div>
       </div>
     </motion.div>
   )
+}
+
+function truthWeight(state: ApiFinding["truth_state"]): number {
+  switch (state) {
+    case "verified":
+      return 6
+    case "reproduced":
+      return 5
+    case "suspected":
+      return 4
+    case "observed":
+      return 3
+    case "expired":
+      return 2
+    case "rejected":
+      return 1
+    default:
+      return 0
+  }
 }
 
 function MetaRow({
@@ -387,6 +666,14 @@ function formatExecutionLane(mode?: string | null): string {
     default:
       return "Not declared"
   }
+}
+
+function formatTargetProfileKey(value: string): string {
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(" ")
 }
 
 function formatScopePolicy(policy?: string | null): string {

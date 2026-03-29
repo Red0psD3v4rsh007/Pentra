@@ -11,6 +11,8 @@ dependencies = [
     "asyncpg>=0.29,<1",
     "redis>=5.0,<6",
     "httpx>=0.27,<1",
+    "openai>=1.107.0,<2",
+    "anthropic>=0.60.0,<1",
     "python-jose[cryptography]>=3.3,<4",
     "passlib[bcrypt]>=1.7,<2",
     "pydantic>=2.6,<3",
@@ -39,9 +41,6 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

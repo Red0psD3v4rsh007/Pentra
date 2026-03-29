@@ -11,10 +11,11 @@ import {
   RefreshCw,
   Route,
   ShieldCheck,
+  TrendingUp,
+  Waypoints,
 } from "lucide-react"
 
-import { DashboardSidebar } from "@/components/dashboard/sidebar"
-import { TopBar } from "@/components/dashboard/top-bar"
+import { CommandLayout } from "@/components/layout/command-layout"
 import { Spinner } from "@/components/ui/spinner"
 import { getIntelligenceSummary, type ApiIntelligenceSummary } from "@/lib/scans-store"
 import { cn } from "@/lib/utils"
@@ -25,6 +26,13 @@ const severityClass = {
   medium: "bg-medium/10 text-medium",
   low: "bg-low/10 text-low",
   info: "bg-elevated text-muted-foreground",
+}
+
+const trendClass = {
+  new: "bg-primary/10 text-primary",
+  increasing: "bg-high/10 text-high",
+  decreasing: "bg-low/10 text-low",
+  stable: "bg-elevated text-muted-foreground",
 }
 
 function formatDate(value: string | null) {
@@ -66,11 +74,8 @@ export default function IntelligencePage() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-background">
-      <DashboardSidebar />
+    <CommandLayout title="Intelligence">
 
-      <div className="pl-60 transition-all duration-200">
-        <TopBar title="Intelligence" />
 
         <main className="p-6">
           <div className="mb-6 flex items-start justify-between gap-4">
@@ -104,7 +109,7 @@ export default function IntelligencePage() {
             </div>
           ) : summary ? (
             <>
-              <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {[
                   {
                     icon: Brain,
@@ -123,6 +128,18 @@ export default function IntelligencePage() {
                     label: "Route Groups",
                     value: summary.overview.route_groups,
                     detail: `${summary.overview.completed_scans} completed scans`,
+                  },
+                  {
+                    icon: TrendingUp,
+                    label: "Trending Vulnerabilities",
+                    value: summary.overview.trending_patterns,
+                    detail: `${summary.trending_patterns.filter((item) => item.direction !== "stable").length} active shifts`,
+                  },
+                  {
+                    icon: Waypoints,
+                    label: "Tracked Assets",
+                    value: summary.overview.tracked_assets,
+                    detail: `${summary.overview.assets_with_history} assets with history`,
                   },
                   {
                     icon: Radar,
@@ -146,6 +163,101 @@ export default function IntelligencePage() {
                     <p className="mt-3 text-xs text-muted-foreground">{item.detail}</p>
                   </div>
                 ))}
+              </section>
+
+              <section className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <div className="rounded-lg border border-border bg-card p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-foreground">Trend Pressure</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Vulnerability classes gaining or losing pressure across recent completed scans.
+                      </p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {summary.trending_patterns.length} tracked
+                    </span>
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    {summary.trending_patterns.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No trend data yet.</p>
+                    ) : (
+                      summary.trending_patterns.map((trend) => (
+                        <div key={trend.vulnerability_type} className="rounded-lg border border-border bg-background p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-foreground">
+                                {trend.vulnerability_type.replaceAll("_", " ")}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                recent {trend.recent_count} · previous {trend.previous_count}
+                              </p>
+                            </div>
+                            <span className={cn("rounded-md px-2 py-1 text-xs font-medium", trendClass[trend.direction])}>
+                              {trend.direction}
+                            </span>
+                          </div>
+                          <p className="mt-3 text-xs text-muted-foreground">
+                            Delta {trend.delta >= 0 ? `+${trend.delta}` : trend.delta}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-card p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-foreground">Target Knowledge</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        What Pentra has learned about each asset across persisted scan history.
+                      </p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {summary.target_knowledge.length} assets
+                    </span>
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    {summary.target_knowledge.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No target knowledge yet.</p>
+                    ) : (
+                      summary.target_knowledge.map((asset) => (
+                        <div key={asset.asset_id} className="rounded-lg border border-border bg-background p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-foreground">{asset.asset_name}</p>
+                              <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{asset.target}</p>
+                            </div>
+                            <Link
+                              href={`/assets/${asset.asset_id}`}
+                              className="text-xs font-medium text-primary transition-colors hover:text-primary/80"
+                            >
+                              Open asset
+                            </Link>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            <span>{asset.scan_count} scans</span>
+                            <span>{asset.known_endpoints} endpoints</span>
+                            <span>{asset.known_forms} forms</span>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {asset.known_technologies.slice(0, 4).map((technology) => (
+                              <span
+                                key={`${asset.asset_id}:${technology}`}
+                                className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground"
+                              >
+                                {technology}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </section>
 
               <section className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -473,7 +585,6 @@ export default function IntelligencePage() {
             </>
           ) : null}
         </main>
-      </div>
-    </div>
+    </CommandLayout>
   )
 }

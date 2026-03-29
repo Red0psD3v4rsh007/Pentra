@@ -1,0 +1,31 @@
+key: owasp_cryptographic_storage_cheat_sheet_phase1
+phase: 1
+source_key: owasp_cryptographic_storage_cheat_sheet
+title: OWASP Cryptographic Storage Cheat Sheet acquisition manifest
+acquisition_scope: >
+  Capture official cryptographic storage guidance that shapes key handling,
+  algorithm selection boundaries, and token-material persistence review.
+parser_key: manual_structured_summary
+normalization_units:
+  - crypto_storage_summary
+target_outputs:
+  - normalized/source_summaries/owasp_cryptographic_storage_cheat_sheet.yaml
+focus_areas:
+  - key_storage
+  - algorithm_selection
+  - token_material_persistence
+usage_notes: >
+  Preserve design constraints for storage and key handling. Avoid adding
+  algorithm-abuse or cracking guidance.
+citations:
+  - fact_key: owasp_cryptographic_storage_cheat_sheet_source
+    title: OWASP Cryptographic Storage Cheat Sheet
+    source_key: owasp_cryptographic_storage_cheat_sheet
+    source_url: https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html
+    trust_tier: official_public
+    retrieved_at: "2026-03-27T00:00:00Z"
+    extraction_mode: browse
+    authority_for:
+      - crypto_storage_guidance
+      - encryption_design_guidance
+      - key_storage_guidance

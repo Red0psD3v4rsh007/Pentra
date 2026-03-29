@@ -1,0 +1,50 @@
+{
+  "key": "webgoat_local",
+  "enabled": true,
+  "asset_name": "Phase 9 WebGoat",
+  "asset_type": "web_app",
+  "target": "http://127.0.0.1:3003/WebGoat",
+  "healthcheck_url": "http://127.0.0.1:3003/WebGoat",
+  "launch_mode": "docker_script",
+  "launch_recipe": {
+    "script": "pentra_core/scripts/local/run_phase9_benchmark_targets.sh",
+    "args": [
+      "ensure",
+      "webgoat_local"
+    ]
+  },
+  "ground_truth_source": "pentra_core/dev_targets/capability_benchmarks/webgoat.json",
+  "notes": "Pinned OWASP WebGoat benchmark target. Expectations are intentionally small and web-profile aligned so failures remain interpretable instead of grading against the full lesson catalog.",
+  "expectations": {
+    "expected_vulnerability_types": [
+      "sql_injection",
+      "idor"
+    ],
+    "expected_verified_types": [],
+    "minimum_detected_recall": 0.5,
+    "minimum_verified_recall": 0.0,
+    "minimum_verified_share": 0.0
+  },
+  "scan_plans": [
+    {
+      "key": "webgoat_full",
+      "label": "WebGoat / full",
+      "scan_type": "full",
+      "config_template": "default_external_web_api_v1",
+      "timeout_seconds": 360,
+      "config_overrides": {
+        "selected_checks": {
+          "http_probe_paths": [
+            "/",
+            "/start.mvc",
+            "/login"
+          ],
+          "content_paths": [
+            "start.mvc",
+            "login"
+          ]
+        }
+      }
+    }
+  ]
+}

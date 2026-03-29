@@ -48,7 +48,7 @@ _SCAN_TRANSITIONS: dict[str, set[str]] = {
     "queued":      {"validating", "cancelled", "failed"},
     "validating":  {"running", "failed", "cancelled"},
     "running":     {"running", "analyzing", "paused", "failed", "cancelled", "completed"},
-    "paused":      {"running", "cancelled"},
+    "paused":      {"running", "cancelled", "failed", "completed"},
     "analyzing":   {"reporting", "failed"},
     "reporting":   {"completed", "failed"},
 }
@@ -95,16 +95,48 @@ class StateManager:
         """
         import json
         summary_json = json.dumps(output_summary or {})
-        await self._session.execute(text("""
+        result = await self._session.execute(text("""
             UPDATE scan_nodes
             SET status = 'completed',
                 output_ref = :ref, output_summary = CAST(:summary AS jsonb)
-            WHERE id = :id
+            WHERE id = :id AND status IN ('scheduled', 'running')
+            RETURNING id
         """), {
             "id": str(node_id),
             "ref": output_ref,
             "summary": summary_json,
         })
+        updated = result.mappings().first()
+        result = await self._session.execute(text("""
+            SELECT n.status, n.dag_id, p.phase_number
+            FROM scan_nodes n
+            JOIN scan_phases p ON p.id = n.phase_id
+            WHERE n.id = :id
+        """), {"id": str(node_id)})
+        row = result.mappings().first()
+        if row is None:
+            await self._session.flush()
+            logger.warning("Completion event for unknown node %s", node_id)
+            return {
+                "dag_id": None,
+                "phase_number": None,
+                "state_changed": False,
+                "current_status": None,
+            }
+
+        if updated is None:
+            await self._session.flush()
+            logger.warning(
+                "Ignoring completion for node %s in status %s",
+                node_id,
+                row["status"],
+            )
+            return {
+                "dag_id": uuid.UUID(str(row["dag_id"])),
+                "phase_number": int(row["phase_number"]),
+                "state_changed": False,
+                "current_status": row["status"],
+            }
 
         await self._session.execute(text("""
             UPDATE scan_jobs
@@ -112,6 +144,7 @@ class StateManager:
                 completed_at = NOW(),
                 output_ref = :ref
             WHERE id = (SELECT job_id FROM scan_nodes WHERE id = :nid)
+              AND status NOT IN ('completed', 'failed')
         """), {"ref": output_ref, "nid": str(node_id)})
 
         # Propagate data_ref to all outgoing edges
@@ -120,38 +153,48 @@ class StateManager:
             WHERE source_node_id = :nid
         """), {"ref": output_ref, "nid": str(node_id)})
 
-        # Get DAG and phase info for this node
-        result = await self._session.execute(text("""
-            SELECT n.dag_id, p.phase_number
-            FROM scan_nodes n JOIN scan_phases p ON p.id = n.phase_id
-            WHERE n.id = :id
-        """), {"id": str(node_id)})
-        row = result.mappings().first()
-
         await self._session.flush()
 
         logger.info("Node %s COMPLETED, output_ref=%s", node_id, output_ref)
         return {
-            "dag_id": uuid.UUID(str(row["dag_id"])) if row else None,
-            "phase_number": int(row["phase_number"]) if row else None,
+            "dag_id": uuid.UUID(str(row["dag_id"])),
+            "phase_number": int(row["phase_number"]),
+            "state_changed": True,
+            "current_status": "completed",
         }
 
     async def mark_node_failed(
-        self, node_id: uuid.UUID, error: str
+        self,
+        node_id: uuid.UUID,
+        error: str,
+        *,
+        output_ref: str | None = None,
+        output_summary: dict | None = None,
     ) -> dict:
         """Mark a node as failed.
 
         Returns dict with dag_id, phase_number, retry_count, max_retries.
         Retry info comes from the linked scan_jobs row.
         """
-        await self._session.execute(text("""
-            UPDATE scan_nodes SET status = 'failed'
-            WHERE id = :id
-        """), {"id": str(node_id)})
+        import json
+
+        summary_json = json.dumps(output_summary) if output_summary is not None else None
+        result = await self._session.execute(text("""
+            UPDATE scan_nodes
+            SET status = 'failed',
+                output_ref = COALESCE(:ref, output_ref),
+                output_summary = CASE
+                    WHEN :summary IS NULL THEN output_summary
+                    ELSE CAST(:summary AS jsonb)
+                END
+            WHERE id = :id AND status IN ('scheduled', 'running')
+            RETURNING id
+        """), {"id": str(node_id), "ref": output_ref, "summary": summary_json})
+        updated = result.mappings().first()
 
         # Get DAG/phase info from node + retry info from linked job
         result = await self._session.execute(text("""
-            SELECT n.dag_id, p.phase_number,
+            SELECT n.status, n.dag_id, p.phase_number,
                    COALESCE(j.retry_count, 0) AS retry_count,
                    COALESCE(j.max_retries, 0) AS max_retries
             FROM scan_nodes n
@@ -161,13 +204,31 @@ class StateManager:
         """), {"id": str(node_id)})
         row = result.mappings().first()
 
+        if updated is None:
+            await self._session.flush()
+            logger.warning(
+                "Ignoring failure for node %s in status %s",
+                node_id,
+                row["status"] if row else None,
+            )
+            return {
+                "dag_id": uuid.UUID(str(row["dag_id"])) if row else None,
+                "phase_number": int(row["phase_number"]) if row else None,
+                "retry_count": int(row["retry_count"]) if row else 0,
+                "max_retries": int(row["max_retries"]) if row else 0,
+                "state_changed": False,
+                "current_status": row["status"] if row else None,
+            }
+
         # Also update the linked job's error
         await self._session.execute(text("""
             UPDATE scan_jobs
             SET status = 'failed', error_message = :err,
-                completed_at = NOW()
+                completed_at = NOW(),
+                output_ref = COALESCE(:ref, output_ref)
             WHERE id = (SELECT job_id FROM scan_nodes WHERE id = :nid)
-        """), {"err": error, "nid": str(node_id)})
+              AND status NOT IN ('completed', 'failed')
+        """), {"err": error, "nid": str(node_id), "ref": output_ref})
 
         await self._session.flush()
 
@@ -177,6 +238,8 @@ class StateManager:
             "phase_number": int(row["phase_number"]) if row else None,
             "retry_count": int(row["retry_count"]) if row else 0,
             "max_retries": int(row["max_retries"]) if row else 0,
+            "state_changed": True,
+            "current_status": "failed",
         }
 
     async def reset_node_for_retry(self, node_id: uuid.UUID) -> None:
@@ -231,14 +294,14 @@ class StateManager:
         while frontier:
             current = frontier.pop()
 
-            # Find all direct downstream nodes that are still pending
+            # Find all direct downstream nodes that are still pending, ready, or scheduled
             result = await self._session.execute(text("""
                 SELECT DISTINCT e.target_node_id
                 FROM scan_edges e
                 JOIN scan_nodes n ON n.id = e.target_node_id
                 WHERE e.source_node_id = :nid
                   AND e.dag_id = :did
-                  AND n.status = 'pending'
+                  AND n.status IN ('pending', 'ready', 'scheduled')
             """), {"nid": str(current), "did": str(dag_id)})
 
             for row in result.mappings().all():
@@ -294,7 +357,22 @@ class StateManager:
             )
             return None
 
-        if new_status in ("completed", "failed", "cancelled"):
+        if new_status == "running":
+            await self._session.execute(text("""
+                UPDATE scans
+                SET status = :st,
+                    started_at = COALESCE(started_at, NOW())
+                WHERE id = :id
+            """), {"st": new_status, "id": str(scan_id)})
+        elif new_status == "completed":
+            await self._session.execute(text("""
+                UPDATE scans
+                SET status = :st,
+                    completed_at = NOW(),
+                    progress = 100
+                WHERE id = :id
+            """), {"st": new_status, "id": str(scan_id)})
+        elif new_status in ("failed", "cancelled"):
             await self._session.execute(text("""
                 UPDATE scans SET status = :st, completed_at = NOW()
                 WHERE id = :id

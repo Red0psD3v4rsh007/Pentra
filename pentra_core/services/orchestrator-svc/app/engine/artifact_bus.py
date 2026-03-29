@@ -41,6 +41,8 @@ from pentra_common.storage.artifacts import read_json_artifact
 
 logger = logging.getLogger(__name__)
 
+_DERIVED_EXECUTION_TOOLS = frozenset({"ai_triage", "report_gen"})
+
 # Artifact types that trigger exploit planning
 _EXPLOIT_TRIGGER_TYPES = {"vulnerabilities", "endpoints"}
 
@@ -99,6 +101,7 @@ class ArtifactBus:
             "strategy_nodes_created": 0,
             "exploration_nodes_created": 0,
             "findings_persisted": 0,
+            "verification_outcomes_applied": 0,
         }
         scored = []
         artifact = await self._load_artifact(output_ref, output_summary)
@@ -106,6 +109,7 @@ class ArtifactBus:
         artifact_findings = artifact.get("findings", [])
         artifact_evidence = artifact.get("evidence", [])
         scan_config = await self._load_scan_config(scan_id)
+        verification_queue_candidates: list[dict[str, Any]] = []
 
         if artifact_findings:
             persisted = await self._persist_findings(
@@ -118,10 +122,14 @@ class ArtifactBus:
             )
             result["findings_persisted"] = persisted
             await self._refresh_scan_result_summary(scan_id)
+            verification_queue_candidates = _build_verification_queue_candidates(
+                findings=artifact_findings,
+                output_ref=output_ref,
+            )
 
         # 1 — Vulnerability artifact triggers exploit planning
         if artifact_type in _EXPLOIT_TRIGGER_TYPES:
-            vuln_items = artifact_items
+            vuln_items = verification_queue_candidates or artifact_items
 
             if vuln_items:
                 created = await self._planner.plan_exploits(
@@ -140,31 +148,63 @@ class ArtifactBus:
                         "ArtifactBus: %d exploit nodes created from %s (%s)",
                         len(created), tool, artifact_type,
                     )
+        elif verification_queue_candidates:
+            created = await self._planner.plan_exploits(
+                dag_id=dag_id,
+                scan_id=scan_id,
+                tenant_id=tenant_id,
+                source_node_id=node_id,
+                source_output_ref=output_ref,
+                vulnerability_items=verification_queue_candidates,
+                scan_config=scan_config,
+            )
+            result["dynamic_nodes_created"] = len(created)
+
+            if created:
+                logger.info(
+                    "ArtifactBus: %d queued verification nodes created from %s (%s)",
+                    len(created), tool, artifact_type,
+                )
 
         # 2 — Exploit tool output triggers impact verification
-        if tool in _EXPLOIT_TOOLS and artifact_type not in (_IMPACT_TRIGGER_TYPES | {"verified_impact"}):
-            impact_items = artifact_items
+        if tool in _EXPLOIT_TOOLS:
+            impact_count = 0
+            if artifact_type not in (_IMPACT_TRIGGER_TYPES | {"verified_impact"}):
+                impact_items = artifact_items
 
-            # Get the node config for vuln_type/impact_type
-            node_config = await self._get_node_config(node_id)
-            expected_impact = node_config.get("impact_type", "unknown")
+                # Get the node config for vuln_type/impact_type
+                node_config = await self._get_node_config(node_id)
+                expected_impact = node_config.get("impact_type", "unknown")
 
-            impact_count = await self._verifier.verify_impact(
+                impact_count = await self._verifier.verify_impact(
+                    scan_id=scan_id,
+                    node_id=node_id,
+                    tenant_id=tenant_id,
+                    tool=tool,
+                    output_ref=output_ref,
+                    expected_impact_type=expected_impact,
+                    exploit_items=impact_items,
+                )
+                result["impact_artifacts_created"] = impact_count
+
+                if impact_count > 0:
+                    logger.info(
+                        "ArtifactBus: %d impact artifacts verified from %s",
+                        impact_count, tool,
+                    )
+
+            proof_observed = bool(artifact_findings) or impact_count > 0
+            reconciled = await self._sync_verification_outcome_to_findings(
                 scan_id=scan_id,
                 node_id=node_id,
-                tenant_id=tenant_id,
                 tool=tool,
                 output_ref=output_ref,
-                expected_impact_type=expected_impact,
-                exploit_items=impact_items,
+                artifact=artifact,
+                proof_observed=proof_observed,
             )
-            result["impact_artifacts_created"] = impact_count
-
-            if impact_count > 0:
-                logger.info(
-                    "ArtifactBus: %d impact artifacts verified from %s",
-                    impact_count, tool,
-                )
+            result["verification_outcomes_applied"] = reconciled
+            if reconciled > 0:
+                await self._refresh_scan_result_summary(scan_id)
 
 
         # 3 — MOD-07: Incremental attack graph update
@@ -488,32 +528,156 @@ class ArtifactBus:
 
         return inserted
 
-    async def _refresh_scan_result_summary(self, scan_id: uuid.UUID) -> None:
-        """Refresh the scan.result_summary JSON from persisted findings and artifacts."""
-        findings_result = await self._session.execute(
+    async def _sync_verification_outcome_to_findings(
+        self,
+        *,
+        scan_id: uuid.UUID,
+        node_id: uuid.UUID,
+        tool: str,
+        output_ref: str,
+        artifact: dict[str, Any],
+        proof_observed: bool,
+    ) -> int:
+        metadata = artifact.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        execution_provenance = str(metadata.get("execution_provenance") or "").strip().lower()
+        if execution_provenance != "live":
+            return 0
+
+        node_config = await self._get_node_config(node_id)
+        verification_context = node_config.get("verification_context") or {}
+        if not isinstance(verification_context, dict) or not verification_context:
+            return 0
+
+        candidate_rows = await self._load_verification_target_findings(
+            scan_id=scan_id,
+            verification_context=verification_context,
+        )
+        if not candidate_rows:
+            return 0
+
+        occurred_at = datetime.now(timezone.utc).isoformat()
+        applied = 0
+        for row in candidate_rows:
+            existing_evidence = row.get("evidence") or {}
+            if not isinstance(existing_evidence, dict):
+                existing_evidence = {}
+            source_type = str(row.get("source_type") or "scanner")
+            merged_evidence = _merge_verification_outcome_evidence(
+                existing=existing_evidence,
+                source_type=source_type,
+                verification_context=verification_context,
+                artifact=artifact,
+                output_ref=output_ref,
+                tool=tool,
+                occurred_at=occurred_at,
+                proof_observed=proof_observed,
+            )
+            if merged_evidence == existing_evidence:
+                continue
+
+            await self._session.execute(
+                text(
+                    """
+                    UPDATE findings
+                    SET evidence = CAST(:evidence AS jsonb)
+                    WHERE id = :id
+                    """
+                ),
+                {
+                    "id": str(row["id"]),
+                    "evidence": json.dumps(merged_evidence),
+                },
+            )
+            applied += 1
+        return applied
+
+    async def _load_verification_target_findings(
+        self,
+        *,
+        scan_id: uuid.UUID,
+        verification_context: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        fingerprint = str(verification_context.get("finding_fingerprint") or "").strip()
+        if fingerprint:
+            result = await self._session.execute(
+                text(
+                    """
+                    SELECT id, fingerprint, source_type, title, evidence, is_false_positive
+                    FROM findings
+                    WHERE scan_id = :scan_id
+                      AND fingerprint = :fingerprint
+                      AND source_type <> 'exploit_verify'
+                    """
+                ),
+                {
+                    "scan_id": str(scan_id),
+                    "fingerprint": fingerprint,
+                },
+            )
+            return [dict(row) for row in result.mappings().all()]
+
+        result = await self._session.execute(
             text(
                 """
-                SELECT severity, evidence, COUNT(*) AS total
+                SELECT id, fingerprint, source_type, title, evidence, is_false_positive
                 FROM findings
                 WHERE scan_id = :scan_id
-                GROUP BY severity, evidence
+                  AND source_type <> 'exploit_verify'
+                """
+            ),
+            {"scan_id": str(scan_id)},
+        )
+        rows = [dict(row) for row in result.mappings().all()]
+        return [
+            row
+            for row in rows
+            if _finding_matches_verification_context(row, verification_context)
+        ]
+
+    async def _refresh_scan_result_summary(self, scan_id: uuid.UUID) -> None:
+        """Refresh the scan.result_summary JSON from persisted findings and artifacts."""
+        # Severity aggregate — GROUP BY severity only (not evidence!)
+        severity_result = await self._session.execute(
+            text(
+                """
+                SELECT severity, COUNT(*) AS total
+                FROM findings
+                WHERE scan_id = :scan_id
+                GROUP BY severity
                 """
             ),
             {"scan_id": str(scan_id)},
         )
 
         severity_counts = {key: 0 for key in ("critical", "high", "medium", "low", "info")}
-        verification_counts = {"verified": 0, "suspected": 0, "detected": 0}
-        for row in findings_result.mappings().all():
+        for row in severity_result.mappings().all():
             severity = str(row["severity"])
             severity_counts[severity] = severity_counts.get(severity, 0) + int(row["total"])
-            evidence = row.get("evidence") or {}
-            if isinstance(evidence, dict):
-                classification = evidence.get("classification") or {}
-                if isinstance(classification, dict):
-                    state = str(classification.get("verification_state") or "detected")
-                    if state in verification_counts:
-                        verification_counts[state] += int(row["total"])
+
+        # Verification state aggregate — extract from evidence JSONB
+        verification_result = await self._session.execute(
+            text(
+                """
+                SELECT COALESCE(
+                    evidence->'classification'->>'verification_state',
+                    'detected'
+                ) AS vstate,
+                COUNT(*) AS total
+                FROM findings
+                WHERE scan_id = :scan_id
+                GROUP BY vstate
+                """
+            ),
+            {"scan_id": str(scan_id)},
+        )
+
+        verification_counts = {"verified": 0, "suspected": 0, "detected": 0}
+        for row in verification_result.mappings().all():
+            state = str(row["vstate"])
+            if state in verification_counts:
+                verification_counts[state] += int(row["total"])
 
         artifact_result = await self._session.execute(
             text(
@@ -532,17 +696,27 @@ class ArtifactBus:
         artifact_rows = artifact_result.mappings().all()
         artifact_types = [str(row["artifact_type"]) for row in artifact_rows]
         evidence_count = sum(int(row["evidence_count"]) for row in artifact_rows)
-        execution_summary = {"live": 0, "simulated": 0, "blocked": 0, "inferred": 0}
+        execution_summary = {"live": 0, "simulated": 0, "blocked": 0, "inferred": 0, "derived": 0}
         for row in artifact_rows:
             artifact_type = str(row["artifact_type"])
+            metadata = row.get("metadata") or {}
+            if not isinstance(metadata, dict):
+                metadata = {}
+            tool_name = str(metadata.get("tool") or "").strip().lower()
+            provenance = str(metadata.get("execution_provenance") or "").strip().lower()
+            reason = str(metadata.get("execution_reason") or "").strip().lower()
+            if (
+                tool_name in _DERIVED_EXECUTION_TOOLS
+                and provenance == "blocked"
+                and reason == "not_supported"
+            ):
+                execution_summary["derived"] += 1
+                continue
+
             if artifact_type in {"attack_graph", "report", "ai_reasoning"}:
                 execution_summary["inferred"] += 1
                 continue
 
-            metadata = row.get("metadata") or {}
-            if not isinstance(metadata, dict):
-                metadata = {}
-            provenance = str(metadata.get("execution_provenance") or "").strip().lower()
             if provenance in execution_summary:
                 execution_summary[provenance] += 1
 
@@ -709,3 +883,385 @@ def _prefer_text(existing: Any, candidate: Any) -> Any:
     if candidate and len(str(candidate)) > len(str(existing)):
         return candidate
     return existing
+
+
+_QUEUEABLE_SOURCE_TYPES = frozenset({"scanner", "ai_analysis"})
+_TERMINAL_TRUTH_STATES = frozenset({"verified", "reproduced", "rejected", "expired"})
+_RAW_EVIDENCE_KEYS = ("request", "response", "payload", "exploit_result", "proof", "content", "excerpt", "transcript")
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _default_verification_state_for_source(source_type: str) -> str:
+    return "suspected" if source_type == "ai_analysis" else "detected"
+
+
+def _finding_truth_state_from_payload(finding: dict[str, Any]) -> str:
+    evidence = _as_dict(finding.get("evidence"))
+    classification = _as_dict(evidence.get("classification"))
+    metadata = _as_dict(evidence.get("metadata"))
+
+    for container in (classification, metadata):
+        state = str(container.get("truth_state") or "").strip().lower()
+        if state in _TERMINAL_TRUTH_STATES | {"observed", "suspected"}:
+            return state
+
+    if bool(finding.get("is_false_positive")):
+        return "rejected"
+
+    for container in (classification, metadata):
+        if bool(container.get("expired")) or container.get("expired_at"):
+            return "expired"
+
+    verification_state = str(
+        classification.get("verification_state")
+        or finding.get("verification_state")
+        or ""
+    ).strip().lower()
+    if verification_state == "verified":
+        return "verified"
+    if verification_state == "suspected" or str(finding.get("source_type") or "").strip().lower() == "ai_analysis":
+        return "suspected"
+    return "observed"
+
+
+def _has_raw_finding_evidence(evidence: dict[str, Any]) -> bool:
+    return any(str(evidence.get(key) or "").strip() for key in _RAW_EVIDENCE_KEYS)
+
+
+def _build_verification_queue_candidates(
+    *,
+    findings: list[dict[str, Any]],
+    output_ref: str,
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for finding in findings:
+        candidate = _build_verification_queue_candidate(
+            finding=finding,
+            output_ref=output_ref,
+        )
+        if candidate is not None:
+            candidates.append(candidate)
+    return candidates
+
+
+def _build_verification_queue_candidate(
+    *,
+    finding: dict[str, Any],
+    output_ref: str,
+) -> dict[str, Any] | None:
+    source_type = str(finding.get("source_type") or "scanner").strip().lower()
+    if source_type not in _QUEUEABLE_SOURCE_TYPES:
+        return None
+
+    truth_state = _finding_truth_state_from_payload(finding)
+    if truth_state in _TERMINAL_TRUTH_STATES:
+        return None
+
+    title = str(finding.get("title") or "").strip()
+    evidence = _as_dict(finding.get("evidence"))
+    classification = _as_dict(evidence.get("classification"))
+    metadata = _as_dict(evidence.get("metadata"))
+    references = _as_list(evidence.get("references"))
+    raw_evidence_present = _has_raw_finding_evidence(evidence)
+    has_material = raw_evidence_present or any(
+        isinstance(item, dict) and any(
+            item.get(key) for key in ("id", "evidence_type", "label", "storage_ref")
+        )
+        for item in references
+    )
+    if not title or not has_material:
+        return None
+
+    endpoint = str(
+        finding.get("endpoint")
+        or evidence.get("endpoint")
+        or finding.get("target")
+        or evidence.get("target")
+        or ""
+    ).strip()
+    if not endpoint:
+        return None
+
+    return {
+        **finding,
+        "target": finding.get("target") or evidence.get("target") or endpoint,
+        "endpoint": finding.get("endpoint") or evidence.get("endpoint") or endpoint,
+        "request": finding.get("request") or evidence.get("request"),
+        "response": finding.get("response") or evidence.get("response"),
+        "payload": finding.get("payload") or evidence.get("payload"),
+        "exploit_result": finding.get("exploit_result") or evidence.get("exploit_result"),
+        "surface": finding.get("surface") or classification.get("surface"),
+        "route_group": finding.get("route_group") or classification.get("route_group"),
+        "vulnerability_type": finding.get("vulnerability_type") or classification.get("vulnerability_type"),
+        "references": references,
+        "verification_context": _as_dict(metadata.get("verification_context")),
+        "storage_ref": str(evidence.get("storage_ref") or output_ref).strip() or output_ref,
+        "verification_state": str(
+            classification.get("verification_state")
+            or finding.get("verification_state")
+            or _default_verification_state_for_source(source_type)
+        ).strip().lower(),
+    }
+
+
+def _merge_verification_outcome_evidence(
+    *,
+    existing: dict[str, Any],
+    source_type: str,
+    verification_context: dict[str, Any],
+    artifact: dict[str, Any],
+    output_ref: str,
+    tool: str,
+    occurred_at: str,
+    proof_observed: bool,
+) -> dict[str, Any]:
+    merged = dict(existing)
+    classification = _as_dict(merged.get("classification"))
+    metadata = _as_dict(merged.get("metadata"))
+    references = _as_list(merged.get("references"))
+    artifact_summary = _as_dict(artifact.get("summary"))
+    artifact_findings = artifact.get("findings") or []
+
+    metadata["verification_context"] = _merge_verification_context(
+        metadata.get("verification_context"),
+        verification_context,
+    )
+    metadata["last_verification_outcome"] = "verified" if proof_observed else "failed"
+    metadata["last_verification_ref"] = output_ref
+    metadata["last_verification_tool"] = tool
+    metadata["verification_attempted_at"] = occurred_at
+    metadata["replayable"] = True
+
+    if proof_observed:
+        classification["verification_state"] = "verified"
+        classification["verified"] = True
+        classification["verification_outcome"] = "verified"
+        classification.pop("truth_state", None)
+        metadata.pop("truth_state", None)
+        metadata["verified_at"] = occurred_at
+        metadata.pop("verification_failed_at", None)
+
+        proof_finding = artifact_findings[0] if artifact_findings else {}
+        proof_evidence = _as_dict(_as_dict(proof_finding).get("evidence"))
+        for key in ("request", "response", "payload", "exploit_result"):
+            if not merged.get(key):
+                candidate_value = proof_evidence.get(key)
+                if candidate_value:
+                    merged[key] = candidate_value
+
+        references = _append_reference(
+            references,
+            {
+                "id": f"{tool}:verification",
+                "evidence_type": "verification_artifact",
+                "label": f"{tool} verification proof",
+                "content_preview": _verification_artifact_preview(
+                    artifact=artifact,
+                    proof_observed=True,
+                ),
+                "storage_ref": output_ref,
+            },
+        )
+    else:
+        classification["verification_state"] = _default_verification_state_for_source(source_type)
+        classification["verified"] = False
+        classification["truth_state"] = "rejected"
+        classification["verification_outcome"] = "failed"
+        metadata["verification_failed_at"] = occurred_at
+        metadata["negative_verification_count"] = int(
+            metadata.get("negative_verification_count") or 0
+        ) + 1
+        metadata["negative_verifications"] = _append_negative_verification(
+            metadata.get("negative_verifications"),
+            {
+                "at": occurred_at,
+                "tool": tool,
+                "storage_ref": output_ref,
+                "outcome": "failed",
+                "summary": _verification_artifact_preview(
+                    artifact=artifact,
+                    proof_observed=False,
+                ),
+            },
+        )
+        metadata.pop("verified_at", None)
+        references = _append_reference(
+            references,
+            {
+                "id": f"{tool}:negative-verification",
+                "evidence_type": "negative_verification",
+                "label": f"{tool} negative verification",
+                "content_preview": _verification_artifact_preview(
+                    artifact=artifact,
+                    proof_observed=False,
+                ),
+                "storage_ref": output_ref,
+            },
+        )
+
+    if not merged.get("storage_ref"):
+        merged["storage_ref"] = output_ref
+    if not classification.get("vulnerability_type"):
+        vuln_type = str(verification_context.get("vulnerability_type") or "").strip().lower()
+        if vuln_type:
+            classification["vulnerability_type"] = vuln_type
+    if not classification.get("route_group") and verification_context.get("route_group"):
+        classification["route_group"] = verification_context.get("route_group")
+    if not classification.get("surface") and verification_context.get("surface"):
+        classification["surface"] = verification_context.get("surface")
+    if artifact_summary.get("execution"):
+        classification["execution_mode"] = _as_dict(artifact_summary.get("execution")).get("mode")
+        classification["execution_provenance"] = _as_dict(artifact_summary.get("execution")).get("provenance")
+
+    merged["classification"] = classification
+    merged["metadata"] = metadata
+    merged["references"] = references
+    return merged
+
+
+def _merge_verification_context(existing: Any, candidate: dict[str, Any]) -> dict[str, Any]:
+    merged = _as_dict(existing)
+    for key, value in candidate.items():
+        if value not in (None, "", [], {}):
+            merged[key] = value
+    return merged
+
+
+def _append_negative_verification(existing: Any, entry: dict[str, Any]) -> list[dict[str, Any]]:
+    items = [item for item in _as_list(existing) if isinstance(item, dict)]
+    signature = json.dumps(entry, sort_keys=True)
+    seen = {json.dumps(item, sort_keys=True) for item in items}
+    if signature not in seen:
+        items.append(entry)
+    return items
+
+
+def _append_reference(existing: list[Any], candidate: dict[str, Any]) -> list[dict[str, Any]]:
+    items = [item for item in existing if isinstance(item, dict)]
+    signature = json.dumps(
+        {
+            "id": candidate.get("id"),
+            "type": candidate.get("evidence_type"),
+            "preview": candidate.get("content_preview"),
+            "ref": candidate.get("storage_ref"),
+        },
+        sort_keys=True,
+    )
+    seen = {
+        json.dumps(
+            {
+                "id": item.get("id"),
+                "type": item.get("evidence_type"),
+                "preview": item.get("content_preview"),
+                "ref": item.get("storage_ref"),
+            },
+            sort_keys=True,
+        )
+        for item in items
+    }
+    if signature not in seen:
+        items.append(candidate)
+    return items
+
+
+def _verification_artifact_preview(*, artifact: dict[str, Any], proof_observed: bool) -> str:
+    if proof_observed:
+        finding = _as_dict((artifact.get("findings") or [{}])[0])
+        title = str(finding.get("title") or "").strip()
+        exploit_result = str(_as_dict(finding.get("evidence")).get("exploit_result") or "").strip()
+        if title and exploit_result:
+            return f"{title}: {exploit_result[:180]}"
+        if title:
+            return title
+    summary = _as_dict(artifact.get("summary"))
+    highlights = summary.get("highlights")
+    if isinstance(highlights, list) and highlights:
+        return str(highlights[0])
+    return (
+        "Bounded verification produced replayable negative evidence and did not reproduce the issue."
+        if not proof_observed
+        else "Verification completed."
+    )
+
+
+def _finding_matches_verification_context(
+    finding: dict[str, Any],
+    verification_context: dict[str, Any],
+) -> bool:
+    evidence = _as_dict(finding.get("evidence"))
+    classification = _as_dict(evidence.get("classification"))
+
+    context_vuln = str(verification_context.get("vulnerability_type") or "").strip().lower()
+    finding_vuln = str(classification.get("vulnerability_type") or "").strip().lower()
+    if context_vuln and finding_vuln and context_vuln != finding_vuln:
+        return False
+
+    context_locators = _normalized_context_locators(verification_context)
+    finding_locators = _normalized_finding_locators(finding)
+    if context_locators and finding_locators and context_locators.isdisjoint(finding_locators):
+        return False
+
+    context_title = str(
+        verification_context.get("finding_title")
+        or verification_context.get("title")
+        or ""
+    ).strip().lower()
+    finding_title = str(finding.get("title") or "").strip().lower()
+    if context_title and finding_title and context_title == finding_title:
+        return True
+
+    return bool(context_locators & finding_locators) or (not context_locators and not context_title)
+
+
+def _normalized_context_locators(verification_context: dict[str, Any]) -> set[str]:
+    values = [
+        verification_context.get("request_url"),
+        verification_context.get("endpoint"),
+        verification_context.get("target"),
+        verification_context.get("route_group"),
+    ]
+    result: set[str] = set()
+    for value in values:
+        result.update(_normalize_locator_values(value))
+    return result
+
+
+def _normalized_finding_locators(finding: dict[str, Any]) -> set[str]:
+    evidence = _as_dict(finding.get("evidence"))
+    classification = _as_dict(evidence.get("classification"))
+    values = [
+        finding.get("target"),
+        finding.get("endpoint"),
+        evidence.get("target"),
+        evidence.get("endpoint"),
+        classification.get("route_group"),
+    ]
+    result: set[str] = set()
+    for value in values:
+        result.update(_normalize_locator_values(value))
+    return result
+
+
+def _normalize_locator_values(value: Any) -> set[str]:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return set()
+    normalized = raw.rstrip("/")
+    if "://" in normalized:
+        try:
+            from urllib.parse import urlsplit
+
+            parsed = urlsplit(normalized)
+            path = (parsed.path or "/").rstrip("/") or "/"
+            host = parsed.netloc.lower()
+            return {normalized, f"{host}{path}", path}
+        except ValueError:
+            return {normalized}
+    return {normalized}

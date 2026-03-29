@@ -41,6 +41,7 @@ def test_registry_has_expected_tools():
         "scope_check", "subfinder", "amass", "nmap_discovery",
         "httpx_probe", "web_interact", "nmap_svc", "ffuf", "nuclei", "zap", "sqlmap",
         "metasploit", "ai_triage", "report_gen",
+        "dalfox", "graphql_cop", "jwt_tool", "cors_scanner",
     ]
     for name in expected:
         tool = get_tool(name)
@@ -107,6 +108,212 @@ def test_registry_command_rendering_with_profile_context():
     )
     assert "/work/input/httpx_targets.txt" in cmd
     assert "77" in cmd
+
+
+def test_graphql_cop_command_renders_graphql_target_url():
+    """graphql_cop should emit JSON to stdout while targeting the exact GraphQL path."""
+    from app.tools.tool_registry import get_tool, render_command
+
+    tool = get_tool("graphql_cop")
+    assert tool is not None
+    cmd = render_command(
+        tool,
+        target="https://example.com",
+        output_dir="/work/out",
+        context={"graphql_target_url": "https://example.com/api/graphql"},
+    )
+    assert cmd == ["-t", "https://example.com/api/graphql", "-o", "json"]
+
+
+def test_container_runner_materializes_graphql_cop_stdout(tmp_path):
+    from app.engine.container_runner import ContainerRunner
+
+    runner = ContainerRunner()
+    runner._materialize_graphql_cop_output(
+        output_dir=str(tmp_path),
+        stdout="http://example.test/graphql does not seem to be running GraphQL.\n[]\n",
+    )
+
+    output_file = tmp_path / "graphql_cop.json"
+    assert output_file.exists()
+    assert output_file.read_text().strip() == "[]"
+
+
+def test_tool_execution_class_audit_matches_registry() -> None:
+    from app.tools.tool_registry import get_all_tools
+    from pentra_common.execution_truth import classify_tool_execution
+
+    native_expected = {"scope_check", "custom_poc", "web_interact"}
+    for tool_name in get_all_tools():
+        expected = "pentra_native" if tool_name in native_expected else "external_tool"
+        assert classify_tool_execution(tool_name) == expected
+
+    assert classify_tool_execution("graphql_cop") == "external_tool"
+
+
+def test_container_runner_routes_graphql_cop_through_real_tool_path(monkeypatch, tmp_path):
+    import asyncio
+
+    from app.engine import container_runner as container_runner_module
+    from app.engine.container_runner import ContainerResult, ContainerRunner
+
+    runner = ContainerRunner()
+    monkeypatch.setattr(container_runner_module, "WORK_DIR_BASE", str(tmp_path))
+
+    async def _fake_get_docker(*, execution_mode: str):
+        assert execution_mode == "controlled_live_scoped"
+        return object()
+
+    async def _fake_run_docker(**kwargs):
+        assert kwargs["tool_name"] == "graphql_cop"
+        assert kwargs["command"] == ["-t", "https://example.com/api/graphql", "-o", "json"]
+        return ContainerResult(
+            exit_code=0,
+            stdout="[]\n",
+            stderr="",
+            output_dir=kwargs["output_dir"],
+            execution_mode=kwargs["execution_mode"],
+            execution_provenance="live",
+            execution_class="external_tool",
+        )
+
+    async def _unexpected_probe(**_kwargs):
+        raise AssertionError("graphql_cop should use the real external tool path")
+
+    monkeypatch.setattr(runner, "_get_docker", _fake_get_docker)
+    monkeypatch.setattr(runner, "_run_docker", _fake_run_docker)
+    monkeypatch.setattr(runner, "_run_graphql_cop_probe", _unexpected_probe, raising=False)
+
+    result = asyncio.run(
+        runner.run(
+            image="dolevf/graphql-cop:latest",
+            command=["-t", "https://example.com/api/graphql", "-o", "json"],
+            working_dir="/app",
+            entrypoint=None,
+            tool_name="graphql_cop",
+            target="https://example.com",
+            job_id=uuid.uuid4(),
+            worker_family="web",
+            timeout=300,
+            env_vars={},
+            input_refs={},
+            scan_config={
+                "execution": {
+                    "allowed_live_tools": ["graphql_cop"],
+                    "mode": "controlled_live_scoped",
+                    "target_policy": "in_scope",
+                },
+                "scope": {"allowed_hosts": ["example.com"]},
+            },
+        )
+    )
+
+    assert result.exit_code == 0
+    assert result.execution_class == "external_tool"
+
+
+def test_container_runner_run_keeps_graphql_cop_out_of_native_dispatch() -> None:
+    import inspect
+
+    from app.engine.container_runner import ContainerRunner
+
+    source = inspect.getsource(ContainerRunner.run)
+    assert 'if tool_name == "graphql_cop"' not in source
+
+
+def test_worker_service_execution_log_artifacts_include_replay_session() -> None:
+    from pentra_common.storage.artifacts import read_json_artifact
+
+    from app.services.worker_service import WorkerService
+
+    worker = WorkerService(redis=object())  # type: ignore[arg-type]
+    refs = worker._store_execution_log_artifacts(
+        scan_id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
+        node_id=uuid.uuid4(),
+        tool_name="graphql_cop",
+        execution_class="external_tool",
+        policy_state="auto_live",
+        command=["graphql-cop", "-t", "http://127.0.0.1:8088/graphql", "-o", "json"],
+        stdout='[{"name":"GraphQL introspection enabled","severity":"medium"}]\n',
+        stderr="",
+    )
+
+    payload = read_json_artifact(refs["session_artifact_ref"])
+
+    assert payload["tool"] == "graphql_cop"
+    assert payload["execution_class"] == "external_tool"
+    assert payload["policy_state"] == "auto_live"
+    assert payload["runtime_stage"] == "completed"
+    assert payload["stream_complete"] is True
+    assert payload["frames"][0]["channel"] == "command"
+    assert "http://127.0.0.1:8088/graphql" in payload["frames"][0]["chunk_text"]
+    assert any(frame["channel"] == "stdout" for frame in payload["frames"])
+
+
+def test_worker_service_live_session_tracking_persists_runtime_stages() -> None:
+    from pentra_common.storage.artifacts import read_json_artifact
+
+    from app.services.worker_service import WorkerService
+
+    worker = WorkerService(redis=object())  # type: ignore[arg-type]
+    scan_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    node_id = uuid.uuid4()
+    started_at = "2026-03-28T00:00:00+00:00"
+
+    live_state = worker._start_live_execution_tracking(
+        scan_id=scan_id,
+        tenant_id=tenant_id,
+        node_id=node_id,
+        tool_name="httpx_probe",
+        execution_class="external_tool",
+        policy_state="auto_live",
+        command=["httpx", "-l", "/work/input/httpx_targets.txt", "-json"],
+        image="projectdiscovery/httpx:latest",
+        entrypoint=[],
+        working_dir="/work/output",
+        started_at=started_at,
+    )
+
+    session_ref = live_state["refs"]["session_artifact_ref"]
+    payload = read_json_artifact(session_ref)
+    assert payload["runtime_stage"] == "command_resolved"
+    assert payload["stream_complete"] is False
+    assert payload["last_chunk_at"] == started_at
+
+    worker._append_live_execution_chunk(
+        tool_name="httpx_probe",
+        execution_class="external_tool",
+        policy_state="auto_live",
+        live_state=live_state,
+        started_at=started_at,
+        channel="stdout",
+        chunk_text="http://example.com [200]\n",
+        timestamp="2026-03-28T00:00:01+00:00",
+    )
+
+    payload = read_json_artifact(session_ref)
+    assert payload["runtime_stage"] == "streaming"
+    assert payload["stream_complete"] is False
+    assert payload["last_chunk_at"] == "2026-03-28T00:00:01+00:00"
+    assert any(frame["channel"] == "stdout" for frame in payload["frames"])
+
+    worker._finalize_live_execution_tracking(
+        tool_name="httpx_probe",
+        execution_class="external_tool",
+        policy_state="auto_live",
+        live_state=live_state,
+        started_at=started_at,
+        completed_at="2026-03-28T00:00:03+00:00",
+        status="completed",
+        exit_code=0,
+    )
+
+    payload = read_json_artifact(session_ref)
+    assert payload["runtime_stage"] == "completed"
+    assert payload["stream_complete"] is True
+    assert payload["last_chunk_at"] == "2026-03-28T00:00:01+00:00"
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -183,6 +390,55 @@ def test_container_runner_prepares_phase3_runtime_inputs():
         assert "api/v1/auth/login" in (input_dir / "ffuf_wordlist.txt").read_text()
         assert (input_dir / "nuclei_targets.txt").read_text().strip() == "http://127.0.0.1:8088"
         assert (input_dir / "nuclei-templates" / "sqli-login.yaml").exists()
+
+
+def test_web_interact_discovery_normalization_preserves_same_origin_spa_hash_routes():
+    from app.engine.web_interaction_runner import _normalize_discovery_url
+
+    assert _normalize_discovery_url("http://127.0.0.1:3001", "/#/contact") == "http://127.0.0.1:3001/#/contact"
+    assert (
+        _normalize_discovery_url("http://127.0.0.1:3001", "http://127.0.0.1:3001/#/search?q=test")
+        == "http://127.0.0.1:3001/#/search?q=test"
+    )
+    assert _normalize_discovery_url("http://127.0.0.1:3001", "#section") == "http://127.0.0.1:3001/"
+
+
+def test_web_interact_extracts_spa_hash_routes_from_script_content():
+    from app.engine.web_interaction_runner import _extract_script_discovery_urls
+
+    urls = _extract_script_discovery_urls(
+        "http://127.0.0.1:3001",
+        """
+        const routes = [
+          { path: 'search' },
+          { path: 'contact' },
+          { path: '**', redirectTo: 'login' }
+        ];
+        fetch('/api/Users');
+        """,
+    )
+
+    assert "http://127.0.0.1:3001/#/search" in urls
+    assert "http://127.0.0.1:3001/#/contact" in urls
+    assert "http://127.0.0.1:3001/#/login" in urls
+    assert "http://127.0.0.1:3001/api/Users" in urls
+
+
+def test_web_interact_parser_collects_router_link_routes():
+    from app.engine.web_interaction_runner import _DiscoveryParser
+
+    parser = _DiscoveryParser()
+    parser.feed(
+        """
+        <nav>
+          <button routerLink="/profile">Profile</button>
+          <a ng-reflect-router-link="/contact">Contact</a>
+        </nav>
+        """
+    )
+
+    assert "/#/profile" in parser.links
+    assert "/#/contact" in parser.links
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -282,8 +538,8 @@ def test_normalize_raw_output():
         artifact = normalize_output(
             output_dir=tmpdir,
             output_parser="raw",
-            tool_name="sqlmap",
-            artifact_type="vulnerabilities",
+            tool_name="git_clone",
+            artifact_type="source_code",
             scan_id="s", node_id="n", tenant_id="t",
             exit_code=0,
         )
@@ -639,6 +895,125 @@ def test_normalize_custom_poc_preserves_explicit_stateful_vulnerability_type():
         assert artifact["findings"][0]["vulnerability_type"] == "auth_bypass"
 
 
+def test_normalize_web_interact_emits_sensitive_config_exposure_finding():
+    from app.engine.artifact_handler import normalize_output
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "web_interactions.json").write_text(
+            json.dumps(
+                {
+                    "pages": [
+                        {
+                            "url": "http://127.0.0.1:3001/rest/admin/application-configuration",
+                            "title": "Application configuration",
+                            "status_code": 200,
+                            "surface": "api",
+                            "session_label": "unauthenticated",
+                            "auth_state": "none",
+                            "requires_auth": False,
+                            "content_length": 256,
+                            "content_type": "application/json",
+                            "response_preview": (
+                                '{"config":{"server":{"baseUrl":"http://localhost:3000"},'
+                                '"application":{"showVersionNumber":true,"localBackupEnabled":true}}}'
+                            ),
+                            "tool_source": "web_interact",
+                            "vulnerability_type": "sensitive_data_exposure",
+                            "severity": "high",
+                            "confidence": 86,
+                            "description": "Public application configuration data was returned.",
+                            "request": (
+                                "GET http://127.0.0.1:3001/rest/admin/application-configuration"
+                            ),
+                            "response": (
+                                "HTTP/1.1 200\nContent-Type: application/json\n\n"
+                                '{"config":{"server":{"baseUrl":"http://localhost:3000"}}}'
+                            ),
+                            "payload": "public_config_probe",
+                            "exploit_result": "Configuration endpoint exposed internal settings.",
+                            "verification_state": "detected",
+                            "verification_confidence": 86,
+                            "references": ["marker:config", "marker:baseurl"],
+                        }
+                    ],
+                    "forms": [],
+                    "sessions": [],
+                    "workflows": [],
+                    "replays": [],
+                },
+                indent=2,
+            )
+        )
+
+        artifact = normalize_output(
+            output_dir=tmpdir,
+            output_parser="json",
+            tool_name="web_interact",
+            artifact_type="endpoints",
+            scan_id="scan-1",
+            node_id="node-1",
+            tenant_id="tenant-1",
+            exit_code=0,
+        )
+
+        assert artifact["findings"]
+        finding = artifact["findings"][0]
+        assert finding["endpoint"] == "http://127.0.0.1:3001/rest/admin/application-configuration"
+        assert finding["target"] == "127.0.0.1"
+        assert finding["vulnerability_type"] == "sensitive_data_exposure"
+        assert finding["tool_source"] == "web_interact"
+        assert finding["evidence"]["classification"]["verification_state"] == "detected"
+
+
+def test_normalize_custom_poc_preserves_explicit_verified_state():
+    from app.engine.artifact_handler import normalize_output
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "custom_poc.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "title": "Authorization bypass confirmed via stateful replay",
+                        "severity": "high",
+                        "confidence": 82,
+                        "target": "http://127.0.0.1:8088/login",
+                        "endpoint": "http://127.0.0.1:8088/login",
+                        "description": "Replay reached a privileged workflow state.",
+                        "tool_source": "custom_poc",
+                        "vulnerability_type": "auth_bypass",
+                        "request": "GET /login",
+                        "response": "HTTP/1.1 200 OK",
+                        "payload": "cross_session",
+                        "exploit_result": "privileged content returned",
+                        "surface": "web",
+                        "route_group": "/login",
+                        "verification_state": "verified",
+                        "verification_confidence": 93,
+                    }
+                ],
+                indent=2,
+            )
+        )
+
+        artifact = normalize_output(
+            output_dir=tmpdir,
+            output_parser="json",
+            tool_name="custom_poc",
+            artifact_type="vulnerabilities",
+            scan_id="scan-1",
+            node_id="node-1",
+            tenant_id="tenant-1",
+            exit_code=0,
+        )
+
+        classification = artifact["findings"][0]["evidence"]["classification"]
+        metadata = artifact["findings"][0]["evidence"]["metadata"]
+        assert classification["verification_state"] == "verified"
+        assert classification["verification_confidence"] == 93
+        assert classification["verified"] is True
+        assert metadata["verified_at"]
+
+
 def test_parse_json_supports_pretty_printed_objects():
     from app.engine.artifact_handler import _parse_json
 
@@ -702,6 +1077,108 @@ def test_normalize_vulnerabilities_applies_scope_limits_and_dedupes():
         assert len(artifact["findings"]) == 1
         assert artifact["findings"][0]["exploitability"] == "high"
         assert artifact["metadata"]["guardrail_stats"]["filtered_out_of_scope"] == 1
+
+
+def test_normalize_graphql_cop_preserves_curl_verify_target_and_scope():
+    from app.engine.artifact_handler import normalize_output
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "graphql_cop.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "result": True,
+                        "title": "Introspection",
+                        "description": "Introspection Query Enabled",
+                        "impact": "Information Leakage - /graphql",
+                        "severity": "HIGH",
+                        "curl_verify": (
+                            "curl -X POST -H \"Content-Type: application/json\" "
+                            "-d '{\"query\": \"query cop { __schema { types { name } } }\"}' "
+                            "'http://127.0.0.1:8088/graphql'"
+                        ),
+                    }
+                ]
+            )
+        )
+
+        artifact = normalize_output(
+            output_dir=tmpdir,
+            output_parser="json",
+            tool_name="graphql_cop",
+            artifact_type="vulnerabilities",
+            scan_id="scan-1",
+            node_id="node-1",
+            tenant_id="tenant-1",
+            exit_code=0,
+            scan_config={
+                "scope": {
+                    "allowed_hosts": ["127.0.0.1"],
+                    "max_endpoints": 10,
+                }
+            },
+        )
+
+        assert artifact["item_count"] == 1
+        assert artifact["metadata"]["guardrail_stats"]["filtered_out_of_scope"] == 0
+        item = artifact["items"][0]
+        assert item["endpoint"] == "http://127.0.0.1:8088/graphql"
+        assert item["target"] == "127.0.0.1"
+        assert "http://127.0.0.1:8088/graphql" in str(item["request"])
+        finding = artifact["findings"][0]
+        assert finding["vulnerability_type"] == "graphql_introspection"
+        assert finding["endpoint"] == "http://127.0.0.1:8088/graphql"
+
+
+def test_normalize_graphql_cop_preserves_multiple_surface_findings() -> None:
+    from app.engine.artifact_handler import normalize_output
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        Path(tmpdir, "graphql_cop.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "title": "Introspection",
+                        "description": "Introspection Query Enabled",
+                        "impact": "Information Leakage - /graphql",
+                        "severity": "HIGH",
+                        "curl_verify": "curl 'http://127.0.0.1:8088/graphql'",
+                    },
+                    {
+                        "title": "Mutation is allowed over GET (possible CSRF)",
+                        "description": "GraphQL mutations allowed using the GET method",
+                        "impact": "Possible Cross Site Request Forgery - /graphql",
+                        "severity": "MEDIUM",
+                        "curl_verify": "curl 'http://127.0.0.1:8088/graphql?query=mutation+cop+%7B__typename%7D'",
+                    },
+                    {
+                        "title": "Alias Overloading",
+                        "description": "Alias Overloading with 100+ aliases is allowed",
+                        "impact": "Denial of Service - /graphql",
+                        "severity": "HIGH",
+                        "curl_verify": "curl 'http://127.0.0.1:8088/graphql'",
+                    },
+                ]
+            )
+        )
+
+        artifact = normalize_output(
+            output_dir=tmpdir,
+            output_parser="json",
+            tool_name="graphql_cop",
+            artifact_type="vulnerabilities",
+            scan_id="scan-1",
+            node_id="node-1",
+            tenant_id="tenant-1",
+            exit_code=0,
+            scan_config={"scope": {"allowed_hosts": ["127.0.0.1"]}},
+        )
+
+        assert artifact["item_count"] == 3
+        vulnerability_types = {item["vulnerability_type"] for item in artifact["items"]}
+        assert "graphql_introspection" in vulnerability_types
+        assert "csrf" in vulnerability_types
+        assert "graphql_dos" in vulnerability_types
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -789,6 +1266,169 @@ def test_worker_service_derives_per_tool_targets():
 
     assert _command_target_for_tool(tool_name="subfinder", target="https://example.com", config=config) == "example.com"
     assert _command_target_for_tool(tool_name="nuclei", target="https://example.com", config=config) == "https://example.com"
+
+
+def test_worker_service_skips_terminal_scan_jobs(monkeypatch):
+    import asyncio
+
+    import app.services.worker_service as worker_service_module
+    from app.services.worker_service import WorkerService
+
+    class _FakeRedis:
+        pass
+
+    service = WorkerService(redis=_FakeRedis())
+    cancelled_calls: list[dict[str, str | None]] = []
+
+    async def _fake_load_scan_status(*, scan_id, tenant_id):
+        del scan_id, tenant_id
+        return "cancelled"
+
+    async def _fake_mark_job_cancelled(**kwargs):
+        cancelled_calls.append(
+            {
+                "job_id": str(kwargs["job_id"]),
+                "reason": str(kwargs["reason"]),
+            }
+        )
+
+    async def _noop(**kwargs):
+        del kwargs
+        return None
+
+    def _unexpected_get_tool(*args, **kwargs):
+        raise AssertionError("cancelled scan jobs must not resolve tools")
+
+    monkeypatch.setattr(service, "_load_scan_status", _fake_load_scan_status)
+    monkeypatch.setattr(service, "_mark_job_cancelled", _fake_mark_job_cancelled)
+    monkeypatch.setattr(service, "_mark_job_claimed", _noop)
+    monkeypatch.setattr(service, "_persist_job_claimed", _noop)
+    monkeypatch.setattr(worker_service_module, "get_tool", _unexpected_get_tool)
+
+    asyncio.run(
+        service.execute_job(
+            {
+                "job_id": str(uuid.uuid4()),
+                "scan_id": str(uuid.uuid4()),
+                "tenant_id": str(uuid.uuid4()),
+                "node_id": str(uuid.uuid4()),
+                "dag_id": str(uuid.uuid4()),
+                "tool": "httpx_probe",
+                "target": "http://127.0.0.1:3001",
+                "worker_family": "web",
+                "config": {},
+            }
+        )
+    )
+
+    assert len(cancelled_calls) == 1
+    assert "scan is cancelled" in cancelled_calls[0]["reason"].lower()
+
+
+def test_worker_service_emits_failed_output_summary_with_execution_log(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    import app.services.worker_service as worker_service_module
+    from app.engine.container_runner import ContainerResult
+    from app.services.worker_service import WorkerService
+
+    class _FakeRedis:
+        pass
+
+    class _FakeEmitter:
+        def __init__(self) -> None:
+            self.failed_calls: list[dict[str, object]] = []
+
+        async def emit_job_failed(self, **kwargs):
+            self.failed_calls.append(kwargs)
+            return "msg-1"
+
+    service = WorkerService(redis=_FakeRedis())
+    service._emitter = _FakeEmitter()  # type: ignore[assignment]
+
+    async def _fake_load_scan_status(*, scan_id, tenant_id):
+        del scan_id, tenant_id
+        return "queued"
+
+    async def _noop(**kwargs):
+        del kwargs
+        return None
+
+    def _fake_get_tool(_tool_name):
+        return SimpleNamespace(
+            image="example/tool:latest",
+            working_dir="/work",
+            entrypoint=None,
+            env_vars={},
+            default_timeout=30,
+            artifact_type="http_observation",
+            output_parser="json",
+        )
+
+    def _fake_render_command(*args, **kwargs):
+        del args, kwargs
+        return ["fake-tool", "--target", "https://example.com"]
+
+    async def _fake_run(**kwargs):
+        del kwargs
+        return ContainerResult(
+            exit_code=2,
+            stdout="line 1\nline 2",
+            stderr="fatal: request failed",
+            output_dir="/tmp/pentra/fake-output",
+            timed_out=False,
+            execution_mode="controlled_live_external",
+            execution_provenance="live",
+            execution_reason=None,
+        )
+
+    async def _unexpected_success():
+        raise AssertionError("failed jobs must not mark success")
+
+    async def _fake_cleanup_job(_job_id):
+        return None
+
+    monkeypatch.setattr(service, "_load_scan_status", _fake_load_scan_status)
+    monkeypatch.setattr(service, "_mark_job_claimed", _noop)
+    monkeypatch.setattr(service, "_persist_job_claimed", _noop)
+    monkeypatch.setattr(service, "_persist_job_started", _noop)
+    monkeypatch.setattr(service, "_mark_job_started", _noop)
+    monkeypatch.setattr(service, "_mark_job_failed", _noop)
+    monkeypatch.setattr(service, "_mark_job_succeeded", _unexpected_success)
+    monkeypatch.setattr(service._runner, "run", _fake_run)
+    monkeypatch.setattr(service._runner, "cleanup_job", _fake_cleanup_job)
+    monkeypatch.setattr(worker_service_module, "get_tool", _fake_get_tool)
+    monkeypatch.setattr(worker_service_module, "render_command", _fake_render_command)
+
+    payload = {
+        "job_id": str(uuid.uuid4()),
+        "scan_id": str(uuid.uuid4()),
+        "tenant_id": str(uuid.uuid4()),
+        "node_id": str(uuid.uuid4()),
+        "dag_id": str(uuid.uuid4()),
+        "tool": "nuclei",
+        "target": "https://example.com",
+        "worker_family": "web",
+        "config": {},
+    }
+
+    asyncio.run(service.execute_job(payload))
+
+    assert len(service._emitter.failed_calls) == 1  # type: ignore[attr-defined]
+    failed_call = service._emitter.failed_calls[0]  # type: ignore[attr-defined]
+    assert failed_call["error_code"] == "EXIT_2"
+    output_summary = failed_call["output_summary"]
+    assert isinstance(output_summary, dict)
+    assert output_summary["artifact_type"] == "http_observation"
+    assert output_summary["summary"]["status"] == "failed"
+    assert output_summary["execution_log"]["command"] == ["fake-tool", "--target", "https://example.com"]
+    assert output_summary["execution_log"]["stdout_preview"].endswith("line 1\nline 2")
+    assert output_summary["execution_log"]["stderr_preview"].endswith("fatal: request failed")
+    assert output_summary["execution_log"]["full_stdout_artifact_ref"]
+    assert output_summary["execution_log"]["full_stderr_artifact_ref"]
+    assert output_summary["execution_log"]["command_artifact_ref"]
+    assert output_summary["execution_log"]["exit_code"] == 2
 
 
 # ═══════════════════════════════════════════════════════════════════

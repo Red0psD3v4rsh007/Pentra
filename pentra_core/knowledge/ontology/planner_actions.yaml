@@ -1,0 +1,485 @@
+version: 1
+program: phase10_public_source_first
+phase: 2
+generated_at: "2026-03-24T15:00:00+05:30"
+planner_actions:
+  - key: map_client_side_sinks
+    action_type: map_client_side_sinks
+    name: Map client-side sinks
+    description: >
+      Extract script sources and DOM sink markers before deeper browser-backed
+      XSS verification.
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_wstg_stable
+    required_inputs:
+      - script_inventory
+      - route_focus
+    evidence_goals:
+      - sink_marker_inventory
+      - route_to_sink_mapping
+    candidate_tool_ids:
+      - web_interact
+      - custom_poc
+    stop_conditions:
+      - stop when no new sinks are found for the focused route group
+      - stop after bounded script coverage budget is exhausted
+    benchmark_target_keys:
+      - juice_shop_local
+      - repo_parser_upload_demo
+    citations:
+      - fact_key: map_client_side_sinks_action_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_paths
+          - proof_patterns
+  - key: stage_route_specific_xss_payloads
+    action_type: stage_route_specific_xss_payloads
+    name: Stage route-specific XSS payloads
+    description: >
+      Generate payloads for the current route family and verify only through
+      browser execution.
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_cheat_sheet_series
+    required_inputs:
+      - route_focus
+      - reflection_or_sink_clues
+    evidence_goals:
+      - payload_execution_candidates
+      - payload_to_route_mapping
+    candidate_tool_ids:
+      - web_interact
+      - custom_poc
+    stop_conditions:
+      - stop when candidate payload budget is exhausted
+      - stop when browser execution proof is obtained or route proves sterile
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: stage_route_specific_xss_payloads_action_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_paths
+          - proof_patterns
+  - key: replay_stored_xss_workflow
+    action_type: replay_stored_xss_workflow
+    name: Replay stored XSS workflow
+    description: >
+      Persist controlled input, then replay downstream rendering routes in a
+      browser.
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_wstg_stable
+    required_inputs:
+      - writable_surface
+      - render_surface
+      - browser_session
+    evidence_goals:
+      - stored_payload_reference
+      - browser_execution_artifact
+    candidate_tool_ids:
+      - web_interact
+      - custom_poc
+    stop_conditions:
+      - stop after bounded workflow replay attempts
+      - stop when stored payload path is disproven
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: replay_stored_xss_workflow_action_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_paths
+          - proof_patterns
+  - key: compare_role_access
+    action_type: compare_role_access
+    name: Compare role access
+    description: >
+      Replay the same route, object, or workflow under multiple identities and
+      preserve the differential evidence.
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    required_inputs:
+      - role_model
+      - focused_route_group
+    evidence_goals:
+      - role_outcome_matrix
+      - unauthorized_success_or_leakage
+    candidate_tool_ids:
+      - web_interact
+      - custom_poc
+    stop_conditions:
+      - stop after all available roles have been compared for the focus set
+      - stop when no differential outcomes remain
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: compare_role_access_action_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_paths
+          - proof_patterns
+  - key: enumerate_privileged_api_surface
+    action_type: enumerate_privileged_api_surface
+    name: Enumerate privileged API surface
+    description: >
+      Expand and verify admin or management APIs under differential identity
+      pressure.
+    source_summary_keys:
+      - juice_shop_official_project
+      - owasp_wstg_stable
+    required_inputs:
+      - route_group_focus
+      - role_model
+    evidence_goals:
+      - privileged_route_inventory
+      - replayable exposure or access control proof
+    candidate_tool_ids:
+      - web_interact
+      - httpx_probe
+      - ffuf
+    stop_conditions:
+      - stop when privileged route family is exhausted
+      - stop when marginal evidence value drops below threshold
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: enumerate_privileged_api_surface_action_phase2
+        title: OWASP Juice Shop Project Page
+        source_key: juice_shop_official_project
+        source_url: https://owasp.org/www-project-juice-shop/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - benchmark_target_identity
+          - challenge_family_mapping
+  - key: verify_suspected_injection
+    action_type: verify_suspected_injection
+    name: Verify suspected injection
+    description: >
+      Move from candidate injection signals to replayable controlled deltas.
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    required_inputs:
+      - parameter_focus
+      - replayable_request
+    evidence_goals:
+      - baseline_vs_mutation_delta
+      - parameter_specific_proof
+    candidate_tool_ids:
+      - sqlmap
+      - custom_poc
+      - web_interact
+    stop_conditions:
+      - stop after bounded parameter verification budget
+      - stop when heuristic signals fail replay
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: verify_suspected_injection_action_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_guidance
+          - testing_methodology
+  - key: pressure_auth_tokens_and_login_flows
+    action_type: pressure_auth_tokens_and_login_flows
+    name: Pressure auth tokens and login flows
+    description: >
+      Explore login, token, and reset behaviors under multi-step and
+      multi-identity pressure.
+    source_summary_keys:
+      - owasp_wstg_stable
+      - owasp_cheat_sheet_series
+    required_inputs:
+      - auth_surface_summary
+      - session_material
+    evidence_goals:
+      - token_or_session_abuse_evidence
+      - login_or_reset_flow_matrix
+    candidate_tool_ids:
+      - web_interact
+      - jwt_tool
+      - custom_poc
+    stop_conditions:
+      - stop when auth surface budget is exhausted
+      - stop when replayable differential proof is obtained or ruled out
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: pressure_auth_tokens_and_login_flows_action_phase2
+        title: OWASP Cheat Sheet Series
+        source_key: owasp_cheat_sheet_series
+        source_url: https://cheatsheetseries.owasp.org/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_preconditions
+          - implementation_guidance
+  - key: probe_rate_limits_and_anti_automation
+    action_type: probe_rate_limits_and_anti_automation
+    name: Probe rate limits and anti-automation
+    description: >
+      Check repeatable action flows for missing or weak automation controls.
+    source_summary_keys:
+      - portswigger_web_security_academy
+      - owasp_wstg_stable
+    required_inputs:
+      - repeatable_route
+      - safe_request_budget
+    evidence_goals:
+      - throttling_matrix
+      - abuse_without_challenge
+    candidate_tool_ids:
+      - web_interact
+      - ffuf
+      - custom_poc
+    stop_conditions:
+      - stop when throttling behavior is characterized
+      - stop when safe request budget is exhausted
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: probe_rate_limits_and_anti_automation_action_phase2
+        title: PortSwigger Web Security Academy All Topics
+        source_key: portswigger_web_security_academy
+        source_url: https://portswigger.net/web-security/all-topics
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - exploit_paths
+          - challenge_family_mapping
+  - key: inspect_error_and_log_disclosure
+    action_type: inspect_error_and_log_disclosure
+    name: Inspect error and log disclosure
+    description: >
+      Reproduce candidate error conditions and capture internal disclosure
+      evidence.
+    source_summary_keys:
+      - owasp_wstg_stable
+      - juice_shop_runtime_inventory_local_19_2_1
+    required_inputs:
+      - candidate_error_route
+      - replayable_request
+    evidence_goals:
+      - stack_trace_or_log_evidence
+      - exact_trigger
+    candidate_tool_ids:
+      - web_interact
+      - custom_poc
+    stop_conditions:
+      - stop when candidate route is reproduced or disproven
+      - stop after bounded error reproduction attempts
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: inspect_error_and_log_disclosure_action_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_guidance
+          - attack_preconditions
+  - key: inspect_config_and_secret_exposure
+    action_type: inspect_config_and_secret_exposure
+    name: Inspect config and secret exposure
+    description: >
+      Pressure routes that may disclose configuration, secrets, or sensitive
+      administrative data.
+    source_summary_keys:
+      - owasp_wstg_stable
+      - juice_shop_official_project
+    required_inputs:
+      - route_focus
+      - disclosure_candidate
+    evidence_goals:
+      - exact disclosed fields
+      - route_replay_artifact
+    candidate_tool_ids:
+      - web_interact
+      - httpx_probe
+      - custom_poc
+    stop_conditions:
+      - stop when disclosure candidates are exhausted
+      - stop when route family yields no new verified exposure
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: inspect_config_and_secret_exposure_action_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - verification_guidance
+          - testing_methodology
+  - key: probe_parser_boundaries
+    action_type: probe_parser_boundaries
+    name: Probe parser boundaries
+    description: >
+      Exercise XML and serialization boundaries with safe parser-focused probes.
+    source_summary_keys:
+      - owasp_cheat_sheet_series
+      - portswigger_web_security_academy
+    required_inputs:
+      - parser_surface
+      - safe_mutation_budget
+    evidence_goals:
+      - parser_behavior_delta
+      - replayable_input_output_pair
+    candidate_tool_ids:
+      - web_interact
+      - custom_poc
+    stop_conditions:
+      - stop when parser surface is characterized
+      - stop when replayable parser proof is ruled out
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: probe_parser_boundaries_action_phase2
+        title: OWASP Cheat Sheet Series
+        source_key: owasp_cheat_sheet_series
+        source_url: https://cheatsheetseries.owasp.org/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - payload_archetypes
+          - exploit_preconditions
+  - key: mutate_business_workflows
+    action_type: mutate_business_workflows
+    name: Mutate business workflows
+    description: >
+      Replay and reorder workflow steps to discover logic abuse and cross-state
+      challenge paths.
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    required_inputs:
+      - workflow_edge_summary
+      - repeatable_session_state
+    evidence_goals:
+      - workflow_mutation_outcomes
+      - step_skip_or_state_abuse_evidence
+    candidate_tool_ids:
+      - web_interact
+      - custom_poc
+    stop_conditions:
+      - stop when workflow mutation matrix is exhausted
+      - stop when no new state transitions remain
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: mutate_business_workflows_action_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - testing_methodology
+          - attack_preconditions
+  - key: validate_redirect_targets
+    action_type: validate_redirect_targets
+    name: Validate redirect targets
+    description: >
+      Confirm whether user-controlled redirect destinations are accepted.
+    source_summary_keys:
+      - owasp_wstg_stable
+      - portswigger_web_security_academy
+    required_inputs:
+      - redirect_candidate
+      - controlled_target
+    evidence_goals:
+      - redirect_control_artifact
+      - route_specific_validation_result
+    candidate_tool_ids:
+      - web_interact
+      - custom_poc
+    stop_conditions:
+      - stop when redirect candidates are exhausted
+      - stop when redirect behavior is conclusively classified
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: validate_redirect_targets_action_phase2
+        title: OWASP Web Security Testing Guide Stable
+        source_key: owasp_wstg_stable
+        source_url: https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - attack_preconditions
+          - verification_guidance
+  - key: fingerprint_components_and_hidden_assets
+    action_type: fingerprint_components_and_hidden_assets
+    name: Fingerprint components and hidden assets
+    description: >
+      Expand hidden route and exposed asset coverage from bundle and component
+      evidence.
+    source_summary_keys:
+      - juice_shop_official_project
+      - owasp_asvs
+    required_inputs:
+      - asset_inventory
+      - component_markers
+    evidence_goals:
+      - component_truth_summary
+      - hidden_route_candidates
+    candidate_tool_ids:
+      - httpx_probe
+      - ffuf
+      - web_interact
+    stop_conditions:
+      - stop when component and asset enumeration budget is exhausted
+      - stop when no new hidden assets remain
+    benchmark_target_keys:
+      - juice_shop_local
+    citations:
+      - fact_key: fingerprint_components_and_hidden_assets_action_phase2
+        title: OWASP Juice Shop Project Page
+        source_key: juice_shop_official_project
+        source_url: https://owasp.org/www-project-juice-shop/
+        trust_tier: official_public
+        retrieved_at: "2026-03-24T15:00:00+05:30"
+        extraction_mode: browse
+        authority_for:
+          - benchmark_target_identity
+          - project_scope

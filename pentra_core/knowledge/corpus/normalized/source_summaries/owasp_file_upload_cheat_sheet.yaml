@@ -1,0 +1,43 @@
+key: owasp_file_upload_cheat_sheet
+title: OWASP File Upload Cheat Sheet normalized source summary
+source_key: owasp_file_upload_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's file-upload guidance gives Pentra the parser-boundary controls that
+  matter for real targets: validation must cover extension, content type,
+  storage location, and post-upload handling.
+facts:
+  - fact_key: owasp_file_upload_defense_in_depth
+    title: File-upload defense-in-depth controls
+    fact_type: upload_boundary_summary
+    summary: >
+      Upload workflows should validate extensions and media types, store files
+      outside executable paths, and treat parser or transformation steps as
+      separate attack surfaces.
+    tags:
+      - file_upload
+      - parsers
+      - validation
+    data:
+      high_signal_upload_controls:
+        - extension_allowlist
+        - content_type_and_signature_checks
+        - storage_outside_webroot
+        - post_upload_processing_isolation
+        - file_size_and_name_constraints
+      replay_implications:
+        - Preserve upload boundary, parser step, and storage path as separate workflow states.
+        - Distinguish validation bypass from parser execution evidence.
+    citations:
+      - fact_key: owasp_file_upload_defense_in_depth
+        title: OWASP File Upload Cheat Sheet
+        source_key: owasp_file_upload_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - file_upload_guidance
+          - parser_boundary_guidance
+          - upload_validation_patterns

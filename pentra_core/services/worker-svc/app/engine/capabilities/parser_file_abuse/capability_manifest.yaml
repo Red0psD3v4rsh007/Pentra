@@ -1,0 +1,67 @@
+pack_key: p3a_parser_file_abuse
+name: Parser, file, and upload abuse capability pack
+phase: 3
+description: >
+  Parser and file-abuse capability pack for upload workflow discovery, XML and
+  serialized-input boundary classification, replay-aware candidate generation,
+  and negative evidence without direct exploit execution.
+ontology_family_keys:
+  - xxe
+  - insecure_deserialization
+attack_primitive_keys:
+  - xxe_parser_endpoint_probe
+  - deserialization_replay_probe
+proof_contract_keys:
+  - xxe_parser_contract
+  - deserialization_replay_contract
+planner_action_keys:
+  - probe_parser_boundaries
+target_profile_keys:
+  - upload_parser_heavy
+  - spa_rest_api
+  - traditional_server_rendered
+pack_dependency_keys: []
+knowledge_dependencies:
+  ontology_index_path: pentra_core/knowledge/ontology/index.yaml
+  source_profile: public_source_first
+  cheatsheet_category_keys:
+    - parser_file_and_upload
+  source_registry_keys:
+    - owasp_wstg_stable
+    - owasp_file_upload_cheat_sheet
+    - owasp_deserialization_cheat_sheet
+    - owasp_xxe_prevention_cheat_sheet
+    - owasp_input_validation_cheat_sheet
+  corpus_dependency_notes:
+    - Consume official upload validation, XML parser hardening, and deserialization safety guidance from the Phase 0 to 2 registries.
+    - Keep parser-route heuristics separate from replayable proof and never promote beyond xxe_parser_contract or deserialization_replay_contract boundaries.
+subphases:
+  - key: p3a_5a
+    name: ontology_and_corpus_binding
+  - key: p3a_5b
+    name: discovery
+  - key: p3a_5c
+    name: candidate_generation
+  - key: p3a_5d
+    name: proof_and_negative_evidence
+  - key: p3a_5e
+    name: benchmark_and_regression
+runtime_dependencies:
+  - web_interact
+  - custom_poc
+candidate_generators:
+  - xxe_parser_candidate
+  - deserialization_replay_candidate
+  - upload_boundary_candidate
+verifier_entrypoints:
+  - parser_boundary_replay
+ai_advisory:
+  enabled: true
+  advisory_mode: parser_boundary_focus
+  prompt_contract_id: pentra.ai.advisory
+  trust_boundary: advisor_only
+negative_evidence_behavior:
+  - upload or parser hints without replayable request context remain advisory-only
+  - parser surfaces without route-local evidence or replayable input/output context demote after bounded replay gaps are recorded
+benchmark_target_keys:
+  - repo_parser_upload_demo

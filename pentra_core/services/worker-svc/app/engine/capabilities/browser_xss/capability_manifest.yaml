@@ -1,0 +1,74 @@
+pack_key: p3a_browser_xss
+name: Browser XSS capability pack
+phase: 3
+description: >
+  Safe browser-aware XSS capability pack for discovery, structured candidate
+  generation, workflow-aware staging, and canary-based browser proof without
+  real exploit payloads.
+ontology_family_keys:
+  - xss
+  - input_validation
+attack_primitive_keys:
+  - dom_xss_browser_probe
+  - reflected_xss_route_probe
+  - stored_xss_workflow_probe
+proof_contract_keys:
+  - browser_execution_xss
+  - stored_execution_xss
+planner_action_keys:
+  - map_client_side_sinks
+  - stage_route_specific_xss_payloads
+  - replay_stored_xss_workflow
+target_profile_keys:
+  - spa_rest_api
+  - traditional_server_rendered
+pack_dependency_keys: []
+knowledge_dependencies:
+  ontology_index_path: pentra_core/knowledge/ontology/index.yaml
+  source_profile: public_source_first
+  cheatsheet_category_keys:
+    - browser_xss
+  source_registry_keys:
+    - portswigger_xss_cheat_sheet
+    - owasp_xss_prevention_cheat_sheet
+    - owasp_dom_xss_prevention_cheat_sheet
+    - owasp_input_validation_cheat_sheet
+    - owasp_wstg_stable
+  corpus_dependency_notes:
+    - Use structured cheat-sheet/category material from Phase 0 to 2 registries.
+    - Capability behavior must remain mapped back to ontology families, primitives, and proof contracts.
+subphases:
+  - key: p3a_1a
+    name: ontology_and_corpus_binding
+  - key: p3a_1b
+    name: browser_xss_discovery
+  - key: p3a_1c
+    name: candidate_generation_and_payload_selection
+  - key: p3a_1d
+    name: browser_proof_and_negative_evidence
+  - key: p3a_1e
+    name: benchmark_and_regression
+runtime_dependencies:
+  - web_interact
+  - custom_poc
+candidate_generators:
+  - route_canary_candidate
+  - dom_sink_flow_candidate
+  - stored_form_canary_candidate
+verifier_entrypoints:
+  - xss_browser
+payload_registry:
+  file: browser_xss_payloads.yaml
+  selection_mode: context_aware_canary_archetypes
+ai_advisory:
+  enabled: true
+  advisory_mode: browser_xss_route_focus
+  prompt_contract_id: pentra.ai.advisory
+  trust_boundary: advisor_only
+negative_evidence_behavior:
+  - failed canary propagation demotes the candidate through the verification-first pipeline
+  - no real payload execution is attempted
+benchmark_target_keys:
+  - juice_shop_local
+  - dvwa_local
+  - webgoat_local

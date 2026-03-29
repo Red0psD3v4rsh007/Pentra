@@ -1,0 +1,43 @@
+key: owasp_dom_xss_prevention_cheat_sheet
+title: OWASP DOM based XSS Prevention Cheat Sheet normalized source summary
+source_key: owasp_dom_xss_prevention_cheat_sheet
+document_type: source_summary
+generated_at: "2026-03-27T00:00:00Z"
+summary: >
+  OWASP's DOM XSS guidance gives Pentra the client-side data-flow boundaries
+  needed for SPA-first targets: route parameters, DOM sources, and sink classes
+  matter more than generic page labels.
+facts:
+  - fact_key: owasp_dom_xss_prevention_source_sink_rules
+    title: DOM source and sink rules
+    fact_type: client_side_flow_summary
+    summary: >
+      DOM XSS reasoning must preserve which browser-controlled values reach
+      sensitive sinks such as HTML injection, script execution, URL rewriting,
+      and client-side template rendering.
+    tags:
+      - dom_xss
+      - client_side
+      - sinks
+    data:
+      high_signal_dom_elements:
+        - location_based_sources
+        - postmessage_inputs
+        - dom_html_sinks
+        - script_and_url_sinks
+        - client_side_template_flows
+      replay_implications:
+        - Keep browser-source identity attached to the route assessment.
+        - Prefer browser proof over heuristic client-side labeling.
+    citations:
+      - fact_key: owasp_dom_xss_prevention_source_sink_rules
+        title: OWASP DOM based XSS Prevention Cheat Sheet
+        source_key: owasp_dom_xss_prevention_cheat_sheet
+        source_url: https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html
+        trust_tier: official_public
+        retrieved_at: "2026-03-27T00:00:00Z"
+        extraction_mode: browse
+        authority_for:
+          - dom_sink_guidance
+          - client_side_context_modeling
+          - browser_xss_reasoning

@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 __all__ = [
     "ScanType",
@@ -14,6 +14,10 @@ __all__ = [
     "SCAN_TERMINAL_STATES",
     "ScanPriority",
     "ScanCreate",
+    "ScanBatchCreate",
+    "MultiAssetScanCreate",
+    "MultiAssetScanFailure",
+    "MultiAssetScanResponse",
     "ScanRetestCreate",
     "ScanUpdate",
     "ScanResponse",
@@ -28,7 +32,7 @@ class ScanType(str, Enum):
 
 
 class ScanStatus(str, Enum):
-    """Matches the MOD-01.5 revised state machine (13 states)."""
+    """Matches the MOD-01.5 revised state machine (14 states)."""
 
     queued = "queued"
     priority_queued = "priority_queued"
@@ -43,11 +47,12 @@ class ScanStatus(str, Enum):
     failed = "failed"
     rejected = "rejected"
     checkpointed = "checkpointed"
+    cancelled = "cancelled"
 
 
 # Terminal states — once a scan reaches one of these, quota is decremented.
 SCAN_TERMINAL_STATES = frozenset(
-    {ScanStatus.completed, ScanStatus.failed, ScanStatus.rejected}
+    {ScanStatus.completed, ScanStatus.failed, ScanStatus.rejected, ScanStatus.cancelled}
 )
 
 
@@ -64,6 +69,10 @@ class ScanCreate(BaseModel):
     asset_id: UUID
     scan_type: ScanType
     priority: ScanPriority = ScanPriority.normal
+    scheduled_at: datetime | None = Field(
+        default=None,
+        description="Optional future UTC timestamp for deferred scan start.",
+    )
     config: dict | None = Field(
         default=None,
         description="Profile overrides: rate_limit, tool selection, etc.",
@@ -76,6 +85,55 @@ class ScanRetestCreate(BaseModel):
         default=None,
         description="Optional config overrides merged into the retest scan configuration.",
     )
+
+
+class ScanBatchCreate(BaseModel):
+    scan_type: ScanType
+    priority: ScanPriority = ScanPriority.normal
+    scheduled_at: datetime | None = Field(
+        default=None,
+        description="Optional future UTC timestamp for deferred batch scan starts.",
+    )
+    config: dict | None = Field(
+        default=None,
+        description="Profile overrides applied to every scan in the batch.",
+    )
+
+
+class MultiAssetScanCreate(ScanBatchCreate):
+    asset_ids: list[UUID] | None = Field(
+        default=None,
+        min_length=1,
+        description="Explicit active asset IDs to scan.",
+    )
+    asset_group_id: UUID | None = Field(
+        default=None,
+        description="Reusable asset-group selector for the batch.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_target_selector(self) -> "MultiAssetScanCreate":
+        has_asset_ids = bool(self.asset_ids)
+        has_group_id = self.asset_group_id is not None
+        if has_asset_ids == has_group_id:
+            raise ValueError("Provide exactly one of asset_ids or asset_group_id")
+        return self
+
+
+class MultiAssetScanFailure(BaseModel):
+    asset_id: UUID
+    asset_name: str
+    reason: str
+
+
+class MultiAssetScanResponse(BaseModel):
+    batch_request_id: str
+    asset_group_id: UUID | None = None
+    requested_asset_count: int
+    created_count: int
+    failed_count: int
+    scans: list["ScanResponse"]
+    failures: list[MultiAssetScanFailure]
 
 
 class ScanUpdate(BaseModel):
@@ -96,6 +154,7 @@ class ScanResponse(BaseModel):
     priority: ScanPriority
     progress: int
     config: dict
+    scheduled_at: datetime | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
     error_message: str | None = None

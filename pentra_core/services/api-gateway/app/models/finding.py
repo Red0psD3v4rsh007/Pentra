@@ -86,6 +86,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 from datetime import datetime
 
 from sqlalchemy import (
@@ -129,6 +130,28 @@ def _normalize_vulnerability_type(
         if any(pattern in text for pattern in patterns):
             return normalized
     return raw or None
+
+
+_RAW_EVIDENCE_KEYS = (
+    "request",
+    "response",
+    "payload",
+    "proof",
+    "transcript",
+    "excerpt",
+    "content",
+)
+_TRUTH_STATES = frozenset(
+    {"observed", "suspected", "reproduced", "verified", "rejected", "expired"}
+)
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
 
 
 class Finding(Base, TenantMixin):
@@ -346,6 +369,137 @@ class Finding(Base, TenantMixin):
             return datetime.fromisoformat(str(value))
         except ValueError:
             return None
+
+    @property
+    def evidence_reference_count(self) -> int:
+        evidence = _as_dict(self.evidence)
+        references = _as_list(evidence.get("references"))
+        return sum(
+            1
+            for item in references
+            if isinstance(item, dict) and any(item.get(key) for key in ("id", "evidence_type", "label"))
+        )
+
+    @property
+    def raw_evidence_present(self) -> bool:
+        evidence = _as_dict(self.evidence)
+        return any(str(evidence.get(key) or "").strip() for key in _RAW_EVIDENCE_KEYS)
+
+    @property
+    def provenance_complete(self) -> bool:
+        evidence = _as_dict(self.evidence)
+        classification = _as_dict(evidence.get("classification"))
+        metadata = _as_dict(evidence.get("metadata"))
+
+        for container in (classification, metadata):
+            value = container.get("provenance_complete")
+            if isinstance(value, bool):
+                return value
+
+        has_source = bool(str(self.source_type or "").strip()) and bool(str(self.tool_source or "").strip())
+        has_locator = bool(
+            evidence.get("endpoint")
+            or evidence.get("target")
+            or evidence.get("storage_ref")
+            or any(_as_dict(item).get("storage_ref") for item in _as_list(evidence.get("references")))
+        )
+        has_material = self.evidence_reference_count > 0 or self.raw_evidence_present
+        return has_source and has_locator and has_material
+
+    @property
+    def replayable(self) -> bool:
+        evidence = _as_dict(self.evidence)
+        classification = _as_dict(evidence.get("classification"))
+        metadata = _as_dict(evidence.get("metadata"))
+
+        for container in (classification, metadata):
+            value = container.get("replayable")
+            if isinstance(value, bool):
+                return value
+
+        verification_context = _as_dict(metadata.get("verification_context"))
+        if any(
+            verification_context.get(key)
+            for key in ("request_url", "endpoint", "command", "curl", "http_method")
+        ):
+            return True
+
+        if (
+            (evidence.get("endpoint") or evidence.get("target"))
+            and self.raw_evidence_present
+            and (
+                evidence.get("storage_ref")
+                or any(_as_dict(item).get("storage_ref") for item in _as_list(evidence.get("references")))
+            )
+        ):
+            return True
+
+        return False
+
+    @property
+    def truth_state(self) -> str:
+        evidence = _as_dict(self.evidence)
+        classification = _as_dict(evidence.get("classification"))
+        metadata = _as_dict(evidence.get("metadata"))
+
+        for container in (classification, metadata):
+            value = str(container.get("truth_state") or "").strip().lower()
+            if value in _TRUTH_STATES:
+                return value
+
+        if bool(self.is_false_positive):
+            return "rejected"
+
+        for container in (classification, metadata):
+            if bool(container.get("expired")) or container.get("expired_at"):
+                return "expired"
+
+        verification_state = str(self.verification_state or "").strip().lower()
+        if verification_state == "verified":
+            return "verified" if self.provenance_complete and self.replayable else "reproduced"
+        if verification_state == "suspected":
+            return "suspected"
+        if str(self.source_type) == "ai_analysis":
+            return "suspected"
+        return "observed"
+
+    @property
+    def truth_summary(self) -> dict[str, Any]:
+        state = self.truth_state
+        notes: list[str] = []
+        evidence = _as_dict(self.evidence)
+        metadata = _as_dict(evidence.get("metadata"))
+
+        if self.is_false_positive:
+            notes.append("Marked false positive and excluded from trusted output.")
+        if not self.provenance_complete:
+            notes.append("Provenance is incomplete, so this record stays below trusted finding level.")
+        if self.evidence_reference_count == 0:
+            notes.append("No persisted evidence references are linked yet.")
+        if not self.raw_evidence_present:
+            notes.append("No raw request, response, or payload proof is stored yet.")
+        if state == "reproduced" and not self.replayable:
+            notes.append("Verification exists, but replayable proof metadata is still incomplete.")
+        if state == "suspected" and str(self.source_type) == "ai_analysis":
+            notes.append("AI-generated reasoning requires verification before promotion.")
+        if self.scan_job_id is None:
+            notes.append("No producing scan job is linked to this record.")
+        if str(metadata.get("last_verification_outcome") or "").strip().lower() == "failed":
+            notes.append("Bounded verification did not reproduce the issue; negative evidence is retained.")
+        negative_verifications = _as_list(metadata.get("negative_verifications"))
+        if negative_verifications:
+            notes.append(f"{len(negative_verifications)} negative verification attempt(s) are linked.")
+
+        return {
+            "state": state,
+            "promoted": state == "verified" and self.provenance_complete and self.replayable and not self.is_false_positive,
+            "provenance_complete": self.provenance_complete,
+            "replayable": self.replayable,
+            "evidence_reference_count": self.evidence_reference_count,
+            "raw_evidence_present": self.raw_evidence_present,
+            "scan_job_bound": self.scan_job_id is not None,
+            "notes": notes,
+        }
 
     @property
     def vulnerability_type(self) -> str | None:

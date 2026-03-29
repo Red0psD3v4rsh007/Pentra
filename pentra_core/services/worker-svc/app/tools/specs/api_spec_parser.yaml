@@ -1,0 +1,10 @@
+name: api_spec_parser
+worker_family: web
+image: node:20-slim
+command:
+  - sh
+  - -c
+  - "find {input_dir}/repo -name 'openapi*' -o -name 'swagger*' -o -name '*.openapi.*' | head -5 | xargs -I{} cp {} {output_dir}/ 2>/dev/null; ls -la {output_dir}/ > {output_dir}/api_specs.json 2>&1 || echo '[]' > {output_dir}/api_specs.json"
+output_parser: json
+artifact_type: endpoints
+default_timeout: 300

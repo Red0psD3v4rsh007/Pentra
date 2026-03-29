@@ -57,6 +57,46 @@ def _scan_target(scan: Scan) -> str:
     return "unknown-target"
 
 
+def _scan_severity_counts(scan: Scan) -> dict[str, int]:
+    summary = getattr(scan, "result_summary", None) or {}
+    if isinstance(summary, dict):
+        counts = summary.get("severity_counts")
+        if isinstance(counts, dict):
+            return {severity: int(counts.get(severity, 0) or 0) for severity in _SEVERITIES}
+
+    counts = _zero_severity_counts()
+    for finding in getattr(scan, "findings", []) or []:
+        counts[_severity_from_finding(finding)] += 1
+    return counts
+
+
+def _scan_verification_counts(scan: Scan) -> dict[str, int]:
+    summary = getattr(scan, "result_summary", None) or {}
+    if isinstance(summary, dict):
+        counts = summary.get("verification_counts")
+        if isinstance(counts, dict):
+            return {
+                state: int(counts.get(state, 0) or 0)
+                for state in _VERIFICATION_STATES
+            }
+
+    counts = _zero_verification_counts()
+    for finding in getattr(scan, "findings", []) or []:
+        counts[_verification_from_finding(finding)] += 1
+    return counts
+
+
+def _tracked_vulnerability_types(scans: list[Scan]) -> list[str]:
+    items = {
+        vulnerability_type
+        for scan in scans
+        for finding in (getattr(scan, "findings", []) or [])
+        for vulnerability_type in [scan_service._finding_vulnerability_type(finding)]
+        if vulnerability_type
+    }
+    return sorted(items)
+
+
 def _severity_from_finding(finding: Finding) -> str:
     severity = str(getattr(finding, "severity", "info") or "info").lower()
     return severity if severity in _SEVERITIES else "info"
@@ -565,4 +605,128 @@ async def get_intelligence_summary(
         "advisory_summaries": advisory_summaries,
         "trending_patterns": trending_patterns,
         "target_knowledge": target_knowledge,
+    }
+
+
+async def get_asset_history(
+    *,
+    asset_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    session: AsyncSession,
+    limit: int = 20,
+) -> dict[str, Any] | None:
+    asset_stmt = select(Asset).where(
+        Asset.id == asset_id,
+        Asset.tenant_id == tenant_id,
+        Asset.is_active == True,  # noqa: E712
+    )
+    asset = (await session.execute(asset_stmt)).scalar_one_or_none()
+    if asset is None:
+        return None
+
+    total_scans = (
+        await session.execute(
+            select(func.count()).select_from(Scan).where(
+                Scan.tenant_id == tenant_id,
+                Scan.asset_id == asset_id,
+            )
+        )
+    ).scalar_one()
+
+    recent_scans_stmt = (
+        select(Scan)
+        .where(Scan.tenant_id == tenant_id, Scan.asset_id == asset_id)
+        .options(
+            selectinload(Scan.asset),
+            selectinload(Scan.findings),
+            selectinload(Scan.artifacts),
+        )
+        .order_by(Scan.created_at.desc())
+        .limit(limit)
+    )
+    scans = list((await session.execute(recent_scans_stmt)).scalars().all())
+
+    knowledge_scans_stmt = (
+        select(Scan)
+        .where(Scan.tenant_id == tenant_id, Scan.asset_id == asset_id)
+        .options(
+            selectinload(Scan.asset),
+            selectinload(Scan.findings),
+            selectinload(Scan.artifacts),
+        )
+        .order_by(Scan.created_at.desc())
+    )
+    knowledge_scans = list((await session.execute(knowledge_scans_stmt)).scalars().all())
+
+    target_knowledge = build_target_knowledge(knowledge_scans)
+    asset_knowledge = next(
+        (
+            item
+            for item in target_knowledge
+            if str(item.get("asset_id")) == str(asset_id)
+        ),
+        None,
+    )
+
+    entries: list[dict[str, Any]] = []
+    for scan in scans:
+        comparison_summary: str | None = None
+        comparison_counts: dict[str, int] = {}
+        baseline_scan_id: uuid.UUID | None = None
+
+        if str(scan.status) == "completed":
+            comparison = await scan_service.get_scan_comparison(
+                scan_id=scan.id,
+                tenant_id=tenant_id,
+                session=session,
+            )
+            if comparison is not None:
+                comparison_summary = comparison.get("summary")
+                raw_counts = comparison.get("counts") or {}
+                if isinstance(raw_counts, dict):
+                    comparison_counts = {
+                        key: int(raw_counts.get(key, 0) or 0)
+                        for key in ("new", "resolved", "persistent", "escalated")
+                    }
+                raw_baseline = comparison.get("baseline_scan_id")
+                if raw_baseline:
+                    try:
+                        baseline_scan_id = uuid.UUID(str(raw_baseline))
+                    except (TypeError, ValueError):
+                        baseline_scan_id = None
+
+        severity_counts = _scan_severity_counts(scan)
+        verification_counts = _scan_verification_counts(scan)
+
+        entries.append(
+            {
+                "scan_id": scan.id,
+                "scan_type": str(scan.scan_type),
+                "status": str(scan.status),
+                "priority": str(scan.priority),
+                "generated_at": scan.completed_at or scan.updated_at or scan.created_at,
+                "started_at": scan.started_at,
+                "completed_at": scan.completed_at,
+                "severity_counts": severity_counts,
+                "verification_counts": verification_counts,
+                "total_findings": sum(severity_counts.values()),
+                "comparison_summary": comparison_summary,
+                "comparison_counts": comparison_counts,
+                "baseline_scan_id": baseline_scan_id,
+            }
+        )
+
+    return {
+        "asset_id": asset.id,
+        "asset_name": asset.name,
+        "target": asset.target,
+        "generated_at": datetime.now(timezone.utc),
+        "total_scans": int(total_scans),
+        "known_technologies": (
+            list(asset_knowledge.get("known_technologies", []))
+            if isinstance(asset_knowledge, dict)
+            else []
+        ),
+        "tracked_vulnerability_types": _tracked_vulnerability_types(knowledge_scans),
+        "entries": entries,
     }
