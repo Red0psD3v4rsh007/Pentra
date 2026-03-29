@@ -28,15 +28,17 @@ build/
 .terraform/
 terraform.tfstate*
 
-# ── SENSITIVE / LOCAL-ONLY ──
+# ── LOCAL / SENSITIVE ──
 .local/
 .codex
 jwttokengen.py
-bootstrap_repo.sh
-run_pentra_local.sh
-docker-compose.local.yml
 
-# Internal planning docs (not for public repo)
+# ── Internal planning docs (not for public repo) ──
+ARCHITECTURE.md
+DECISIONS.md
+ENVIRONMENT.md
+MASTER_INDEX.md
+MODULE_LOG.md
 SESSION_CONTEXT.md
 SESSION_BOOTSTRAP_PROMPT.md
 SYSTEM_CONSTRAINTS.md
@@ -57,3 +59,6 @@ TARGET_MODEL_SCHEMA.md
 VERIFICATION_PIPELINE_CONTRACT.md
 FRONTEND_CONTRACT.md
 context.md
+docs/attack_graph_engine.md
+docs/pentest_pipeline.md
+docs/runbooks/

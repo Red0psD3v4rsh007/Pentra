@@ -1,77 +1,165 @@
 <div align="center">
-  <img src="docs/logo.png" alt="Pentra Logo" width="120" height="auto" />
-  <h1>Pentra.</h1>
-  <p><strong>Autonomous Offensive Security Operations Center</strong></p>
-  <p>
-    An enterprise-grade Pentesting-as-a-Service (PTaaS) platform designed for modern security teams. Pentra automates complex vulnerability discovery, coordinates AI-driven exploitation engines, and delivers real-time granular threat intelligence through a high-performance "Obsidian" command center interface.
-  </p>
+  <h1>PENTRA</h1>
+  <p><b>Autonomous Offensive Security Platform</b></p>
+  <p>AI-driven penetration testing engine with a real-time command center UI.</p>
+
+  <br/>
+
+  <img src="https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js" />
+  <img src="https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat-square&logo=fastapi" />
+  <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript" />
+  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=flat-square&logo=tailwindcss" />
+  <img src="https://img.shields.io/badge/Redis-Streams-DC382D?style=flat-square&logo=redis" />
+  <img src="https://img.shields.io/badge/PostgreSQL-14+-336791?style=flat-square&logo=postgresql" />
 </div>
 
 ---
 
-## 🌪 Architecture & Tech Stack
+## What is Pentra?
 
-Pentra is built to scale to thousands of concurrent operations, separated into a robust Python orchestration backend and a Next.js frontend shell optimized for extreme data density.
+Pentra is a Pentesting-as-a-Service (PTaaS) platform that automates offensive security operations end-to-end. It coordinates reconnaissance, vulnerability scanning, exploitation, and AI-powered analysis through a distributed microservices architecture — then surfaces every result through a high-density dark-mode command center built for security operators.
 
-### **Frontend Command Center (V3 Obsidian System)**
-- **Framework:** Next.js 16 (App Router)
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS v4 (Zinc & Electric Blue palette)
-- **Visualizations:** `@xyflow/react` (Attack Pathing), `recharts`
-- **State Integration:** `zustand`, Framer Motion physics
-
-### **Backend Core Services**
-- **API Gateway:** FastAPI, Auth Middleware, Routing
-- **Scan Orchestrator (MOD-04):** Distributed Task Queue (Celery/Redis Streams)
-- **Worker Engines:** Python 3.10+, executing discrete modular vulnerability capabilities (SQLi, SSRF, Bypasses, etc.)
-- **Knowledge Base:** AI Strategy Models, Target Ontologies, Cheatsheet Registries
+**This is not a wrapper around Nmap.** Pentra's orchestrator dynamically mutates attack plans mid-scan based on intermediate findings, applies credential pivoting, and uses AI strategy advisors to prioritize exploit chains — similar to how a human red team operator would adapt during an engagement.
 
 ---
 
-## 🧠 Core Features
+## Project Structure
 
-1. **Strategic AI Orchestration:** Pentra doesn't just run static tools. Its backend dynamically mutates attack plans based on intermediate discoveries, similar to a human Red Team operator.
-2. **Interactive Attack Graphs:** Visualizes the full kill-chain, mapping assets to detected vulnerabilities, compromised credentials, and resulting access levels dynamically via React Flow.
-3. **HTTP Evidence Inspection:** Deeply integrated split-pane HTTP Request/Response viewer (`VS Code` style) for every identified vulnerability directly within the browser dashboard.
-4. **Threat Intelligence Clustering:** AI-inferred architectural groupings (Tech Clusters) and optimized payload extraction rules learned continuously across operations.
-5. **Progressive Disclosure Analysis:** High-density inventory and finding tables (up to 10k rows) cleanly collapsing detailed remediations and PoC data to maintain operator focus.
+```
+pentra/
+├── run_pentra_local.sh            # One-command local stack launcher
+├── docker-compose.local.yml       # PostgreSQL + Redis containers
+│
+├── pentra_core/
+│   ├── frontend/                  # Next.js 16 command center (TypeScript)
+│   │   ├── src/app/(app)/         # Dashboard, Scans, Assets, Findings, etc.
+│   │   ├── src/app/login/         # Authentication page
+│   │   └── src/components/        # Sidebar, Topbar, MainLayout shell
+│   │
+│   ├── services/
+│   │   ├── api-gateway/           # FastAPI REST + WebSocket API
+│   │   ├── orchestrator-svc/      # Scan lifecycle, AI planner, phase execution
+│   │   └── worker-svc/            # Tool execution, capability modules, artifact storage
+│   │
+│   ├── packages/
+│   │   └── pentra-common/         # Shared models, auth, config
+│   │
+│   ├── migrations/                # Alembic database migrations
+│   ├── knowledge/                 # OWASP corpus, ontologies, cheatsheets
+│   └── scripts/local/             # Individual service run scripts
+```
 
 ---
 
-## 🚀 Getting Started
+## Frontend — Obsidian Command Center
+
+The UI follows a custom **Obsidian Design System** — premium enterprise dark mode built on a Zinc palette with Electric Blue accents. No neon glow, no fake terminals, no radar charts. Just clean data density.
+
+| Page | What it does |
+|---|---|
+| **Login** | 50/50 split layout with gradient mesh branding |
+| **Dashboard** | Metric cards, scan status table, Recharts severity breakdown |
+| **Scans → New** | 3-step wizard: target → profile → confirmation |
+| **Scans → Detail** | Sticky header, Framer Motion tabs, pipeline progress tracker |
+| **Attack Graph** | Interactive `@xyflow/react` kill-chain visualization |
+| **Evidence Viewer** | Split-pane HTTP request/response inspector |
+| **Assets** | Dense inventory table with risk scores and tech tags |
+| **Findings** | Filterable table with expandable remediation rows |
+| **Intelligence** | AI-learned patterns + inferred technology clusters |
+| **Reports** | Generated report cards with format badges |
+| **Settings** | Left sub-nav with profile/org/API key configuration |
+
+---
+
+## Backend Services
+
+### API Gateway (`api-gateway/`)
+FastAPI-based REST API and WebSocket server. Handles authentication (JWT), scan lifecycle CRUD, asset management, and real-time event streaming to the frontend.
+
+### Scan Orchestrator (`orchestrator-svc/`)
+The brain. Manages the full scan lifecycle through a phased execution engine:
+- **Strategic Planner** — Generates initial attack plans from target profiles
+- **AI Strategy Advisor** — Adapts plans based on intermediate findings
+- **Phase Controller** — Coordinates Recon → Enumeration → Exploitation → Analysis
+- **Plan Mutator** — Dynamically injects new attack paths mid-execution
+
+### Worker Service (`worker-svc/`)
+Executes discrete security capabilities as isolated jobs:
+- Injection analysis (SQLi, XSS, SSRF)
+- Authentication & access control testing
+- Credential extraction and pivoting
+- File parser abuse chains
+- Browser-based XSS verification
+
+Each capability is defined by a YAML manifest and produces structured findings with full HTTP evidence.
+
+---
+
+## Quick Start
 
 ### Prerequisites
-- Node.js 18.17.0 or greater
+- Docker & Docker Compose
 - Python 3.10+
-- Redis (for Task Queues/Orchestration)
-- PostgreSQL
+- Node.js 18+ and `pnpm`
 
-### Frontend Installation
-1. Navigate to the frontend directory:
-   \`\`\`bash
-   cd pentra_core/frontend
-   \`\`\`
-2. Install dependencies:
-   \`\`\`bash
-   npm install
-   \`\`\`
-3. Start the development server:
-   \`\`\`bash
-   npm run dev
-   \`\`\`
-4. Visit `http://localhost:3000` to view the V3 Command Center.
+### Run the Full Stack
 
-*(See the `backend/` documentation for instructions on standing up the multi-module Microservices and PostgreSQL schemas).*
+```bash
+# Clone
+git clone https://github.com/Red0psD3v4rsh007/Pentra.git
+cd Pentra
+
+# Start everything (Postgres, Redis, API, Orchestrator, Workers, Frontend)
+./run_pentra_local.sh start
+
+# Check status
+./run_pentra_local.sh status
+
+# Stop
+./run_pentra_local.sh stop
+```
+
+The launcher handles database migrations, container health checks, port conflict detection, and coordinated service startup automatically.
+
+| Service | Default Port |
+|---|---|
+| Frontend | `http://localhost:3000` |
+| API Gateway | `http://localhost:8000` |
+| Orchestrator | `http://localhost:8001` |
+
+### Frontend Only
+
+```bash
+cd pentra_core/frontend
+npm install
+npm run dev
+# → http://localhost:3000
+```
 
 ---
 
-## 🔒 Security Notice
+## Tech Stack
 
-**Pentra is designed strictly for authorized Red Teaming, internal security auditing, and continuous vulnerability assessment.** 
-The offensive capabilities integrated within the engine can cause disruption to production networks and trigger highly escalated alerts in enterprise SOCs. Never target infrastructure you do not have explicit, written authorization to test.
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 16, TypeScript, Tailwind CSS v4, Framer Motion, Recharts, React Flow |
+| API | FastAPI, Pydantic, JWT Auth, WebSockets |
+| Orchestration | Python 3.10+, Redis Streams, Celery |
+| Database | PostgreSQL 14+, Alembic migrations |
+| Infrastructure | Docker Compose, health-checked containers |
+| Security Tools | Nmap, Nuclei, SQLMap, Dalfox, Semgrep, TruffleHog, and more |
+
+---
+
+## Security Notice
+
+**Pentra is built for authorized security testing only.**
+
+The offensive capabilities in this platform can disrupt production systems and trigger security alerts. Never target infrastructure without explicit written authorization. The default configuration restricts live tool execution to local-only targets.
 
 ---
 
 <div align="center">
-  <p>Engineered for <a href="https://github.com/Red0psD3v4rsh007">@Red0psD3v4rsh007</a></p>
+  <sub>Built by <a href="https://github.com/Red0psD3v4rsh007">@Red0psD3v4rsh007</a></sub>
 </div>

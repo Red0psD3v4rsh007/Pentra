@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pentra-postgres-local
+    environment:
+      POSTGRES_DB: pentra_dev
+      POSTGRES_USER: pentra
+      POSTGRES_PASSWORD: pentra
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pentra -d pentra_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - pentra-postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: pentra-redis-local
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - pentra-redis-data:/data
+
+volumes:
+  pentra-postgres-data:
+  pentra-redis-data:
