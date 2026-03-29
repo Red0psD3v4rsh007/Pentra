@@ -7,9 +7,11 @@ __pycache__/
 # Virtual environments
 venv/
 .env
+*.env.local
 
 # Node
 node_modules/
+.next/
 
 # Build artifacts
 dist/
@@ -25,3 +27,33 @@ build/
 # Terraform
 .terraform/
 terraform.tfstate*
+
+# ── SENSITIVE / LOCAL-ONLY ──
+.local/
+.codex
+jwttokengen.py
+bootstrap_repo.sh
+run_pentra_local.sh
+docker-compose.local.yml
+
+# Internal planning docs (not for public repo)
+SESSION_CONTEXT.md
+SESSION_BOOTSTRAP_PROMPT.md
+SYSTEM_CONSTRAINTS.md
+SYSTEM_GUARDRAIL.md
+CODEBASE_UNDERSTANDING_REPORT.md
+MERGE_RECOVERY_PENTRA2_TO_PENTRA.md
+PENTRA_CANONICAL_REMEDIATION_BACKLOG.md
+PENTRA_EXECUTION_ROADMAP.md
+PENTRA_PRODUCT_REALITY_RESET_PLAN.md
+PENTRA_TARGET_BAR_GAP_REPORT.md
+PENTRA_UI_PROMPT.md
+PHASE*.md
+AI_PROVIDER_ROUTING_STRATEGY.md
+OFFENSIVE_FINDING_TRUTH_CONTRACT.md
+PLANNER_ACTION_CONTRACT.md
+RUN_PENTRA_LOCAL.md
+TARGET_MODEL_SCHEMA.md
+VERIFICATION_PIPELINE_CONTRACT.md
+FRONTEND_CONTRACT.md
+context.md
