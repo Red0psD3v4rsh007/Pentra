@@ -18,9 +18,9 @@
 
 ## What is Pentra?
 
-Pentra is a Pentesting-as-a-Service (PTaaS) platform that automates offensive security operations end-to-end. It coordinates reconnaissance, vulnerability scanning, exploitation, and AI-powered analysis through a distributed microservices architecture — then surfaces every result through a high-density dark-mode command center built for security operators.
+Pentra is a Pentesting-as-a-Service (PTaaS) platform that automates offensive security operations end-to-end. It coordinates reconnaissance, vulnerability scanning, exploitation, and AI-powered analysis through a distributed microservices architecture - then surfaces every result through a high-density dark-mode command center built for security operators.
 
-**This is not a wrapper around Nmap.** Pentra's orchestrator dynamically mutates attack plans mid-scan based on intermediate findings, applies credential pivoting, and uses AI strategy advisors to prioritize exploit chains — similar to how a human red team operator would adapt during an engagement.
+**This is not a wrapper around Nmap.** Pentra's orchestrator dynamically mutates attack plans mid-scan based on intermediate findings, applies credential pivoting, and uses AI strategy advisors to prioritize exploit chains - similar to how a human red team operator would adapt during an engagement.
 
 ---
 
@@ -52,9 +52,9 @@ pentra/
 
 ---
 
-## Frontend — Obsidian Command Center
+## Frontend - Obsidian Command Center
 
-The UI follows a custom **Obsidian Design System** — premium enterprise dark mode built on a Zinc palette with Electric Blue accents. No neon glow, no fake terminals, no radar charts. Just clean data density.
+The UI follows a custom **Obsidian Design System** - premium enterprise dark mode built on a Zinc palette with Electric Blue accents. No neon glow, no fake terminals, no radar charts. Just clean data density.
 
 | Page | What it does |
 |---|---|
@@ -79,10 +79,10 @@ FastAPI-based REST API and WebSocket server. Handles authentication (JWT), scan 
 
 ### Scan Orchestrator (`orchestrator-svc/`)
 The brain. Manages the full scan lifecycle through a phased execution engine:
-- **Strategic Planner** — Generates initial attack plans from target profiles
-- **AI Strategy Advisor** — Adapts plans based on intermediate findings
-- **Phase Controller** — Coordinates Recon → Enumeration → Exploitation → Analysis
-- **Plan Mutator** — Dynamically injects new attack paths mid-execution
+- **Strategic Planner** - Generates initial attack plans from target profiles
+- **AI Strategy Advisor** - Adapts plans based on intermediate findings
+- **Phase Controller** - Coordinates Recon → Enumeration → Exploitation → Analysis
+- **Plan Mutator** - Dynamically injects new attack paths mid-execution
 
 ### Worker Service (`worker-svc/`)
 Executes discrete security capabilities as isolated jobs:
